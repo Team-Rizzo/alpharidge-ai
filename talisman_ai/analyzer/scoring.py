@@ -591,4 +591,3 @@ def score_post_entry(entry: TweetWithAuthor, analyzer: SubnetRelevanceAnalyzer, 
         "recency": rec,
         "score": _clamp01(final)
     }
-
