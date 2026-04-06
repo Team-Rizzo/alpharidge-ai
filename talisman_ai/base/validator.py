@@ -318,13 +318,11 @@ class BaseValidatorNeuron(BaseNeuron):
             bt.logging.warning(f"Hotkey {synapse.dendrite.hotkey} not found in metagraph")
             return True, "Hotkey not in metagraph"
 
-        if self.config.blacklist.force_validator_permit:
-            # If the config is set to force validator permit, then we should only allow requests from validators.
-            if not self.metagraph.validator_permit[uid]:
-                bt.logging.warning(
-                    f"Blacklisting a request from non-validator hotkey {synapse.dendrite.hotkey}"
-                )
-                return True, "Non-validator hotkey"
+        if not self.metagraph.validator_permit[uid]:
+            bt.logging.warning(
+                f"Blacklisting a request from non-validator hotkey {synapse.dendrite.hotkey}"
+            )
+            return True, "Non-validator hotkey"
 
         bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
@@ -360,13 +358,11 @@ class BaseValidatorNeuron(BaseNeuron):
             bt.logging.warning(f"Hotkey {synapse.dendrite.hotkey} not found in metagraph")
             return True, "Hotkey not in metagraph"
 
-        if self.config.blacklist.force_validator_permit:
-            # If the config is set to force validator permit, then we should only allow requests from validators.
-            if not self.metagraph.validator_permit[uid]:
-                bt.logging.warning(
-                    f"Blacklisting a request from non-validator hotkey {synapse.dendrite.hotkey}"
-                )
-                return True, "Non-validator hotkey"
+        if not self.metagraph.validator_permit[uid]:
+            bt.logging.warning(
+                f"Blacklisting a request from non-validator hotkey {synapse.dendrite.hotkey}"
+            )
+            return True, "Non-validator hotkey"
 
         bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
