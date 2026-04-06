@@ -685,8 +685,9 @@ class Validator(BaseValidatorNeuron):
         Receive reward broadcasts from other validators and cache locally.
         """
         try:
+            authenticated_hotkey = synapse.dendrite.hotkey
             accepted, reason = self._reward_broadcasts.ingest(
-                sender_hotkey=synapse.sender_hotkey,
+                sender_hotkey=authenticated_hotkey,
                 epoch=synapse.epoch,
                 seq=synapse.seq,
                 uid_points=synapse.uid_points,
@@ -695,12 +696,12 @@ class Validator(BaseValidatorNeuron):
             self._reward_broadcasts.save()
             if accepted:
                 bt.logging.info(
-                    f"[BROADCAST] Ingested rewards from {synapse.sender_hotkey[:12]}.. "
+                    f"[BROADCAST] Ingested rewards from {authenticated_hotkey[:12]}.. "
                     f"epoch={synapse.epoch} uids={len(synapse.uid_points)}"
                 )
             else:
                 bt.logging.debug(
-                    f"[BROADCAST] Ignored rewards from {synapse.sender_hotkey[:12]}.. "
+                    f"[BROADCAST] Ignored rewards from {authenticated_hotkey[:12]}.. "
                     f"epoch={synapse.epoch} reason={reason}"
                 )
         except Exception as e:
@@ -712,8 +713,9 @@ class Validator(BaseValidatorNeuron):
         Receive penalty broadcasts from other validators and cache locally.
         """
         try:
+            authenticated_hotkey = synapse.dendrite.hotkey
             accepted, reason = self._penalty_broadcasts.ingest(
-                sender_hotkey=synapse.sender_hotkey,
+                sender_hotkey=authenticated_hotkey,
                 epoch=synapse.epoch,
                 seq=synapse.seq,
                 uid_penalties=synapse.uid_penalties,
@@ -722,12 +724,12 @@ class Validator(BaseValidatorNeuron):
             self._penalty_broadcasts.save()
             if accepted:
                 bt.logging.info(
-                    f"[PENALTY_BROADCAST] Ingested penalties from {synapse.sender_hotkey[:12]}.. "
+                    f"[PENALTY_BROADCAST] Ingested penalties from {authenticated_hotkey[:12]}.. "
                     f"epoch={synapse.epoch} uids={len(synapse.uid_penalties)}"
                 )
             else:
                 bt.logging.debug(
-                    f"[PENALTY_BROADCAST] Ignored penalties from {synapse.sender_hotkey[:12]}.. "
+                    f"[PENALTY_BROADCAST] Ignored penalties from {authenticated_hotkey[:12]}.. "
                     f"epoch={synapse.epoch} reason={reason}"
                 )
         except Exception as e:
