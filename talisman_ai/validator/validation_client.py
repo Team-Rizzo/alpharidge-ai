@@ -74,9 +74,30 @@ class ValidationClient:
         self._running = True
         bt.logging.info("[ValidationClient.run] Entering main validation loop (poll_interval=%ss, scores_interval=%s blocks)", self.poll_seconds, self.scores_block_interval)
 
+        # Provide wallet so remote config requests are authenticated
+        if self.wallet:
+            config.set_wallet(self.wallet)
+
+        # Fetch remote config on startup (force=True to bypass TTL)
+        try:
+            applied = config.refresh_remote_config(force=True)
+            if applied:
+                bt.logging.info(f"[ValidationClient.run] Remote config applied on startup: { {k: v for k, v in applied.items()} }")
+        except Exception as e:
+            bt.logging.warning(f"[ValidationClient.run] Failed to fetch remote config on startup: {e}")
+
         while self._running:
             try:
                 bt.logging.debug("[ValidationClient.run] Top of poll loop")
+
+                # Periodically refresh remote config (internally throttled)
+                try:
+                    applied = config.refresh_remote_config()
+                    if applied:
+                        bt.logging.info(f"[ValidationClient.run] Remote config refreshed: { {k: v for k, v in applied.items()} }")
+                except Exception as e:
+                    bt.logging.debug(f"[ValidationClient.run] Remote config refresh failed: {e}")
+
                 try:
                     bt.logging.debug("[ValidationClient.run] Checking for timed-out tweets")
                     timed_out_tweets = self._validator._tweet_store.get_timeouts()

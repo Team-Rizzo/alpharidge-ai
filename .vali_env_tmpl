@@ -25,3 +25,14 @@ VALIDATION_FETCH_LIMIT=24
 LLM_CACHE_TTL=300
 # Maximum number of cached classification results held in memory.
 LLM_CACHE_MAX_SIZE=1024
+
+# ── Remote Config ──────────────────────────────────────────────────
+# The validator fetches recommended settings from the API once per hour.
+# These values (MINER_BATCH_SIZE, VALIDATION_FETCH_LIMIT, USD_PRICE_PER_POINT,
+# MIN_PERCENT_PER_POINT) are applied automatically — no action needed.
+#
+# To override a remote value, prefix the variable with OVERRIDE_:
+#   OVERRIDE_MINER_BATCH_SIZE=10
+#   OVERRIDE_USD_PRICE_PER_POINT=0.050
+#
+# Local overrides always take precedence over the API recommendation.

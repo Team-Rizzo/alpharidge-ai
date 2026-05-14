@@ -192,8 +192,7 @@ def calculate_weights(rewards: list[Reward], metagraph) -> np.ndarray:
     Calculates the weights for a given list of points and hotkeys.
     Returns: np.ndarray of shape (metagraph.n,)
     """
-    # Minimum percent per point to survive uint16 conversion (1/65535 ≈ 0.00153%, with 2x margin = 0.003%)
-    MIN_PERCENT_PER_POINT = 0.003
+    MIN_PERCENT_PER_POINT = config.MIN_PERCENT_PER_POINT
     
     weights = np.zeros(metagraph.n if hasattr(metagraph, 'n') else len(metagraph), dtype=np.float64)
 
