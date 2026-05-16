@@ -102,7 +102,8 @@ class Validator(BaseValidatorNeuron):
 
     def resync_metagraph(self):
         super().resync_metagraph()
-        self._cooldown_tracker.prune(set(self.metagraph.hotkeys))
+        if hasattr(self, "_cooldown_tracker"):
+            self._cooldown_tracker.prune(set(self.metagraph.hotkeys))
 
     async def forward_tweets(self, synapse: talisman_ai.protocol.TweetBatch) -> talisman_ai.protocol.TweetBatch:
         """
