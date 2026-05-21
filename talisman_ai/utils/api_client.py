@@ -53,6 +53,9 @@ from talisman_ai.utils.api_models import (
     TelegramMessageWithContext, TelegramMessageForScoring,
     TelegramMessagesForScoringResponse,
     CompletedTelegramMessageSubmission,
+    # News article models
+    NewsArticleForScoring, NewsArticlesForScoringResponse,
+    CompletedNewsArticleSubmission,
 )
 
 logger = logging.getLogger(__name__)
@@ -658,9 +661,63 @@ class TalismanAPIClient:
         return SubmissionResponse(**data)
     
     # =========================================================================
+    # News Article Methods
+    # =========================================================================
+
+    async def get_unscored_articles(self, limit: int = 3) -> List[NewsArticleForScoring]:
+        """
+        Get news articles that haven't been scored yet.
+
+        This will mark the returned articles as "in_progress" and assign them
+        to your validator hotkey.
+
+        Args:
+            limit: Maximum number of articles to return (default: 3)
+
+        Returns:
+            List of NewsArticleForScoring objects
+        """
+        data = await self._request("GET", "/articles/unscored", params={"limit": limit})
+
+        articles = []
+        for article_data in data.get("articles", []):
+            article = NewsArticleForScoring(**article_data)
+            articles.append(article)
+
+        return articles
+
+    async def submit_completed_articles(
+        self,
+        completed_articles: List[Union[CompletedNewsArticleSubmission, Dict[str, Any]]],
+    ) -> SubmissionResponse:
+        """
+        Submit completed scored news articles.
+
+        Args:
+            completed_articles: List of completed articles with article_id and classification fields
+
+        Returns:
+            SubmissionResponse with success status
+        """
+        submissions = []
+        for item in completed_articles:
+            if isinstance(item, dict):
+                submissions.append(item)
+            else:
+                submissions.append(item.model_dump(exclude_none=True))
+
+        data = await self._request(
+            "POST",
+            "/articles/completed",
+            json={"completed_articles": submissions},
+        )
+
+        return SubmissionResponse(**data)
+
+    # =========================================================================
     # Price Methods
     # =========================================================================
-    
+
     async def get_tao_price(self) -> TaoPriceResponse:
         """
         Get the cached TAO/USD price.
@@ -825,6 +882,19 @@ class TalismanAPIClientSync:
         """Submit completed scored telegram messages."""
         return self._run(self._async_client.submit_completed_telegram_messages(completed_messages))
     
+    # News Article Methods
+
+    def get_unscored_articles(self, limit: int = 3) -> List[NewsArticleForScoring]:
+        """Get news articles that haven't been scored yet."""
+        return self._run(self._async_client.get_unscored_articles(limit))
+
+    def submit_completed_articles(
+        self,
+        completed_articles: List[Union[CompletedNewsArticleSubmission, Dict[str, Any]]],
+    ) -> SubmissionResponse:
+        """Submit completed scored news articles."""
+        return self._run(self._async_client.submit_completed_articles(completed_articles))
+
     def get_tao_price(self) -> TaoPriceResponse:
         """Get the cached TAO/USD price."""
         return self._run(self._async_client.get_tao_price())

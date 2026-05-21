@@ -21,6 +21,8 @@ import bittensor as bt
 from talisman_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring
 from .relevance import AssetRelevanceAnalyzer, PostClassification
 from .telegram_relevance import TelegramRelevanceAnalyzer, MessageGroupClassification
+from .news_relevance import NewsRelevanceAnalyzer, ArticleClassification
+from talisman_ai.utils.api_models import NewsArticleForScoring
 
 
 # ===== Normalization Caps =====
@@ -613,4 +615,236 @@ def score_post_entry(entry: TweetWithAuthor, analyzer, k: int = 5, analysis_resu
         "recency": rec,
         "score": max(0.0, min(1.0, float(final)))
     }
+
+
+# ===== News Article Scoring =====
+
+SOURCE_CREDIBILITY = {
+    "reuters": 1.0, "ap_news": 1.0, "bbc": 1.0, "financial_times": 1.0,
+    "wsj": 1.0, "bloomberg": 1.0,
+    "economist": 0.9, "nytimes": 0.9,
+    "cnbc": 0.8, "guardian": 0.8, "politico": 0.8,
+    "washington_post": 0.8, "forbes": 0.8, "barrons": 0.8, "npr": 0.8,
+    "techcrunch": 0.7, "ars_technica": 0.7, "wired": 0.7,
+    "marketwatch": 0.7, "investopedia": 0.7, "nasdaq": 0.7,
+    "seeking_alpha": 0.7, "yahoo_finance": 0.7, "motley_fool": 0.6,
+    "benzinga": 0.6, "thestreet": 0.6, "zacks": 0.6,
+}
+
+
+def article_value_score(article: NewsArticleForScoring) -> float:
+    """
+    Compute value score for a news article based on source credibility and content availability.
+
+    Since articles don't have engagement metrics (likes/retweets), value is derived from:
+    1. Source credibility (60% weight)
+    2. Content availability (40% weight)
+
+    Args:
+        article: NewsArticleForScoring object
+
+    Returns:
+        Value score in [0.0, 1.0]
+    """
+    source_cred = SOURCE_CREDIBILITY.get(article.source, 0.5)
+    content_score = 1.0 if article.content else 0.5
+    return 0.6 * source_cred + 0.4 * content_score
+
+
+def compute_article_score(
+    classification: ArticleClassification,
+    article: NewsArticleForScoring,
+    weights: Dict = None
+) -> float:
+    """
+    Compute final article score combining classification + source credibility + recency
+
+    Args:
+        classification: ArticleClassification result
+        article: NewsArticleForScoring object
+        weights: Optional custom weights dict
+
+    Returns:
+        Final score in [0.0, 1.0]
+    """
+    if not article.published:
+        return 0.0
+
+    published_str = article.published if isinstance(article.published, str) else article.published.isoformat()
+    dt = datetime.fromisoformat(published_str.replace("Z", "+00:00")).astimezone(timezone.utc)
+    age_days = (datetime.now(timezone.utc) - dt).total_seconds() / (3600.0 * 24.0)
+    if age_days > 10:
+        return 0.0
+
+    if weights is None:
+        weights = {
+            "relevance": 0.50,
+            "value": 0.40,
+            "recency": 0.10,
+        }
+
+    # sector_id 9 = Other (irrelevant)
+    relevance = 1.0 if classification.sector_id != 9 else 0.0
+
+    val = article_value_score(article)
+
+    rec = recency_score(article.published)
+
+    final = weights["relevance"] * relevance + weights["value"] * val + weights["recency"] * rec
+
+    return _clamp01(final)
+
+
+def validate_miner_article_batch(
+    miner_batch: List[NewsArticleForScoring],
+    analyzer: NewsRelevanceAnalyzer,
+    sample_size: int = 1,
+    seed: int = None
+) -> Tuple[bool, Dict]:
+    """
+    Validate a miner's news article batch by sampling articles and checking classifications.
+
+    All fields require exact match:
+    sector_id, sentiment, content_type, technical_quality, market_analysis, impact_potential
+
+    Args:
+        miner_batch: List of NewsArticleForScoring objects
+        analyzer: NewsRelevanceAnalyzer instance
+        sample_size: Number of articles to sample (default: 1)
+        seed: Random seed for reproducible sampling
+
+    Returns:
+        Tuple of (is_valid, result_dict)
+    """
+    if seed is not None:
+        random.seed(seed)
+
+    sample_size = min(sample_size, len(miner_batch))
+    sampled_articles = random.sample(miner_batch, sample_size)
+
+    bt.logging.info(f"[Validator] Sampling {sample_size} article(s) from batch of {len(miner_batch)}")
+
+    matches = 0
+    discrepancies = []
+
+    for i, article in enumerate(sampled_articles):
+        article_preview = article.title[:100]
+        miner_analysis = article.analysis
+
+        if miner_analysis is None:
+            bt.logging.warning(f"[Validator] No miner classification for article {i+1}")
+            discrepancies.append({
+                "article_index": i,
+                "reason": "missing_miner_classification",
+                "article_preview": article_preview
+            })
+            continue
+
+        # Grace period: miner hasn't updated to sector_id yet
+        if not hasattr(miner_analysis, 'sector_id') or miner_analysis.sector_id is None:
+            bt.logging.warning(
+                f"[Validator] Article {i+1}: Miner using outdated code (no sector_id). "
+                f"Miner needs to pull latest talisman-ai and restart."
+            )
+            discrepancies.append({
+                "article_index": i,
+                "reason": "miner_needs_update",
+                "message": "Miner is using outdated code. Pull latest talisman-ai and restart.",
+                "article_preview": article_preview
+            })
+            continue
+
+        validator_result = analyzer.classify_article(article.title, article.summary, article.content)
+        if validator_result is None:
+            bt.logging.warning(f"[Validator] Failed to classify article {i+1}")
+            discrepancies.append({
+                "article_index": i,
+                "reason": "validator_classification_failed",
+                "article_preview": article_preview
+            })
+            continue
+
+        def _lower(val):
+            return val.lower() if isinstance(val, str) else val
+
+        m_sector = miner_analysis.sector_id
+        m_sent = miner_analysis.sentiment
+        m_content = miner_analysis.content_type
+        m_tech = miner_analysis.technical_quality
+        m_market = miner_analysis.market_analysis
+        m_impact = miner_analysis.impact_potential
+
+        v_sector = validator_result.sector_id
+        v_sent = validator_result.sentiment.value if validator_result.sentiment else None
+        v_content = validator_result.content_type.value if validator_result.content_type else None
+        v_tech = validator_result.technical_quality.value if validator_result.technical_quality else None
+        v_market = validator_result.market_analysis.value if validator_result.market_analysis else None
+        v_impact = validator_result.impact_potential.value if validator_result.impact_potential else None
+
+        sector_ok = m_sector == v_sector
+        sentiment_ok = _lower(m_sent) == _lower(v_sent)
+        content_ok = _lower(m_content) == _lower(v_content)
+        tech_ok = _lower(m_tech) == _lower(v_tech)
+        market_ok = _lower(m_market) == _lower(v_market)
+        impact_ok = _lower(m_impact) == _lower(v_impact)
+
+        all_ok = sector_ok and sentiment_ok and content_ok and tech_ok and market_ok and impact_ok
+
+        if all_ok:
+            matches += 1
+            bt.logging.debug(f"[Validator] Article {i+1}: MATCH")
+        else:
+            failed_fields = []
+            if not sector_ok:
+                failed_fields.append(f"sector_id (miner={m_sector} vs validator={v_sector})")
+            if not sentiment_ok:
+                failed_fields.append(f"sentiment (miner={m_sent} vs validator={v_sent})")
+            if not content_ok:
+                failed_fields.append(f"content_type (miner={m_content} vs validator={v_content})")
+            if not tech_ok:
+                failed_fields.append(f"technical_quality (miner={m_tech} vs validator={v_tech})")
+            if not market_ok:
+                failed_fields.append(f"market_analysis (miner={m_market} vs validator={v_market})")
+            if not impact_ok:
+                failed_fields.append(f"impact_potential (miner={m_impact} vs validator={v_impact})")
+
+            bt.logging.warning(f"[Validator] Article {i+1}: MISMATCH - Failed fields: {', '.join(failed_fields)}")
+            bt.logging.warning(f"[Validator] Article {i+1} title preview: {article_preview}")
+            bt.logging.warning(f"[Validator] Article {i+1} Miner: sector_id={m_sector}, sentiment={m_sent}, content_type={m_content}, tech={m_tech}, market={m_market}, impact={m_impact}")
+            bt.logging.warning(f"[Validator] Article {i+1} Validator: sector_id={v_sector}, sentiment={v_sent}, content_type={v_content}, tech={v_tech}, market={v_market}, impact={v_impact}")
+
+            discrepancies.append({
+                "article_index": i,
+                "reason": "classification_mismatch",
+                "miner": {
+                    "sector_id": m_sector, "sentiment": m_sent, "content_type": m_content,
+                    "technical_quality": m_tech, "market_analysis": m_market, "impact_potential": m_impact
+                },
+                "validator": {
+                    "sector_id": v_sector, "sentiment": v_sent, "content_type": v_content,
+                    "technical_quality": v_tech, "market_analysis": v_market, "impact_potential": v_impact
+                },
+                "field_results": {
+                    "sector_id": sector_ok, "sentiment": sentiment_ok, "content_type": content_ok,
+                    "technical_quality": tech_ok, "market_analysis": market_ok, "impact_potential": impact_ok
+                },
+                "article_preview": article_preview
+            })
+
+    is_valid = matches == sample_size and len(discrepancies) == 0
+
+    result = {
+        "is_valid": is_valid,
+        "matches": matches,
+        "total_sampled": sample_size,
+        "discrepancies": discrepancies,
+        "match_rate": matches / sample_size if sample_size > 0 else 0.0
+    }
+
+    if is_valid:
+        bt.logging.success(f"[Validator] Article batch ACCEPTED: {matches}/{sample_size} matches")
+    else:
+        bt.logging.warning(f"[Validator] Article batch REJECTED: {matches}/{sample_size} matches, {len(discrepancies)} discrepancies")
+
+    return is_valid, result
 

@@ -8,7 +8,7 @@ import random
 
 from talisman_ai import config
 from talisman_ai.utils.api_client import TalismanAPIClient
-from talisman_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring
+from talisman_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring, NewsArticleForScoring
 from talisman_ai.utils.burn import calculate_weights
 from talisman_ai.models.reward import Reward
 from talisman_ai.protocol import ValidatorRewards
@@ -63,6 +63,7 @@ class ValidationClient:
         self,
         on_tweets: Callable[[List[TweetWithAuthor]], Any],
         on_telegram_messages: Callable[[List[TelegramMessageForScoring]], Any] = None,
+        on_articles: Callable[[List[NewsArticleForScoring]], Any] = None,
     ):
         """
         Main validation loop.
@@ -139,6 +140,29 @@ class ValidationClient:
                     except Exception as e:
                         bt.logging.warning(f"[ValidationClient.run] Failed to fetch/process telegram messages: {e}")
 
+                # Fetch unscored news articles
+                if on_articles is not None:
+                    try:
+                        bt.logging.debug("[ValidationClient.run] Checking for timed-out articles")
+                        timed_out_articles = self._validator._article_store.get_timeouts()
+                        for article_item in timed_out_articles:
+                            bt.logging.debug(f"[ValidationClient.run] Resetting timed out article {article_item.article.id} to unprocessed")
+                            self._validator._article_store.reset_to_unprocessed(article_item.article.id)
+                            if article_item.hotkey:
+                                bt.logging.info(f"[ValidationClient.run] Adding penalty to hotkey {article_item.hotkey} for article id {article_item.article.id}")
+                                self._validator._miner_penalty.add_penalty(article_item.hotkey, 1)
+                        bt.logging.debug("[ValidationClient.run] Fetching unscored articles from api and local store")
+                        unscored_articles = (await self.api_client.get_unscored_articles(limit=config.VALIDATION_FETCH_LIMIT)) + [item.article for item in self._validator._article_store.get_unprocessed_articles()]
+
+                        if unscored_articles:
+                            bt.logging.debug(f"[ValidationClient.run] Passing {len(unscored_articles)} unscored articles to on_articles() callback")
+                            maybe_coro = on_articles(unscored_articles)
+                            if asyncio.iscoroutine(maybe_coro):
+                                bt.logging.debug("[ValidationClient.run] Awaiting on_articles coroutine")
+                                await maybe_coro
+                    except Exception as e:
+                        bt.logging.warning(f"[ValidationClient.run] Failed to fetch/process articles: {e}")
+
                 # Submit tweets processed locally but not yet submitted to the API.
                 ready = self._validator._tweet_store.get_ready_to_submit()
                 bt.logging.debug(f"[ValidationClient.run] Checking {len(ready) if ready else 0} tweets ready to submit to API")
@@ -169,6 +193,21 @@ class ValidationClient:
                             bt.logging.warning(f"[ValidationClient.run] Failed to submit completed telegram message {item.message.id}: {e}")
                             continue
 
+                # Submit articles processed locally but not yet submitted to the API.
+                article_ready = self._validator._article_store.get_ready_to_submit()
+                bt.logging.debug(f"[ValidationClient.run] Checking {len(article_ready) if article_ready else 0} articles ready to submit to API")
+                if article_ready:
+                    for item in article_ready:
+                        try:
+                            bt.logging.debug(f"[ValidationClient.run] Submitting article {item.article.id} to API")
+                            await self._validator._submit_article_batch([item.article])
+                            self._validator._article_store.mark_submitted(item.article.id)
+                            self._validator._article_store.delete_article(item.article.id)
+                            bt.logging.info(f"[ValidationClient.run] Successfully submitted article {item.article.id} and removed it from store")
+                        except Exception as e:
+                            bt.logging.warning(f"[ValidationClient.run] Failed to submit completed article {item.article.id}: {e}")
+                            continue
+
                 # Persist local state.
                 try:
                     bt.logging.debug("[ValidationClient.run] Saving tweet store to disk")
@@ -180,6 +219,11 @@ class ValidationClient:
                     self._validator._telegram_store.save_to_file()
                 except Exception as e:
                     bt.logging.debug(f"[ValidationClient.run] Failed to persist telegram store: {e}")
+                try:
+                    bt.logging.debug("[ValidationClient.run] Saving article store to disk")
+                    self._validator._article_store.save_to_file()
+                except Exception as e:
+                    bt.logging.debug(f"[ValidationClient.run] Failed to persist article store: {e}")
 
                 # ---- Periodic remote config refresh ----
                 try:
@@ -406,6 +450,7 @@ class ValidationClient:
                 self._validator._reward_broadcasts.save()
                 self._validator._tweet_store.save_to_file()
                 self._validator._telegram_store.save_to_file()
+                self._validator._article_store.save_to_file()
                 self._validator._miner_reward.save()
                 self._validator._miner_penalty.save()
                 

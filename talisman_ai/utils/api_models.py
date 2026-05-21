@@ -458,3 +458,63 @@ class CompletedTelegramMessageSubmission(BaseModel):
 class CompletedTelegramMessagesSubmission(BaseModel):
     """Model for submitting multiple completed scored telegram messages."""
     completed_messages: List[CompletedTelegramMessageSubmission]
+
+
+# ============================================================================
+# News Article Models
+# ============================================================================
+
+class NewsArticleAnalysisBase(BaseModel):
+    """Base news article analysis model."""
+    sentiment: Optional[str] = None
+    sector_id: Optional[int] = Field(None, alias="sectorId")
+    sector_symbol: Optional[str] = Field(None, alias="sectorSymbol")
+    content_type: Optional[str] = Field(None, alias="contentType")
+    technical_quality: Optional[str] = Field(None, alias="technicalQuality")
+    market_analysis: Optional[str] = Field(None, alias="marketAnalysis")
+    impact_potential: Optional[str] = Field(None, alias="impactPotential")
+
+    class Config:
+        populate_by_name = True
+        extra = "allow"
+
+
+class NewsArticleForScoring(BaseModel):
+    """News article model with optional analysis for scoring."""
+    id: int
+    url: str
+    title: str
+    summary: Optional[str] = None
+    content: Optional[str] = None
+    published: Optional[str] = None
+    source: str
+    topic: Optional[str] = None
+    extra: Optional[dict] = None
+    analysis: Optional[NewsArticleAnalysisBase] = None
+
+    class Config:
+        populate_by_name = True
+
+
+class NewsArticlesForScoringResponse(BaseModel):
+    """Response model for getting news articles for scoring."""
+    articles: List[NewsArticleForScoring]
+    count: int
+
+
+class CompletedNewsArticleSubmission(BaseModel):
+    """Model for submitting a completed scored news article."""
+    article_id: int
+    sentiment: str
+    sector_id: Optional[int] = None
+    sector_symbol: Optional[str] = None
+    content_type: Optional[str] = None
+    technical_quality: Optional[str] = None
+    market_analysis: Optional[str] = None
+    impact_potential: Optional[str] = None
+    relevance_confidence: Optional[str] = None
+
+
+class CompletedNewsArticlesSubmission(BaseModel):
+    """Model for submitting multiple completed scored news articles."""
+    completed_articles: List[CompletedNewsArticleSubmission]

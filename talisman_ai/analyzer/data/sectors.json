@@ -1,0 +1,57 @@
+[
+  {
+    "id": 1,
+    "name": "Crypto & Digital Assets",
+    "symbol": "CRYPTO",
+    "unique_identifiers": ["bitcoin", "ethereum", "crypto", "blockchain", "defi", "nft", "stablecoin", "binance", "coinbase", "solana", "bittensor", "cryptocurrency", "digital asset", "web3", "token", "altcoin", "decentralized"],
+    "cashtags": ["$BTC", "$ETH", "$SOL", "$TAO", "$XRP", "$ADA", "$DOGE", "$AVAX", "$DOT", "$LINK", "$MATIC"]
+  },
+  {
+    "id": 2,
+    "name": "Monetary Policy & Central Banks",
+    "symbol": "MONETARY",
+    "unique_identifiers": ["federal reserve", "interest rate", "fomc", "rate cut", "rate hike", "quantitative easing", "quantitative tightening", "central bank", "ecb", "bank of japan", "monetary policy", "inflation target", "fed funds", "treasury yield", "bond yield", "yield curve"]
+  },
+  {
+    "id": 3,
+    "name": "Macro & Economy",
+    "symbol": "MACRO",
+    "unique_identifiers": ["gdp", "inflation", "unemployment", "trade deficit", "consumer spending", "consumer price index", "cpi", "ppi", "recession", "economic growth", "labor market", "jobs report", "nonfarm payrolls", "retail sales", "housing starts", "economic outlook"]
+  },
+  {
+    "id": 4,
+    "name": "Equities & Corporate",
+    "symbol": "EQUITIES",
+    "unique_identifiers": ["earnings", "ipo", "nasdaq", "s&p 500", "dow jones", "stock market", "wall street", "quarterly results", "revenue growth", "profit margin", "dividend", "share buyback", "market cap", "stock price"]
+  },
+  {
+    "id": 5,
+    "name": "Commodities & Energy",
+    "symbol": "COMMODITIES",
+    "unique_identifiers": ["crude oil", "gold price", "natural gas", "opec", "commodity", "silver", "copper", "wheat", "agriculture", "petroleum", "brent crude", "wti", "precious metal", "energy market"]
+  },
+  {
+    "id": 6,
+    "name": "Geopolitics & Regulation",
+    "symbol": "GEOPOLITICS",
+    "unique_identifiers": ["sanctions", "trade war", "tariff", "regulation", "legislation", "securities and exchange commission", "sec filing", "congress", "executive order", "treaty", "embargo", "diplomatic", "compliance", "antitrust"]
+  },
+  {
+    "id": 7,
+    "name": "Technology & AI",
+    "symbol": "TECH",
+    "unique_identifiers": ["artificial intelligence", "semiconductor", "cloud computing", "cybersecurity", "machine learning", "neural network", "chip shortage", "gpu", "data center", "quantum computing", "large language model", "generative ai"]
+  },
+  {
+    "id": 8,
+    "name": "Science & Health",
+    "symbol": "SCIENCE",
+    "unique_identifiers": ["fda approval", "clinical trial", "vaccine", "biotech", "pharmaceutical", "climate change", "research study", "genome", "crispr", "pandemic", "public health", "drug approval", "medical device"]
+  },
+  {
+    "id": 9,
+    "name": "Other",
+    "symbol": "OTHER",
+    "unique_identifiers": []
+  }
+]

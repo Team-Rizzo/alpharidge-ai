@@ -20,7 +20,7 @@
 import bittensor as bt
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
-from talisman_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring
+from talisman_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring, NewsArticleForScoring
 
 class Score(bt.Synapse):
     """
@@ -59,6 +59,11 @@ class TelegramBatch(bt.Synapse):
     Synapse for sending telegram message batch from miner to validator.
     """
     message_batch: List[TelegramMessageForScoring]
+
+
+class ArticleBatch(bt.Synapse):
+    """Synapse for sending news article batch from miner to validator."""
+    article_batch: List[NewsArticleForScoring]
 
 
 class ValidatorRewards(bt.Synapse):

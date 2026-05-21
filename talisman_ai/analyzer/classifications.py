@@ -52,6 +52,19 @@ class Sentiment(str, Enum):
     VERY_BEARISH = "very_bearish"   # Crash, exploit, major failure
 
 
+class ArticleContentType(str, Enum):
+    """Type of news article content"""
+    BREAKING_NEWS = "breaking_news"
+    ANALYSIS = "analysis"
+    OPINION = "opinion"
+    EARNINGS = "earnings"
+    REGULATORY = "regulatory"
+    RESEARCH = "research"
+    PRESS_RELEASE = "press_release"
+    INTERVIEW = "interview"
+    OTHER = "other"
+
+
 class TechnicalQuality(str, Enum):
     """Quality of technical information"""
     HIGH = "high"       # ≥2 specifics: APIs, versions, repos, endpoints, metrics
