@@ -431,6 +431,7 @@ class Validator(BaseValidatorNeuron):
             return False
 
         bt.logging.info(f"[VALIDATION] Batch validation PASSED for miner {miner_hotkey}")
+        self._tweet_cooldown.record_success(miner_hotkey)
         # Batch accepted: persist analyzed tweets, mark processed, and reward once per tweet.
         for tweet in tweet_batch:
             # Ensure store has the analyzed tweet for API submission.
@@ -529,6 +530,7 @@ class Validator(BaseValidatorNeuron):
             return False
 
         bt.logging.info(f"[VALIDATION] Telegram batch validation PASSED for miner {miner_hotkey}")
+        self._telegram_cooldown.record_success(miner_hotkey)
         # Batch accepted: persist analyzed messages, mark processed, and reward once per message.
         for msg in message_batch:
             # Ensure store has the analyzed message for API submission.
@@ -612,6 +614,7 @@ class Validator(BaseValidatorNeuron):
             return False
 
         bt.logging.info(f"[VALIDATION] Article batch validation PASSED for miner {miner_hotkey}")
+        self._article_cooldown.record_success(miner_hotkey)
         for article in article_batch:
             try:
                 self._article_store.update_article(article.id, article)
