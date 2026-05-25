@@ -92,6 +92,11 @@ class RewardBroadcastStore:
                 )
                 self.last_seen_seq[sender] = seq_i - 1
                 last = seq_i - 1
+                stale_epochs = [e for e in self.by_epoch_by_sender if e > epoch_i * 2]
+                for e in stale_epochs:
+                    self.by_epoch_by_sender.pop(e, None)
+                if stale_epochs:
+                    bt.logging.info(f"[BROADCAST] Flushed {len(stale_epochs)} stale epochs from old scheme")
             else:
                 return False, f"duplicate_or_old_seq(last={last}, got={seq_i})"
 
