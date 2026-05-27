@@ -54,6 +54,8 @@ class ValidationClient:
         self._last_publish_epoch: Optional[int] = None
         # Avoid spamming API submissions: submit at most once per target epoch.
         self._last_api_submit_epoch: Optional[int] = None
+        # Avoid spamming score sends: send at most once per target epoch.
+        self._last_score_epoch: Optional[int] = None
         # Loop cadence. Keep defaults aligned with config.
         self.poll_seconds = poll_seconds if poll_seconds is not None else config.VALIDATION_POLL_SECONDS
         self.scores_block_interval = scores_block_interval if scores_block_interval is not None else config.SCORES_BLOCK_INTERVAL
@@ -452,41 +454,43 @@ class ValidationClient:
                 bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
                 self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())
 
-                # Send each active miner their raw reward/penalty counts for this epoch
-                try:
-                    score_start_block = int(target_epoch) * int(config.BLOCK_LENGTH)
-                    score_end_block = (int(target_epoch) + 1) * int(config.BLOCK_LENGTH) - 1
-                    active_hotkeys = set((local_rewards_map or {}).keys()) | set((local_penalties or {}).keys())
+                # Send each active miner their raw reward/penalty counts for this epoch (once per epoch)
+                if self._last_score_epoch != target_epoch:
+                    try:
+                        score_start_block = int(target_epoch) * int(config.BLOCK_LENGTH)
+                        score_end_block = (int(target_epoch) + 1) * int(config.BLOCK_LENGTH) - 1
+                        active_hotkeys = set((local_rewards_map or {}).keys()) | set((local_penalties or {}).keys())
 
-                    async def _send_score(hk: str) -> None:
-                        try:
-                            if hk not in self._validator.metagraph.hotkeys:
-                                return
-                            uid = self._validator.metagraph.hotkeys.index(hk)
-                            axon = self._validator.metagraph.axons[uid]
-                            r = int((local_rewards_map or {}).get(hk, 0))
-                            p = int((local_penalties or {}).get(hk, 0))
-                            syn = Score(
-                                block_window_start=score_start_block,
-                                block_window_end=score_end_block,
-                                rewards=r,
-                                penalties=p,
-                                score=float(r - p),
-                                validator_hotkey=self._validator.wallet.hotkey.ss58_address,
-                            )
-                            await self._validator.dendrite.forward(
-                                axons=[axon],
-                                synapse=syn,
-                                timeout=12.0,
-                                deserialize=False,
-                            )
-                        except Exception:
-                            pass
+                        async def _send_score(hk: str) -> None:
+                            try:
+                                if hk not in self._validator.metagraph.hotkeys:
+                                    return
+                                uid = self._validator.metagraph.hotkeys.index(hk)
+                                axon = self._validator.metagraph.axons[uid]
+                                r = int((local_rewards_map or {}).get(hk, 0))
+                                p = int((local_penalties or {}).get(hk, 0))
+                                syn = Score(
+                                    block_window_start=score_start_block,
+                                    block_window_end=score_end_block,
+                                    rewards=r,
+                                    penalties=p,
+                                    score=float(r - p),
+                                    validator_hotkey=self._validator.wallet.hotkey.ss58_address,
+                                )
+                                await self._validator.dendrite.forward(
+                                    axons=[axon],
+                                    synapse=syn,
+                                    timeout=12.0,
+                                    deserialize=False,
+                                )
+                            except Exception:
+                                pass
 
-                    await asyncio.gather(*[_send_score(hk) for hk in active_hotkeys])
-                    bt.logging.info(f"[SCORE] Sent epoch={target_epoch} scores to {len(active_hotkeys)} miner(s)")
-                except Exception as e:
-                    bt.logging.debug(f"[ValidationClient.run] [SCORE] Failed to send scores: {e}")
+                        await asyncio.gather(*[_send_score(hk) for hk in active_hotkeys])
+                        self._last_score_epoch = target_epoch
+                        bt.logging.info(f"[SCORE] Sent epoch={target_epoch} scores to {len(active_hotkeys)} miner(s)")
+                    except Exception as e:
+                        bt.logging.debug(f"[ValidationClient.run] [SCORE] Failed to send scores: {e}")
 
                 bt.logging.debug(f"[ValidationClient.run] Sleeping for {self.poll_seconds} seconds before next poll loop")
                 
