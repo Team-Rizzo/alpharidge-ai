@@ -9,6 +9,7 @@ from talisman_ai import config  # Loads .miner_env and .vali_env
 from .relevance import AssetRelevanceAnalyzer
 from .telegram_relevance import TelegramRelevanceAnalyzer
 from .news_relevance import NewsRelevanceAnalyzer
+from .article_intelligence_analyzer import ArticleIntelligenceAnalyzer
 
 
 def setup_analyzer(assets_file: str = None) -> AssetRelevanceAnalyzer:
@@ -73,3 +74,15 @@ def setup_news_analyzer(sectors_file: str = None) -> NewsRelevanceAnalyzer:
         sectors_data = json.load(f)
 
     return NewsRelevanceAnalyzer(sectors=sectors_data)
+
+
+def setup_article_intelligence_analyzer() -> ArticleIntelligenceAnalyzer:
+    """Setup the full ArticleIntelligence analyzer.
+
+    Uses model/api_key/llm_base from config (loaded from .miner_env / .vali_env).
+    Loads all data files (assets, contagion templates, narratives, dependency graph, source profiles).
+
+    Returns:
+        Configured ArticleIntelligenceAnalyzer instance
+    """
+    return ArticleIntelligenceAnalyzer()

@@ -467,7 +467,13 @@ class CompletedTelegramMessagesSubmission(BaseModel):
 # ============================================================================
 
 class NewsArticleAnalysisBase(BaseModel):
-    """Base news article analysis model."""
+    """Base news article analysis model.
+
+    V1 fields (backward-compatible): sentiment through relevance_confidence.
+    V2 fields (ArticleIntelligence): stored in analysis_data JSONB.
+    During transition both old and new miners are supported.
+    """
+    # V1 fields (kept for backward compatibility)
     sentiment: Optional[str] = None
     sector_id: Optional[int] = Field(None, alias="sectorId")
     sector_symbol: Optional[str] = Field(None, alias="sectorSymbol")
@@ -476,6 +482,43 @@ class NewsArticleAnalysisBase(BaseModel):
     market_analysis: Optional[str] = Field(None, alias="marketAnalysis")
     impact_potential: Optional[str] = Field(None, alias="impactPotential")
     relevance_confidence: Optional[str] = Field(None, alias="relevanceConfidence")
+
+    # V2 fields (ArticleIntelligence expansion)
+    overall_sentiment_score: Optional[float] = Field(None, alias="overallSentimentScore")
+    sentiment_direction: Optional[str] = Field(None, alias="sentimentDirection")
+    urgency: Optional[str] = None
+    temporal_focus: Optional[str] = Field(None, alias="temporalFocus")
+    factual_confidence: Optional[str] = Field(None, alias="factualConfidence")
+    positioning_signal: Optional[str] = Field(None, alias="positioningSignal")
+    target_audience: Optional[str] = Field(None, alias="targetAudience")
+    credibility_flag: Optional[str] = Field(None, alias="credibilityFlag")
+    primary_geo: Optional[str] = Field(None, alias="primaryGeo")
+    market_session: Optional[str] = Field(None, alias="marketSession")
+    detected_language: Optional[str] = Field(None, alias="detectedLanguage")
+    staleness_flag: Optional[str] = Field(None, alias="stalenessFlag")
+    forward_event_type: Optional[str] = Field(None, alias="forwardEventType")
+
+    # Rich nested data (serialized as dicts for wire transport)
+    assets: Optional[List[dict]] = None
+    entities: Optional[List[dict]] = None
+    economic_data: Optional[List[dict]] = Field(None, alias="economicData")
+    numeric_claims: Optional[List[dict]] = Field(None, alias="numericClaims")
+    quotes: Optional[List[dict]] = None
+    contagion_links: Optional[List[dict]] = Field(None, alias="contagionLinks")
+    chart_summary: Optional[dict] = Field(None, alias="chartSummary")
+    event_fingerprint: Optional[dict] = Field(None, alias="eventFingerprint")
+    narrative_keywords: Optional[List[str]] = Field(None, alias="narrativeKeywords")
+    topic_signature: Optional[dict] = Field(None, alias="topicSignature")
+    text_stats: Optional[dict] = Field(None, alias="textStats")
+    inferred_impacts: Optional[List[dict]] = Field(None, alias="inferredImpacts")
+
+    # Embeddings (large, transmitted separately or omitted for wire efficiency)
+    title_embedding: Optional[List[float]] = Field(None, alias="titleEmbedding")
+    body_embedding: Optional[List[float]] = Field(None, alias="bodyEmbedding")
+    narrative_embedding: Optional[List[float]] = Field(None, alias="narrativeEmbedding")
+
+    # Full ArticleIntelligence as a single JSONB blob (alternative to field-by-field)
+    analysis_data: Optional[dict] = Field(None, alias="analysisData")
 
     class Config:
         populate_by_name = True
@@ -506,7 +549,11 @@ class NewsArticlesForScoringResponse(BaseModel):
 
 
 class CompletedNewsArticleSubmission(BaseModel):
-    """Model for submitting a completed scored news article."""
+    """Model for submitting a completed scored news article.
+
+    V1 fields for backward compatibility. V2 fields carry the full
+    ArticleIntelligence output either field-by-field or as analysis_data JSONB.
+    """
     article_id: int
     sentiment: str
     sector_id: Optional[int] = None
@@ -517,6 +564,9 @@ class CompletedNewsArticleSubmission(BaseModel):
     impact_potential: Optional[str] = None
     relevance_confidence: Optional[str] = None
     miner_hotkey: Optional[str] = None
+
+    # V2: full ArticleIntelligence as JSONB (the API stores this in analysisData column)
+    analysis_data: Optional[dict] = None
 
 
 class CompletedNewsArticlesSubmission(BaseModel):

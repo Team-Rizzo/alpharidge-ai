@@ -1,11 +1,46 @@
 """
-Categorical Enums for X-Post Classification
+Categorical Enums for Classification
 
 All classification decisions use discrete categories (no floats) to enable
 deterministic validation via exact matching of canonical strings.
+
+Tweet/Telegram classifications use the original enums (ContentType, Sentiment, etc.).
+Article intelligence classifications are defined in talisman_ai.models.article_intelligence
+and re-exported here for convenience.
 """
 
 from enum import Enum
+
+from talisman_ai.models.article_intelligence import (
+    ArticleContentType as ArticleContentTypeV2,
+    AssetClass,
+    ContagionMechanism,
+    CredibilityFlag,
+    DisambiguationMethod,
+    EconomicEventType,
+    EntityRole,
+    EntityType,
+    EventType,
+    FactualConfidence,
+    ForwardEventType,
+    GeoImpactZone,
+    ImpactPotential as ImpactPotentialV2,
+    MarketAnalysisType,
+    MarketSession,
+    MNPIRiskFlag,
+    NumericUnit,
+    PositioningSignalType,
+    Sentiment as SentimentV2,
+    SentimentDirection,
+    SourceAttributionType,
+    SourceCategory,
+    StalenessFlag,
+    TargetAudience,
+    TechnicalQuality as TechnicalQualityV2,
+    TemporalFocus,
+    Urgency,
+    ArticleStatus,
+)
 
 class ContentType(str, Enum):
     """Type of X-Post content"""

@@ -1,0 +1,304 @@
+[
+  {
+    "template_id": "fed_rate_cut",
+    "event_type": "monetary_policy",
+    "description": "Federal Reserve cuts interest rates",
+    "keywords": ["rate cut", "fed cut", "lower rates", "dovish fed", "easing", "rate reduction"],
+    "nodes": [
+      {"label": "Fed Rate Cut", "domain": "monetary", "sector_id": 2, "direction": "neutral", "magnitude": "high", "confidence": "high"},
+      {"label": "US Dollar (DXY)", "domain": "macro", "sector_id": 3, "direction": "bearish", "magnitude": "high", "confidence": "high"},
+      {"label": "US Equities", "domain": "equities", "sector_id": 4, "direction": "bullish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "Gold", "domain": "commodities", "sector_id": 5, "direction": "bullish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "BTC", "domain": "crypto", "sector_id": 1, "direction": "bullish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "Bond Yields", "domain": "macro", "sector_id": 3, "direction": "bearish", "magnitude": "high", "confidence": "high"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Rate cuts weaken the dollar by reducing yield advantage"},
+      {"source_index": 0, "target_index": 5, "relationship": "causal", "lag": "immediate", "reasoning": "Rate cuts directly lower bond yields"},
+      {"source_index": 1, "target_index": 3, "relationship": "inverse_correlation", "lag": "intraday", "reasoning": "Weaker dollar makes gold cheaper in other currencies"},
+      {"source_index": 1, "target_index": 4, "relationship": "inverse_correlation", "lag": "intraday", "reasoning": "Weaker dollar historically bullish for BTC"},
+      {"source_index": 0, "target_index": 2, "relationship": "causal", "lag": "immediate", "reasoning": "Lower rates reduce borrowing costs and discount rates for equities"}
+    ]
+  },
+  {
+    "template_id": "fed_rate_hike",
+    "event_type": "monetary_policy",
+    "description": "Federal Reserve raises interest rates",
+    "keywords": ["rate hike", "fed hike", "raise rates", "hawkish fed", "tightening", "rate increase"],
+    "nodes": [
+      {"label": "Fed Rate Hike", "domain": "monetary", "sector_id": 2, "direction": "neutral", "magnitude": "high", "confidence": "high"},
+      {"label": "US Dollar (DXY)", "domain": "macro", "sector_id": 3, "direction": "bullish", "magnitude": "high", "confidence": "high"},
+      {"label": "US Equities", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "Gold", "domain": "commodities", "sector_id": 5, "direction": "bearish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "BTC", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "Bond Yields", "domain": "macro", "sector_id": 3, "direction": "bullish", "magnitude": "high", "confidence": "high"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Rate hikes strengthen the dollar via yield advantage"},
+      {"source_index": 0, "target_index": 5, "relationship": "causal", "lag": "immediate", "reasoning": "Rate hikes directly raise bond yields"},
+      {"source_index": 1, "target_index": 3, "relationship": "inverse_correlation", "lag": "intraday", "reasoning": "Stronger dollar makes gold more expensive in other currencies"},
+      {"source_index": 1, "target_index": 4, "relationship": "inverse_correlation", "lag": "intraday", "reasoning": "Stronger dollar historically bearish for BTC"},
+      {"source_index": 0, "target_index": 2, "relationship": "causal", "lag": "immediate", "reasoning": "Higher rates increase borrowing costs and discount rates"}
+    ]
+  },
+  {
+    "template_id": "cpi_hot",
+    "event_type": "economic_data",
+    "description": "CPI inflation comes in above expectations",
+    "keywords": ["cpi above", "inflation higher", "hot inflation", "inflation accelerat", "price pressures"],
+    "nodes": [
+      {"label": "CPI Above Expectations", "domain": "macro", "sector_id": 3, "direction": "neutral", "magnitude": "high", "confidence": "high"},
+      {"label": "Rate Hike Expectations", "domain": "monetary", "sector_id": 2, "direction": "bullish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "US Dollar (DXY)", "domain": "macro", "sector_id": 3, "direction": "bullish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "US Equities", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "BTC", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "Gold", "domain": "commodities", "sector_id": 5, "direction": "volatile", "magnitude": "moderate", "confidence": "low"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Hot CPI increases probability of further rate hikes"},
+      {"source_index": 1, "target_index": 2, "relationship": "causal", "lag": "immediate", "reasoning": "Higher rate expectations strengthen the dollar"},
+      {"source_index": 1, "target_index": 3, "relationship": "causal", "lag": "intraday", "reasoning": "Tighter monetary expectations weigh on equities"},
+      {"source_index": 2, "target_index": 4, "relationship": "inverse_correlation", "lag": "intraday", "reasoning": "Stronger dollar historically bearish for BTC"},
+      {"source_index": 0, "target_index": 5, "relationship": "macro_sensitivity", "lag": "intraday", "reasoning": "Gold reacts to real rate expectations, direction depends on context"}
+    ]
+  },
+  {
+    "template_id": "tariff_increase",
+    "event_type": "geopolitical",
+    "description": "Major tariff increase on imports",
+    "keywords": ["tariff", "trade war", "import duties", "trade barriers", "customs duties", "protectionism"],
+    "nodes": [
+      {"label": "Tariff Increase", "domain": "geopolitics", "sector_id": 6, "direction": "neutral", "magnitude": "high", "confidence": "high"},
+      {"label": "Affected Sector", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "high", "confidence": "high"},
+      {"label": "Consumer Prices", "domain": "macro", "sector_id": 3, "direction": "bullish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "Safe Havens (Gold/BTC)", "domain": "commodities", "sector_id": 5, "direction": "bullish", "magnitude": "low", "confidence": "medium"},
+      {"label": "Global Equities", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "moderate", "confidence": "medium"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "supply_chain", "lag": "immediate", "reasoning": "Tariffs directly increase costs for import-dependent companies"},
+      {"source_index": 0, "target_index": 2, "relationship": "causal", "lag": "multi_day", "reasoning": "Tariffs pass through to consumer prices with lag"},
+      {"source_index": 0, "target_index": 3, "relationship": "narrative", "lag": "intraday", "reasoning": "Trade war uncertainty drives flight to safe havens"},
+      {"source_index": 0, "target_index": 4, "relationship": "sentiment_spillover", "lag": "next_day", "reasoning": "Trade tensions create broad risk-off sentiment globally"}
+    ]
+  },
+  {
+    "template_id": "exchange_hack",
+    "event_type": "security_incident",
+    "description": "Major crypto exchange hack or exploit",
+    "keywords": ["exchange hack", "exchange exploit", "funds stolen", "bridge exploit", "protocol hack", "drained"],
+    "nodes": [
+      {"label": "Exchange/Protocol Hack", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "extreme", "confidence": "high"},
+      {"label": "Affected Token", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "extreme", "confidence": "high"},
+      {"label": "BTC", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "DeFi Tokens", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "Stablecoins", "domain": "crypto", "sector_id": 1, "direction": "volatile", "magnitude": "low", "confidence": "medium"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Direct loss of funds crashes the affected token"},
+      {"source_index": 1, "target_index": 2, "relationship": "sentiment_spillover", "lag": "immediate", "reasoning": "Major hacks trigger broad crypto sell-off via fear contagion"},
+      {"source_index": 0, "target_index": 3, "relationship": "regulatory_cascade", "lag": "intraday", "reasoning": "Hacks increase regulatory scrutiny on DeFi protocols"},
+      {"source_index": 2, "target_index": 4, "relationship": "capital_flow", "lag": "intraday", "reasoning": "Panic selling into stablecoins increases their demand temporarily"}
+    ]
+  },
+  {
+    "template_id": "btc_etf_flows",
+    "event_type": "market_move",
+    "description": "Significant Bitcoin ETF inflows or outflows",
+    "keywords": ["bitcoin etf", "btc etf", "etf inflow", "etf outflow", "ibit", "gbtc", "spot etf"],
+    "nodes": [
+      {"label": "BTC ETF Flow", "domain": "crypto", "sector_id": 1, "direction": "neutral", "magnitude": "high", "confidence": "high"},
+      {"label": "BTC", "domain": "crypto", "sector_id": 1, "direction": "neutral", "magnitude": "high", "confidence": "high"},
+      {"label": "ETH", "domain": "crypto", "sector_id": 1, "direction": "neutral", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "Altcoins", "domain": "crypto", "sector_id": 1, "direction": "neutral", "magnitude": "low", "confidence": "medium"},
+      {"label": "Crypto Mining Stocks", "domain": "equities", "sector_id": 4, "direction": "neutral", "magnitude": "moderate", "confidence": "medium"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "capital_flow", "lag": "immediate", "reasoning": "ETF inflows/outflows directly affect BTC supply/demand"},
+      {"source_index": 1, "target_index": 2, "relationship": "correlation", "lag": "intraday", "reasoning": "BTC price moves historically pull ETH in the same direction"},
+      {"source_index": 1, "target_index": 3, "relationship": "correlation", "lag": "intraday", "reasoning": "Altcoins follow BTC with higher beta"},
+      {"source_index": 1, "target_index": 4, "relationship": "correlation", "lag": "intraday", "reasoning": "Mining stock prices correlated with BTC price"}
+    ]
+  },
+  {
+    "template_id": "oil_shock",
+    "event_type": "geopolitical",
+    "description": "Major oil price spike from supply disruption",
+    "keywords": ["oil surge", "oil spike", "oil shock", "opec cut", "supply disruption", "oil embargo", "oil crisis"],
+    "nodes": [
+      {"label": "Oil Price Surge", "domain": "commodities", "sector_id": 5, "direction": "bullish", "magnitude": "high", "confidence": "high"},
+      {"label": "Energy Stocks", "domain": "equities", "sector_id": 4, "direction": "bullish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "Airline/Transport Stocks", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "Inflation Expectations", "domain": "macro", "sector_id": 3, "direction": "bullish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "US Dollar (DXY)", "domain": "macro", "sector_id": 3, "direction": "volatile", "magnitude": "moderate", "confidence": "low"},
+      {"label": "BTC", "domain": "crypto", "sector_id": 1, "direction": "volatile", "magnitude": "low", "confidence": "low"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Higher oil prices directly boost energy company revenues"},
+      {"source_index": 0, "target_index": 2, "relationship": "supply_chain", "lag": "immediate", "reasoning": "Higher fuel costs compress margins for transport companies"},
+      {"source_index": 0, "target_index": 3, "relationship": "causal", "lag": "multi_day", "reasoning": "Energy prices are a major component of inflation indexes"},
+      {"source_index": 3, "target_index": 4, "relationship": "macro_sensitivity", "lag": "multi_day", "reasoning": "Inflation expectations affect rate expectations and dollar"},
+      {"source_index": 4, "target_index": 5, "relationship": "inverse_correlation", "lag": "multi_day", "reasoning": "Dollar movements inversely affect BTC pricing"}
+    ]
+  },
+  {
+    "template_id": "sec_enforcement",
+    "event_type": "regulatory",
+    "description": "SEC enforcement action against crypto entity",
+    "keywords": ["sec sues", "sec charges", "sec enforcement", "securities violation", "unregistered securities", "wells notice"],
+    "nodes": [
+      {"label": "SEC Enforcement", "domain": "geopolitics", "sector_id": 6, "direction": "bearish", "magnitude": "high", "confidence": "high"},
+      {"label": "Target Entity Token", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "extreme", "confidence": "high"},
+      {"label": "Similar Tokens", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "BTC", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "low", "confidence": "medium"},
+      {"label": "Crypto Exchange Tokens", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "moderate", "confidence": "medium"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Enforcement action directly threatens the target entity"},
+      {"source_index": 0, "target_index": 2, "relationship": "regulatory_cascade", "lag": "intraday", "reasoning": "Regulatory precedent threatens tokens with similar characteristics"},
+      {"source_index": 0, "target_index": 3, "relationship": "sentiment_spillover", "lag": "intraday", "reasoning": "Broad regulatory FUD weighs on entire crypto market"},
+      {"source_index": 0, "target_index": 4, "relationship": "regulatory_cascade", "lag": "intraday", "reasoning": "Exchange tokens face heightened regulatory risk by association"}
+    ]
+  },
+  {
+    "template_id": "earnings_beat",
+    "event_type": "earnings",
+    "description": "Major company reports earnings above expectations",
+    "keywords": ["earnings beat", "revenue beat", "profit beat", "exceeded expectations", "better than expected", "blowout quarter"],
+    "nodes": [
+      {"label": "Earnings Beat", "domain": "equities", "sector_id": 4, "direction": "bullish", "magnitude": "high", "confidence": "high"},
+      {"label": "Company Stock", "domain": "equities", "sector_id": 4, "direction": "bullish", "magnitude": "high", "confidence": "high"},
+      {"label": "Sector Peers", "domain": "equities", "sector_id": 4, "direction": "bullish", "magnitude": "low", "confidence": "medium"},
+      {"label": "Sector Index", "domain": "equities", "sector_id": 4, "direction": "bullish", "magnitude": "low", "confidence": "medium"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Earnings beat directly drives stock price higher"},
+      {"source_index": 1, "target_index": 2, "relationship": "sector_contagion", "lag": "intraday", "reasoning": "Strong earnings signal positive sector fundamentals"},
+      {"source_index": 1, "target_index": 3, "relationship": "correlation", "lag": "intraday", "reasoning": "Major component moves pull the sector index"}
+    ]
+  },
+  {
+    "template_id": "earnings_miss",
+    "event_type": "earnings",
+    "description": "Major company reports earnings below expectations",
+    "keywords": ["earnings miss", "revenue miss", "profit miss", "below expectations", "disappointing results", "weak quarter"],
+    "nodes": [
+      {"label": "Earnings Miss", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "high", "confidence": "high"},
+      {"label": "Company Stock", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "high", "confidence": "high"},
+      {"label": "Sector Peers", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "low", "confidence": "medium"},
+      {"label": "Sector Index", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "low", "confidence": "medium"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Earnings miss directly drives stock price lower"},
+      {"source_index": 1, "target_index": 2, "relationship": "sector_contagion", "lag": "intraday", "reasoning": "Weak earnings raise concerns about sector fundamentals"},
+      {"source_index": 1, "target_index": 3, "relationship": "correlation", "lag": "intraday", "reasoning": "Major component decline drags sector index"}
+    ]
+  },
+  {
+    "template_id": "war_escalation",
+    "event_type": "geopolitical",
+    "description": "Military conflict escalation or new war outbreak",
+    "keywords": ["war", "military strike", "invasion", "missile", "conflict escalation", "troops deployed", "bombing"],
+    "nodes": [
+      {"label": "Military Escalation", "domain": "geopolitics", "sector_id": 6, "direction": "neutral", "magnitude": "extreme", "confidence": "high"},
+      {"label": "Oil", "domain": "commodities", "sector_id": 5, "direction": "bullish", "magnitude": "high", "confidence": "high"},
+      {"label": "Gold", "domain": "commodities", "sector_id": 5, "direction": "bullish", "magnitude": "high", "confidence": "high"},
+      {"label": "Global Equities", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "Defense Stocks", "domain": "equities", "sector_id": 4, "direction": "bullish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "BTC", "domain": "crypto", "sector_id": 1, "direction": "volatile", "magnitude": "moderate", "confidence": "low"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Geopolitical risk premia on energy supply disruption"},
+      {"source_index": 0, "target_index": 2, "relationship": "capital_flow", "lag": "immediate", "reasoning": "Flight to safety drives gold demand"},
+      {"source_index": 0, "target_index": 3, "relationship": "sentiment_spillover", "lag": "immediate", "reasoning": "War triggers broad risk-off sentiment"},
+      {"source_index": 0, "target_index": 4, "relationship": "causal", "lag": "immediate", "reasoning": "Defense spending expectations boost military contractors"},
+      {"source_index": 3, "target_index": 5, "relationship": "sentiment_spillover", "lag": "intraday", "reasoning": "Crypto reacts to global risk appetite shifts"}
+    ]
+  },
+  {
+    "template_id": "bank_failure",
+    "event_type": "bankruptcy",
+    "description": "Major bank failure or banking crisis",
+    "keywords": ["bank failure", "bank collapse", "bank run", "banking crisis", "fdic", "bank insolvency", "deposit flight"],
+    "nodes": [
+      {"label": "Bank Failure", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "extreme", "confidence": "high"},
+      {"label": "Banking Sector", "domain": "equities", "sector_id": 4, "direction": "bearish", "magnitude": "high", "confidence": "high"},
+      {"label": "BTC", "domain": "crypto", "sector_id": 1, "direction": "bullish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "Gold", "domain": "commodities", "sector_id": 5, "direction": "bullish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "Stablecoins", "domain": "crypto", "sector_id": 1, "direction": "volatile", "magnitude": "moderate", "confidence": "medium"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "sector_contagion", "lag": "immediate", "reasoning": "Bank failure triggers contagion fears across the banking sector"},
+      {"source_index": 0, "target_index": 2, "relationship": "narrative", "lag": "intraday", "reasoning": "Banking crisis reinforces BTC narrative as alternative financial system"},
+      {"source_index": 0, "target_index": 3, "relationship": "capital_flow", "lag": "immediate", "reasoning": "Systemic fear drives flight to gold"},
+      {"source_index": 0, "target_index": 4, "relationship": "collateral", "lag": "immediate", "reasoning": "Stablecoins backed by bank deposits face counterparty risk"}
+    ]
+  },
+  {
+    "template_id": "protocol_upgrade",
+    "event_type": "token_event",
+    "description": "Major blockchain protocol upgrade or hard fork",
+    "keywords": ["hard fork", "protocol upgrade", "network upgrade", "eip", "mainnet launch", "chain upgrade"],
+    "nodes": [
+      {"label": "Protocol Upgrade", "domain": "crypto", "sector_id": 1, "direction": "bullish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "Native Token", "domain": "crypto", "sector_id": 1, "direction": "bullish", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "Ecosystem Tokens", "domain": "crypto", "sector_id": 1, "direction": "bullish", "magnitude": "low", "confidence": "medium"},
+      {"label": "Competitor L1s", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "low", "confidence": "low"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Upgrades improve fundamentals and attract developer activity"},
+      {"source_index": 1, "target_index": 2, "relationship": "protocol_dependency", "lag": "intraday", "reasoning": "Ecosystem tokens benefit from improved base layer"},
+      {"source_index": 0, "target_index": 3, "relationship": "competitive", "lag": "multi_day", "reasoning": "One chain improving may draw attention away from competitors"}
+    ]
+  },
+  {
+    "template_id": "token_unlock",
+    "event_type": "token_event",
+    "description": "Large token unlock or vesting release",
+    "keywords": ["token unlock", "vesting", "cliff unlock", "token release", "supply unlock", "team tokens"],
+    "nodes": [
+      {"label": "Token Unlock", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "Unlocked Token", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "Similar Tokens", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "low", "confidence": "low"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Supply increase from unlock creates sell pressure"},
+      {"source_index": 1, "target_index": 2, "relationship": "narrative", "lag": "multi_day", "reasoning": "Unlock selling reminds market of similar upcoming unlocks for other tokens"}
+    ]
+  },
+  {
+    "template_id": "nfp_strong",
+    "event_type": "economic_data",
+    "description": "Nonfarm Payrolls comes in strong (above expectations)",
+    "keywords": ["nonfarm payrolls", "jobs report", "strong employment", "labor market tight", "jobs beat", "payrolls beat"],
+    "nodes": [
+      {"label": "Strong NFP", "domain": "macro", "sector_id": 3, "direction": "neutral", "magnitude": "high", "confidence": "high"},
+      {"label": "Rate Hike Expectations", "domain": "monetary", "sector_id": 2, "direction": "bullish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "US Dollar (DXY)", "domain": "macro", "sector_id": 3, "direction": "bullish", "magnitude": "moderate", "confidence": "high"},
+      {"label": "US Equities", "domain": "equities", "sector_id": 4, "direction": "volatile", "magnitude": "moderate", "confidence": "low"},
+      {"label": "BTC", "domain": "crypto", "sector_id": 1, "direction": "bearish", "magnitude": "low", "confidence": "medium"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Strong jobs market supports higher rates for longer"},
+      {"source_index": 1, "target_index": 2, "relationship": "causal", "lag": "immediate", "reasoning": "Higher rate expectations strengthen the dollar"},
+      {"source_index": 0, "target_index": 3, "relationship": "macro_sensitivity", "lag": "intraday", "reasoning": "Equities torn between strong economy and tighter policy"},
+      {"source_index": 2, "target_index": 4, "relationship": "inverse_correlation", "lag": "intraday", "reasoning": "Dollar strength typically bearish for BTC"}
+    ]
+  },
+  {
+    "template_id": "merger_acquisition",
+    "event_type": "partnership",
+    "description": "Major merger or acquisition announcement",
+    "keywords": ["acquisition", "merger", "takeover", "buyout", "acquire", "deal to buy"],
+    "nodes": [
+      {"label": "M&A Announcement", "domain": "equities", "sector_id": 4, "direction": "neutral", "magnitude": "high", "confidence": "high"},
+      {"label": "Target Company", "domain": "equities", "sector_id": 4, "direction": "bullish", "magnitude": "high", "confidence": "high"},
+      {"label": "Acquirer", "domain": "equities", "sector_id": 4, "direction": "volatile", "magnitude": "moderate", "confidence": "medium"},
+      {"label": "Sector Peers", "domain": "equities", "sector_id": 4, "direction": "bullish", "magnitude": "low", "confidence": "medium"}
+    ],
+    "edges": [
+      {"source_index": 0, "target_index": 1, "relationship": "causal", "lag": "immediate", "reasoning": "Acquisition premium drives target stock to deal price"},
+      {"source_index": 0, "target_index": 2, "relationship": "causal", "lag": "immediate", "reasoning": "Acquirer may drop on dilution fears or rise on strategic value"},
+      {"source_index": 0, "target_index": 3, "relationship": "sector_contagion", "lag": "multi_day", "reasoning": "M&A activity suggests sector consolidation, peers become potential targets"}
+    ]
+  }
+]

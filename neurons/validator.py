@@ -19,6 +19,7 @@ from talisman_ai.validator.forward import forward
 from talisman_ai.validator.validation_client import ValidationClient
 from talisman_ai.analyzer import setup_analyzer
 from talisman_ai.analyzer import setup_news_analyzer
+from talisman_ai.analyzer import setup_article_intelligence_analyzer
 import talisman_ai.protocol
 from talisman_ai import config
 from talisman_ai.utils.api_models import TweetWithAuthor, CompletedTweetSubmission, TelegramMessageForScoring, CompletedTelegramMessageSubmission, TelegramMessageAnalysis, NewsArticleForScoring, CompletedNewsArticleSubmission
@@ -33,7 +34,7 @@ from talisman_ai.validator.reward_broadcast_store import RewardBroadcastStore
 from talisman_ai.validator.penalty_broadcast_store import PenaltyBroadcastStore
 from talisman_ai.protocol import ValidatorRewards
 from talisman_ai.protocol import ValidatorPenalties
-from talisman_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch
+from talisman_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch
 from talisman_ai.analyzer import setup_telegram_analyzer
 from talisman_ai.utils.cooldown import MinerCooldownTracker
 class Validator(BaseValidatorNeuron):
@@ -67,6 +68,14 @@ class Validator(BaseValidatorNeuron):
         self._telegram_analyzer = setup_telegram_analyzer()
         self._news_analyzer = setup_news_analyzer()
         bt.logging.info("[VALIDATION] News analyzer initialized")
+
+        try:
+            self._article_intel_analyzer = setup_article_intelligence_analyzer()
+            bt.logging.info("[VALIDATION] ArticleIntelligence analyzer initialized")
+        except Exception as e:
+            bt.logging.warning(f"[VALIDATION] ArticleIntelligence analyzer init failed, V1 only: {e}")
+            self._article_intel_analyzer = None
+
         bt.logging.info("[VALIDATION] Analyzer initialized")
 
         # Initialize validation client
@@ -575,10 +584,23 @@ class Validator(BaseValidatorNeuron):
             return False
 
         loop = asyncio.get_running_loop()
-        is_valid, validation_result = await loop.run_in_executor(
-            self._validation_executor,
-            validate_miner_article_batch, article_batch, self._news_analyzer, 1
+
+        # Try V2 validation if miner submitted analysis_data
+        has_v2 = any(
+            getattr(a.analysis, "analysis_data", None)
+            for a in article_batch if a.analysis
         )
+        if has_v2 and self._article_intel_analyzer is not None:
+            is_valid, validation_result = await loop.run_in_executor(
+                self._validation_executor,
+                validate_miner_article_intelligence_batch,
+                article_batch, self._article_intel_analyzer, 1,
+            )
+        else:
+            is_valid, validation_result = await loop.run_in_executor(
+                self._validation_executor,
+                validate_miner_article_batch, article_batch, self._news_analyzer, 1,
+            )
         if not is_valid:
             discrepancies = validation_result.get("discrepancies", [])
             match_rate = validation_result.get("match_rate", 0.0)

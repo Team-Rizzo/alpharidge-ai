@@ -17,12 +17,14 @@ from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 import random
 import bittensor as bt
+import numpy as np
 
 from talisman_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring
 from .relevance import AssetRelevanceAnalyzer, PostClassification
 from .telegram_relevance import TelegramRelevanceAnalyzer, MessageGroupClassification
 from .news_relevance import NewsRelevanceAnalyzer, ArticleClassification
 from talisman_ai.utils.api_models import NewsArticleForScoring
+from talisman_ai.models.article_intelligence import ArticleIntelligence
 
 
 # ===== Normalization Caps =====
@@ -874,4 +876,321 @@ def validate_miner_article_batch(
         bt.logging.warning(f"[Validator] Article batch REJECTED: {matches}/{sample_size} matches, {len(discrepancies)} discrepancies")
 
     return is_valid, result
+
+
+# ============================================================================
+# V2: ArticleIntelligence 4-Tier Validation
+# ============================================================================
+
+
+def _jaccard(set_a: set, set_b: set) -> float:
+    if not set_a and not set_b:
+        return 1.0
+    union = set_a | set_b
+    if not union:
+        return 1.0
+    return len(set_a & set_b) / len(union)
+
+
+def _levenshtein_ratio(s1: str, s2: str) -> float:
+    if s1 == s2:
+        return 1.0
+    if not s1 or not s2:
+        return 0.0
+    len1, len2 = len(s1), len(s2)
+    if len1 > len2:
+        s1, s2 = s2, s1
+        len1, len2 = len2, len1
+    prev = list(range(len1 + 1))
+    for j in range(1, len2 + 1):
+        curr = [j] + [0] * len1
+        for i in range(1, len1 + 1):
+            cost = 0 if s1[i - 1] == s2[j - 1] else 1
+            curr[i] = min(curr[i - 1] + 1, prev[i] + 1, prev[i - 1] + cost)
+        prev = curr
+    dist = prev[len1]
+    max_len = max(len1, len2)
+    return 1.0 - (dist / max_len) if max_len > 0 else 1.0
+
+
+def _normalize_text(text: str) -> str:
+    t = text.lower().strip()
+    t = " ".join(t.split())
+    for article in (" a ", " an ", " the "):
+        t = t.replace(article, " ")
+    return " ".join(t.split())
+
+
+def validate_article_intelligence(
+    miner_intel: ArticleIntelligence,
+    validator_intel: ArticleIntelligence,
+) -> Tuple[bool, float, Dict]:
+    """4-tier validation of ArticleIntelligence objects.
+
+    Returns (is_valid, composite_score, details_dict).
+    """
+    m, v = miner_intel, validator_intel
+    details = {"tier1": {}, "tier2": {}, "tier3": {}}
+
+    # ---- Tier 1: Exact enum match ----
+    tier1_fields = [
+        ("content_type", m.content_type.value, v.content_type.value),
+        ("overall_sentiment", m.overall_sentiment.value, v.overall_sentiment.value),
+        ("market_analysis_type", m.market_analysis_type.value, v.market_analysis_type.value),
+        ("impact_potential", m.impact_potential.value, v.impact_potential.value),
+        ("technical_quality", str(m.technical_quality), str(v.technical_quality)),
+        ("urgency", m.urgency.value, v.urgency.value),
+        ("temporal_focus", m.temporal_focus.value, v.temporal_focus.value),
+        ("sentiment_direction", m.sentiment_direction.value, v.sentiment_direction.value),
+        ("factual_confidence", m.factual_confidence.value, v.factual_confidence.value),
+        ("positioning_signal", m.positioning_signal.value, v.positioning_signal.value),
+        ("primary_geo", m.primary_geo.value, v.primary_geo.value),
+        ("target_audience", m.target_audience.value, v.target_audience.value),
+        ("forward_event_type", m.forward_event_type.value, v.forward_event_type.value),
+        ("staleness_flag", m.staleness_flag.value, v.staleness_flag.value),
+        ("credibility_flag", m.credibility_flag.value, v.credibility_flag.value),
+        ("detected_language", m.detected_language, v.detected_language),
+        ("market_session", m.market_session.value, v.market_session.value),
+        ("event_type", m.event_fingerprint.event_type.value, v.event_fingerprint.event_type.value),
+        ("event_date", m.event_fingerprint.event_date or "none", v.event_fingerprint.event_date or "none"),
+        ("primary_sector_id", str(m.topic_signature.primary_sector_id), str(v.topic_signature.primary_sector_id)),
+    ]
+
+    m_primaries = sorted([a for a in m.assets if a.is_primary_subject], key=lambda a: a.ticker)
+    v_primaries = sorted([a for a in v.assets if a.is_primary_subject], key=lambda a: a.ticker)
+    for mp, vp in zip(m_primaries, v_primaries):
+        if mp.ticker == vp.ticker:
+            tier1_fields.extend([
+                (f"asset_{mp.ticker}_direction", mp.direction.value, vp.direction.value),
+                (f"asset_{mp.ticker}_st", mp.short_term_outlook.value, vp.short_term_outlook.value),
+                (f"asset_{mp.ticker}_mt", mp.medium_term_outlook.value, vp.medium_term_outlook.value),
+                (f"asset_{mp.ticker}_lt", mp.long_term_outlook.value, vp.long_term_outlook.value),
+            ])
+
+    tier1_pass = True
+    for field_name, m_val, v_val in tier1_fields:
+        match = (m_val == v_val)
+        details["tier1"][field_name] = {"match": match, "miner": m_val, "validator": v_val}
+        if not match:
+            tier1_pass = False
+            bt.logging.warning(f"[V2_VALIDATE] Tier 1 FAIL: {field_name} miner={m_val} validator={v_val}")
+
+    if not tier1_pass:
+        return False, 0.0, details
+
+    # ---- Tier 2: Deterministic match ----
+    tier2_checks = [
+        ("content_hash", m.event_fingerprint.content_hash, v.event_fingerprint.content_hash),
+        ("word_count", m.text_stats.word_count, v.text_stats.word_count),
+        ("sentence_count", m.text_stats.sentence_count, v.text_stats.sentence_count),
+        ("char_count", m.text_stats.char_count, v.text_stats.char_count),
+        ("ticker_mention_count", m.text_stats.ticker_mention_count, v.text_stats.ticker_mention_count),
+    ]
+
+    tier2_pass = True
+    for field_name, m_val, v_val in tier2_checks:
+        match = (m_val == v_val)
+        details["tier2"][field_name] = {"match": match, "miner": m_val, "validator": v_val}
+        if not match:
+            tier2_pass = False
+            bt.logging.warning(f"[V2_VALIDATE] Tier 2 FAIL: {field_name} miner={m_val} validator={v_val}")
+
+    if not tier2_pass:
+        return False, 0.0, details
+
+    # ---- Tier 2.5: Embedding verification ----
+    details["tier2_5"] = {}
+    EMBEDDING_DIM = 384
+
+    def _check_embedding(name, m_emb, v_emb, threshold):
+        if m_emb and v_emb and len(m_emb) == EMBEDDING_DIM and len(v_emb) == EMBEDDING_DIM:
+            m_norm = np.linalg.norm(m_emb)
+            v_norm = np.linalg.norm(v_emb)
+            if m_norm < 0.01 or v_norm < 0.01:
+                details["tier2_5"][name] = {"status": "fail", "reason": "zero_vector"}
+                return False
+            if abs(m_norm - 1.0) > 0.05 or abs(v_norm - 1.0) > 0.05:
+                details["tier2_5"][name] = {"status": "fail", "reason": "not_normalized",
+                                            "m_norm": round(m_norm, 4), "v_norm": round(v_norm, 4)}
+                return False
+            sim = float(np.dot(m_emb, v_emb))
+            details["tier2_5"][name] = {"sim": round(sim, 4), "threshold": threshold}
+            if sim < threshold:
+                bt.logging.warning(f"[V2_VALIDATE] Tier 2.5 FAIL: {name} cosine={sim:.4f} < {threshold}")
+                return False
+        return True
+
+    if not _check_embedding("title_embedding", m.title_embedding, v.title_embedding, 0.90):
+        return False, 0.0, details
+    if not _check_embedding("narrative_embedding", m.narrative_embedding, v.narrative_embedding, 0.80):
+        return False, 0.0, details
+
+    # ---- Tier 3: Near-deterministic with tolerances ----
+    tier3_scores = {}
+
+    m_tickers = {a.ticker for a in m.assets}
+    v_tickers = {a.ticker for a in v.assets}
+    tier3_scores["asset_extraction"] = _jaccard(m_tickers, v_tickers)
+
+    m_sent_map = {a.ticker: a.direction.value for a in m.assets}
+    v_sent_map = {a.ticker: a.direction.value for a in v.assets}
+    common_tickers = m_tickers & v_tickers
+    if common_tickers:
+        tier3_scores["asset_sentiment"] = sum(
+            1 for t in common_tickers if m_sent_map.get(t) == v_sent_map.get(t)
+        ) / len(common_tickers)
+    else:
+        tier3_scores["asset_sentiment"] = 1.0 if not m_tickers and not v_tickers else 0.0
+
+    headline_sim = _levenshtein_ratio(
+        _normalize_text(m.chart_summary.headline), _normalize_text(v.chart_summary.headline))
+    oneliner_sim = _levenshtein_ratio(
+        _normalize_text(m.chart_summary.one_liner), _normalize_text(v.chart_summary.one_liner))
+    paragraph_sim = _levenshtein_ratio(
+        _normalize_text(m.chart_summary.context_paragraph), _normalize_text(v.chart_summary.context_paragraph))
+    tier3_scores["chart_summary"] = 0.4 * headline_sim + 0.3 * oneliner_sim + 0.3 * paragraph_sim
+
+    m_entities = {e.name.lower() for e in m.entities}
+    v_entities = {e.name.lower() for e in v.entities}
+    tier3_scores["entities"] = _jaccard(m_entities, v_entities)
+
+    if m.economic_data or v.economic_data:
+        m_data = {(d.event_type.value, round(d.actual_value or 0, 1)) for d in m.economic_data}
+        v_data = {(d.event_type.value, round(d.actual_value or 0, 1)) for d in v.economic_data}
+        tier3_scores["economic_data"] = _jaccard(m_data, v_data)
+    else:
+        tier3_scores["economic_data"] = 1.0
+
+    title_sim = _levenshtein_ratio(
+        _normalize_text(m.event_fingerprint.event_title), _normalize_text(v.event_fingerprint.event_title))
+    fp_sim = _jaccard(set(m.event_fingerprint.semantic_fingerprint), set(v.event_fingerprint.semantic_fingerprint))
+    tier3_scores["event_fingerprint"] = 0.5 * title_sim + 0.5 * fp_sim
+
+    m_cont = {(l.source_ticker, l.target_ticker) for l in m.contagion_links}
+    v_cont = {(l.source_ticker, l.target_ticker) for l in v.contagion_links}
+    tier3_scores["contagion"] = _jaccard(m_cont, v_cont)
+
+    m_narr = {kw.lower() for kw in m.narrative_keywords}
+    v_narr = {kw.lower() for kw in v.narrative_keywords}
+    tier3_scores["narrative_keywords"] = _jaccard(m_narr, v_narr)
+
+    weights = {
+        "asset_extraction": 0.20, "asset_sentiment": 0.20, "chart_summary": 0.15,
+        "entities": 0.10, "economic_data": 0.10, "event_fingerprint": 0.10,
+        "contagion": 0.10, "narrative_keywords": 0.05,
+    }
+    composite = sum(tier3_scores[k] * weights[k] for k in weights)
+    details["tier3"] = {k: {"score": round(tier3_scores[k], 4), "weight": weights[k]} for k in weights}
+    details["tier3"]["composite"] = round(composite, 4)
+
+    is_valid = composite >= 0.80
+    if is_valid:
+        bt.logging.success(f"[V2_VALIDATE] Article ACCEPTED: composite={composite:.4f}")
+    else:
+        bt.logging.warning(f"[V2_VALIDATE] Article REJECTED: composite={composite:.4f} < 0.80")
+
+    return is_valid, composite, details
+
+
+def validate_miner_article_intelligence_batch(
+    miner_batch: List[NewsArticleForScoring],
+    analyzer,
+    sample_size: int = 1,
+    seed: int = None,
+) -> Tuple[bool, Dict]:
+    """Validate a miner's article batch using V2 4-tier validation.
+
+    Falls back to V1 if analysis_data is missing.
+    """
+    if seed is not None:
+        random.seed(seed)
+
+    sample_size = min(sample_size, len(miner_batch))
+    sampled = random.sample(miner_batch, sample_size)
+
+    bt.logging.info(f"[V2_VALIDATE] Sampling {sample_size} article(s) from batch of {len(miner_batch)}")
+
+    matches = 0
+    total_composite = 0.0
+    discrepancies = []
+
+    for i, article in enumerate(sampled):
+        miner_analysis = article.analysis
+        if miner_analysis is None:
+            discrepancies.append({"article_index": i, "reason": "missing_analysis"})
+            continue
+
+        analysis_data = getattr(miner_analysis, "analysis_data", None)
+        if not analysis_data or not isinstance(analysis_data, dict):
+            discrepancies.append({"article_index": i, "reason": "no_v2_analysis_data"})
+            continue
+
+        try:
+            miner_intel = ArticleIntelligence(**analysis_data)
+        except Exception as e:
+            discrepancies.append({"article_index": i, "reason": f"invalid_analysis_data: {e}"})
+            continue
+
+        validator_intel = analyzer.analyze(
+            article_id=article.id,
+            url=article.url,
+            title=article.title,
+            source=article.source,
+            published=article.published,
+            summary=article.summary,
+            content=article.content,
+        )
+        if validator_intel is None:
+            discrepancies.append({"article_index": i, "reason": "validator_analysis_failed"})
+            continue
+
+        is_valid, composite, details = validate_article_intelligence(miner_intel, validator_intel)
+        if is_valid:
+            matches += 1
+            total_composite += composite
+        else:
+            discrepancies.append({
+                "article_index": i, "reason": "validation_failed",
+                "composite_score": composite, "details": details,
+            })
+
+    # Cross-article adversarial detection: check for cloned embeddings
+    EMBEDDING_DIM = 384
+    miner_embeddings = []
+    for article in miner_batch:
+        ad = getattr(getattr(article, "analysis", None), "analysis_data", None)
+        if ad and isinstance(ad, dict):
+            te = ad.get("title_embedding")
+            if te and isinstance(te, list) and len(te) == EMBEDDING_DIM:
+                miner_embeddings.append(np.array(te, dtype=np.float32))
+
+    if len(miner_embeddings) >= 3:
+        emb_matrix = np.stack(miner_embeddings)
+        pairwise = emb_matrix @ emb_matrix.T
+        n = len(pairwise)
+        for i in range(n):
+            for j in range(i + 1, n):
+                if pairwise[i][j] > 0.99:
+                    bt.logging.warning(f"[V2_VALIDATE] Adversarial: articles {i} and {j} have "
+                                       f"near-identical embeddings (cosine={pairwise[i][j]:.4f})")
+                    discrepancies.append({
+                        "reason": "cloned_embeddings",
+                        "articles": [i, j],
+                        "cosine": float(pairwise[i][j]),
+                    })
+
+    batch_valid = matches == sample_size and len(discrepancies) == 0
+    avg_composite = total_composite / max(matches, 1)
+
+    result = {
+        "is_valid": batch_valid, "matches": matches, "total_sampled": sample_size,
+        "avg_composite_score": round(avg_composite, 4), "discrepancies": discrepancies,
+    }
+
+    if batch_valid:
+        bt.logging.success(f"[V2_VALIDATE] Batch ACCEPTED: {matches}/{sample_size}, avg={avg_composite:.4f}")
+    else:
+        bt.logging.warning(f"[V2_VALIDATE] Batch REJECTED: {matches}/{sample_size}")
+
+    return batch_valid, result
 

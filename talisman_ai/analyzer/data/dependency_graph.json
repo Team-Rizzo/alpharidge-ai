@@ -1,0 +1,147 @@
+{
+  "_description": "Maps assets to their dependents. When an article affects a source asset, inferred_impacts includes the dependent assets. One-hop only.",
+  "dependencies": {
+    "ETH": {
+      "dependents": [
+        {"ticker": "stETH", "asset_class": "crypto", "relationship": "liquid_staking_derivative"},
+        {"ticker": "rETH", "asset_class": "crypto", "relationship": "liquid_staking_derivative"},
+        {"ticker": "cbETH", "asset_class": "crypto", "relationship": "liquid_staking_derivative"},
+        {"ticker": "UNI", "asset_class": "crypto", "relationship": "ecosystem_token"},
+        {"ticker": "AAVE", "asset_class": "crypto", "relationship": "ecosystem_token"},
+        {"ticker": "LDO", "asset_class": "crypto", "relationship": "staking_infrastructure"},
+        {"ticker": "RPL", "asset_class": "crypto", "relationship": "staking_infrastructure"},
+        {"ticker": "MKR", "asset_class": "crypto", "relationship": "ecosystem_token"},
+        {"ticker": "CRV", "asset_class": "crypto", "relationship": "ecosystem_token"},
+        {"ticker": "COMP", "asset_class": "crypto", "relationship": "ecosystem_token"},
+        {"ticker": "SNX", "asset_class": "crypto", "relationship": "ecosystem_token"},
+        {"ticker": "ENS", "asset_class": "crypto", "relationship": "ecosystem_token"},
+        {"ticker": "ARB", "asset_class": "crypto", "relationship": "layer2_rollup"},
+        {"ticker": "OP", "asset_class": "crypto", "relationship": "layer2_rollup"},
+        {"ticker": "MATIC", "asset_class": "crypto", "relationship": "layer2_sidechain"},
+        {"ticker": "MANTA", "asset_class": "crypto", "relationship": "layer2_rollup"},
+        {"ticker": "ETHA", "asset_class": "derivative", "relationship": "etf_tracking"}
+      ]
+    },
+    "BTC": {
+      "dependents": [
+        {"ticker": "WBTC", "asset_class": "crypto", "relationship": "wrapped_token"},
+        {"ticker": "MSTR", "asset_class": "equity", "relationship": "treasury_holding"},
+        {"ticker": "MARA", "asset_class": "equity", "relationship": "mining_company"},
+        {"ticker": "RIOT", "asset_class": "equity", "relationship": "mining_company"},
+        {"ticker": "CLSK", "asset_class": "equity", "relationship": "mining_company"},
+        {"ticker": "HUT", "asset_class": "equity", "relationship": "mining_company"},
+        {"ticker": "IBIT", "asset_class": "derivative", "relationship": "etf_tracking"},
+        {"ticker": "GBTC", "asset_class": "derivative", "relationship": "etf_tracking"},
+        {"ticker": "FBTC", "asset_class": "derivative", "relationship": "etf_tracking"},
+        {"ticker": "STX", "asset_class": "crypto", "relationship": "bitcoin_layer"}
+      ]
+    },
+    "SOL": {
+      "dependents": [
+        {"ticker": "JTO", "asset_class": "crypto", "relationship": "ecosystem_token"},
+        {"ticker": "BONK", "asset_class": "crypto", "relationship": "ecosystem_meme"},
+        {"ticker": "WIF", "asset_class": "crypto", "relationship": "ecosystem_meme"},
+        {"ticker": "JUP", "asset_class": "crypto", "relationship": "ecosystem_dex"},
+        {"ticker": "PYTH", "asset_class": "crypto", "relationship": "ecosystem_oracle"},
+        {"ticker": "RAY", "asset_class": "crypto", "relationship": "ecosystem_dex"},
+        {"ticker": "ORCA", "asset_class": "crypto", "relationship": "ecosystem_dex"}
+      ]
+    },
+    "BNB": {
+      "dependents": [
+        {"ticker": "CAKE", "asset_class": "crypto", "relationship": "ecosystem_dex"},
+        {"ticker": "XVS", "asset_class": "crypto", "relationship": "ecosystem_lending"}
+      ]
+    },
+    "AVAX": {
+      "dependents": [
+        {"ticker": "JOE", "asset_class": "crypto", "relationship": "ecosystem_dex"},
+        {"ticker": "GMX", "asset_class": "crypto", "relationship": "ecosystem_perps"}
+      ]
+    },
+    "ATOM": {
+      "dependents": [
+        {"ticker": "OSMO", "asset_class": "crypto", "relationship": "ibc_ecosystem"},
+        {"ticker": "INJ", "asset_class": "crypto", "relationship": "cosmos_chain"},
+        {"ticker": "TIA", "asset_class": "crypto", "relationship": "cosmos_chain"},
+        {"ticker": "SEI", "asset_class": "crypto", "relationship": "cosmos_chain"},
+        {"ticker": "DYDX", "asset_class": "crypto", "relationship": "cosmos_chain"}
+      ]
+    },
+    "DOT": {
+      "dependents": [
+        {"ticker": "GLMR", "asset_class": "crypto", "relationship": "parachain"},
+        {"ticker": "ASTR", "asset_class": "crypto", "relationship": "parachain"}
+      ]
+    },
+    "COIN": {
+      "dependents": [
+        {"ticker": "cbETH", "asset_class": "crypto", "relationship": "issued_product"},
+        {"ticker": "USDC", "asset_class": "crypto", "relationship": "partnership_product"}
+      ]
+    },
+    "XOM": {
+      "dependents": [
+        {"ticker": "CVX", "asset_class": "equity", "relationship": "sector_peer"},
+        {"ticker": "COP", "asset_class": "equity", "relationship": "sector_peer"},
+        {"ticker": "BP", "asset_class": "equity", "relationship": "sector_peer"}
+      ]
+    },
+    "NVDA": {
+      "dependents": [
+        {"ticker": "AMD", "asset_class": "equity", "relationship": "direct_competitor"},
+        {"ticker": "AVGO", "asset_class": "equity", "relationship": "sector_peer"},
+        {"ticker": "MU", "asset_class": "equity", "relationship": "supply_chain"},
+        {"ticker": "TSM", "asset_class": "equity", "relationship": "foundry_partner"},
+        {"ticker": "SMCI", "asset_class": "equity", "relationship": "server_partner"},
+        {"ticker": "ARM", "asset_class": "equity", "relationship": "ip_provider"}
+      ]
+    },
+    "AAPL": {
+      "dependents": [
+        {"ticker": "TSM", "asset_class": "equity", "relationship": "foundry_partner"},
+        {"ticker": "QCOM", "asset_class": "equity", "relationship": "component_supplier"},
+        {"ticker": "AVGO", "asset_class": "equity", "relationship": "component_supplier"}
+      ]
+    },
+    "TSLA": {
+      "dependents": [
+        {"ticker": "RIVN", "asset_class": "equity", "relationship": "ev_competitor"},
+        {"ticker": "LCID", "asset_class": "equity", "relationship": "ev_competitor"},
+        {"ticker": "NIO", "asset_class": "equity", "relationship": "ev_competitor"},
+        {"ticker": "LI", "asset_class": "equity", "relationship": "ev_competitor"}
+      ]
+    },
+    "USDT": {
+      "dependents": [
+        {"ticker": "USDC", "asset_class": "crypto", "relationship": "stablecoin_peer"},
+        {"ticker": "DAI", "asset_class": "crypto", "relationship": "stablecoin_peer"}
+      ]
+    },
+    "DXY": {
+      "dependents": [
+        {"ticker": "EUR/USD", "asset_class": "forex", "relationship": "inverse_component"},
+        {"ticker": "GBP/USD", "asset_class": "forex", "relationship": "inverse_component"},
+        {"ticker": "USD/JPY", "asset_class": "forex", "relationship": "direct_component"},
+        {"ticker": "GOLD", "asset_class": "commodity", "relationship": "inverse_correlation"},
+        {"ticker": "BTC", "asset_class": "crypto", "relationship": "inverse_correlation"}
+      ]
+    },
+    "GOLD": {
+      "dependents": [
+        {"ticker": "SLV", "asset_class": "commodity", "relationship": "precious_metal_peer"},
+        {"ticker": "GLD", "asset_class": "derivative", "relationship": "etf_tracking"},
+        {"ticker": "NEM", "asset_class": "equity", "relationship": "mining_company"},
+        {"ticker": "GOLD", "asset_class": "equity", "relationship": "mining_company"}
+      ]
+    },
+    "OIL": {
+      "dependents": [
+        {"ticker": "XOM", "asset_class": "equity", "relationship": "producer"},
+        {"ticker": "CVX", "asset_class": "equity", "relationship": "producer"},
+        {"ticker": "USO", "asset_class": "derivative", "relationship": "etf_tracking"},
+        {"ticker": "XLE", "asset_class": "derivative", "relationship": "sector_etf"}
+      ]
+    }
+  }
+}

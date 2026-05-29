@@ -1,0 +1,344 @@
+[
+  {
+    "id": 1,
+    "slug": "bitcoin-etf-flows",
+    "name": "Bitcoin ETF Flows",
+    "description": "Institutional capital flowing into and out of spot Bitcoin ETFs",
+    "keywords": ["bitcoin etf", "spot etf", "etf inflow", "etf outflow", "ibit", "gbtc", "fbtc", "arkb", "spot bitcoin", "etf flows", "crypto etf", "institutional inflow"],
+    "sector_ids": [1],
+    "status": "active"
+  },
+  {
+    "id": 2,
+    "slug": "fed-pivot",
+    "name": "Fed Pivot / Rate Cycle",
+    "description": "Federal Reserve monetary policy shifts between tightening and easing",
+    "keywords": ["fed pivot", "rate cut", "rate hike", "dovish fed", "hawkish fed", "easing cycle", "tightening cycle", "fed pause", "rate decision", "monetary easing", "monetary tightening", "interest rate", "fomc", "real yield"],
+    "sector_ids": [2],
+    "status": "active"
+  },
+  {
+    "id": 3,
+    "slug": "ai-infrastructure-buildout",
+    "name": "AI Infrastructure Buildout",
+    "description": "Massive capital deployment into AI chips, data centers, and compute infrastructure",
+    "keywords": ["ai infrastructure", "data center", "gpu demand", "nvidia earnings", "ai spending", "ai capex", "hyperscaler", "ai chip"],
+    "sector_ids": [7, 4],
+    "status": "active"
+  },
+  {
+    "id": 4,
+    "slug": "us-crypto-regulation",
+    "name": "US Crypto Regulation",
+    "description": "SEC, CFTC, and Congressional actions shaping US crypto regulatory framework",
+    "keywords": ["sec crypto", "crypto regulation", "crypto legislation", "crypto bill", "stablecoin regulation", "securities classification", "crypto enforcement"],
+    "sector_ids": [1, 6],
+    "status": "active"
+  },
+  {
+    "id": 5,
+    "slug": "defi-revival",
+    "name": "DeFi Revival",
+    "description": "Resurgence of decentralized finance activity, TVL growth, and protocol innovation",
+    "keywords": ["defi revival", "tvl growth", "defi yields", "defi summer", "lending protocol", "dex volume", "liquidity mining"],
+    "sector_ids": [1],
+    "status": "active"
+  },
+  {
+    "id": 6,
+    "slug": "ethereum-scaling",
+    "name": "Ethereum L2 Scaling",
+    "description": "Layer 2 rollup ecosystem growth, blob fees, and scaling improvements",
+    "keywords": ["layer 2", "l2 scaling", "rollup", "arbitrum", "optimism", "base", "blob", "danksharding", "eip-4844"],
+    "sector_ids": [1],
+    "status": "active"
+  },
+  {
+    "id": 7,
+    "slug": "meme-coin-cycle",
+    "name": "Meme Coin Cycle",
+    "description": "Speculative cycles in meme tokens and community-driven assets",
+    "keywords": ["meme coin", "meme token", "doge", "shib", "pepe", "bonk", "wif", "pump.fun", "meme season"],
+    "sector_ids": [1],
+    "status": "active"
+  },
+  {
+    "id": 8,
+    "slug": "stablecoin-growth",
+    "name": "Stablecoin Market Growth",
+    "description": "Stablecoin market cap expansion, new issuers, and regulatory developments",
+    "keywords": ["stablecoin", "usdt", "usdc", "tether", "circle", "stablecoin regulation", "stablecoin bill", "stablecoin supply"],
+    "sector_ids": [1, 6],
+    "status": "active"
+  },
+  {
+    "id": 9,
+    "slug": "global-trade-war",
+    "name": "Global Trade War",
+    "description": "Tariff escalations, trade barriers, and deglobalization dynamics",
+    "keywords": ["trade war", "tariff", "trade barrier", "deglobalization", "reshoring", "sanctions", "export controls", "china tariff"],
+    "sector_ids": [6, 5],
+    "status": "active"
+  },
+  {
+    "id": 10,
+    "slug": "inflation-persistence",
+    "name": "Inflation Persistence",
+    "description": "Ongoing battle against sticky inflation and its market implications",
+    "keywords": ["sticky inflation", "inflation persistence", "core inflation", "cpi surprise", "price pressures", "wage inflation", "shelter inflation"],
+    "sector_ids": [3, 2],
+    "status": "active"
+  },
+  {
+    "id": 11,
+    "slug": "china-economic-recovery",
+    "name": "China Economic Recovery",
+    "description": "China stimulus efforts, property sector, and economic rebalancing",
+    "keywords": ["china stimulus", "china recovery", "china property", "evergrande", "pboc", "china gdp", "renminbi", "hang seng"],
+    "sector_ids": [3, 6],
+    "status": "active"
+  },
+  {
+    "id": 12,
+    "slug": "semiconductor-cycle",
+    "name": "Semiconductor Cycle",
+    "description": "Global chip supply/demand dynamics, inventory cycles, and geopolitics",
+    "keywords": ["semiconductor", "chip shortage", "chip surplus", "tsmc", "samsung foundry", "intel fab", "chips act", "semiconductor cycle"],
+    "sector_ids": [7, 4],
+    "status": "active"
+  },
+  {
+    "id": 13,
+    "slug": "bitcoin-halving-cycle",
+    "name": "Bitcoin Halving Cycle",
+    "description": "Bitcoin halving events and their historical impact on price cycles",
+    "keywords": ["bitcoin halving", "block reward", "halving cycle", "supply reduction", "post-halving", "halving rally"],
+    "sector_ids": [1],
+    "status": "active"
+  },
+  {
+    "id": 14,
+    "slug": "tokenization-rwa",
+    "name": "Real World Asset Tokenization",
+    "description": "Tokenization of traditional assets: treasuries, real estate, commodities on-chain",
+    "keywords": ["rwa tokenization", "real world asset", "tokenized treasuries", "on-chain bonds", "tokenized real estate", "asset tokenization"],
+    "sector_ids": [1, 4],
+    "status": "active"
+  },
+  {
+    "id": 15,
+    "slug": "decentralized-ai",
+    "name": "Decentralized AI / DePIN",
+    "description": "Intersection of AI and crypto: decentralized compute, AI tokens, DePIN networks",
+    "keywords": ["decentralized ai", "ai token", "depin", "bittensor", "render", "akash", "decentralized compute", "ai crypto"],
+    "sector_ids": [1, 7],
+    "status": "active"
+  },
+  {
+    "id": 16,
+    "slug": "us-election-market-impact",
+    "name": "US Election & Policy Shift",
+    "description": "US political cycle impact on markets, regulation, and fiscal policy",
+    "keywords": ["us election", "presidential election", "policy shift", "political risk", "election market", "regulation change", "executive order"],
+    "sector_ids": [6, 3],
+    "status": "active"
+  },
+  {
+    "id": 17,
+    "slug": "japan-monetary-policy",
+    "name": "Japan Monetary Policy Shift",
+    "description": "BOJ rate normalization, yen carry trade dynamics, and global spillover",
+    "keywords": ["boj rate", "yen carry trade", "japan rates", "yield curve control", "boj normalization", "japanese yen", "ueda"],
+    "sector_ids": [2, 3],
+    "status": "active"
+  },
+  {
+    "id": 18,
+    "slug": "energy-transition",
+    "name": "Energy Transition",
+    "description": "Shift from fossil fuels to renewables, EV adoption, and clean energy investment",
+    "keywords": ["energy transition", "renewable energy", "solar", "wind power", "ev adoption", "electric vehicle", "clean energy", "green hydrogen"],
+    "sector_ids": [5, 7],
+    "status": "active"
+  },
+  {
+    "id": 19,
+    "slug": "banking-sector-stress",
+    "name": "Banking Sector Stress",
+    "description": "Concerns about banking stability, credit tightening, and systemic risk",
+    "keywords": ["bank failure", "banking crisis", "credit tightening", "bank run", "deposit flight", "commercial real estate", "bank stress test"],
+    "sector_ids": [4, 3],
+    "status": "active"
+  },
+  {
+    "id": 20,
+    "slug": "us-debt-deficit",
+    "name": "US Debt & Deficit",
+    "description": "Growing US national debt, deficit spending, and fiscal sustainability concerns",
+    "keywords": ["national debt", "deficit spending", "debt ceiling", "treasury auction", "bond vigilante", "fiscal sustainability", "government shutdown"],
+    "sector_ids": [3, 2],
+    "status": "active"
+  },
+  {
+    "id": 21,
+    "slug": "big-tech-antitrust",
+    "name": "Big Tech Antitrust",
+    "description": "Regulatory actions targeting tech monopolies and market dominance",
+    "keywords": ["antitrust", "tech monopoly", "big tech regulation", "doj google", "apple antitrust", "meta antitrust", "break up big tech"],
+    "sector_ids": [7, 6],
+    "status": "active"
+  },
+  {
+    "id": 22,
+    "slug": "emerging-market-crisis",
+    "name": "Emerging Market Stress",
+    "description": "Currency crises, capital flight, and economic instability in emerging markets",
+    "keywords": ["emerging market", "currency crisis", "capital flight", "em debt", "sovereign default", "devaluation", "imf bailout"],
+    "sector_ids": [3, 6],
+    "status": "active"
+  },
+  {
+    "id": 23,
+    "slug": "crypto-exchange-consolidation",
+    "name": "Crypto Exchange Landscape",
+    "description": "Exchange competition, regulatory compliance, and market structure evolution",
+    "keywords": ["crypto exchange", "binance", "coinbase", "exchange regulation", "exchange volume", "exchange listing", "dex vs cex"],
+    "sector_ids": [1, 6],
+    "status": "active"
+  },
+  {
+    "id": 24,
+    "slug": "institutional-crypto-adoption",
+    "name": "Institutional Crypto Adoption",
+    "description": "Traditional finance institutions entering crypto markets",
+    "keywords": ["institutional adoption", "institutional crypto", "blackrock crypto", "fidelity crypto", "bank crypto", "custody solution", "institutional inflow"],
+    "sector_ids": [1, 4],
+    "status": "active"
+  },
+  {
+    "id": 25,
+    "slug": "global-cbdc-development",
+    "name": "Central Bank Digital Currencies",
+    "description": "CBDC development and deployment worldwide",
+    "keywords": ["cbdc", "digital dollar", "digital euro", "digital yuan", "central bank digital", "e-cny", "digital currency"],
+    "sector_ids": [2, 1],
+    "status": "active"
+  },
+  {
+    "id": 26,
+    "slug": "gold-safe-haven-rally",
+    "name": "Gold as Safe Haven",
+    "description": "Gold rally driven by geopolitical uncertainty, de-dollarization, and central bank buying",
+    "keywords": ["gold rally", "safe haven", "gold demand", "central bank gold", "de-dollarization", "gold etf", "gold price"],
+    "sector_ids": [5],
+    "status": "active"
+  },
+  {
+    "id": 27,
+    "slug": "middle-east-tensions",
+    "name": "Middle East Tensions",
+    "description": "Geopolitical instability in the Middle East affecting energy and markets",
+    "keywords": ["middle east", "iran", "israel", "houthi", "red sea", "strait of hormuz", "oil supply risk", "gulf tensions"],
+    "sector_ids": [6, 5],
+    "status": "active"
+  },
+  {
+    "id": 28,
+    "slug": "biotech-drug-approvals",
+    "name": "Biotech & Drug Approvals",
+    "description": "FDA approvals, clinical trial results, and pharma M&A",
+    "keywords": ["fda approval", "clinical trial", "drug approval", "biotech", "pharma merger", "pipeline data", "phase 3"],
+    "sector_ids": [8, 4],
+    "status": "active"
+  },
+  {
+    "id": 29,
+    "slug": "housing-market-dynamics",
+    "name": "Housing Market",
+    "description": "US housing affordability, mortgage rates, and real estate market shifts",
+    "keywords": ["housing market", "mortgage rate", "home prices", "housing starts", "home sales", "housing affordability", "real estate"],
+    "sector_ids": [3, 4],
+    "status": "active"
+  },
+  {
+    "id": 30,
+    "slug": "labor-market-cooling",
+    "name": "Labor Market Evolution",
+    "description": "Shifts in employment, wages, and workforce dynamics",
+    "keywords": ["labor market", "unemployment", "job openings", "wage growth", "layoffs", "hiring freeze", "great resignation", "return to office"],
+    "sector_ids": [3],
+    "status": "active"
+  },
+  {
+    "id": 31,
+    "slug": "europe-energy-security",
+    "name": "European Energy Security",
+    "description": "Europe's energy independence efforts post-Russia sanctions",
+    "keywords": ["europe energy", "lng terminal", "nord stream", "energy security", "european gas", "energy independence"],
+    "sector_ids": [5, 6],
+    "status": "active"
+  },
+  {
+    "id": 32,
+    "slug": "quantum-computing-race",
+    "name": "Quantum Computing",
+    "description": "Advances in quantum computing and implications for cryptography",
+    "keywords": ["quantum computing", "quantum supremacy", "qubit", "quantum cryptography", "post-quantum", "quantum threat"],
+    "sector_ids": [7],
+    "status": "emerging"
+  },
+  {
+    "id": 33,
+    "slug": "supply-chain-reshoring",
+    "name": "Supply Chain Reshoring",
+    "description": "Global supply chain restructuring, nearshoring, and manufacturing shifts",
+    "keywords": ["reshoring", "nearshoring", "supply chain", "friend-shoring", "onshoring", "manufacturing shift", "supply chain resilience"],
+    "sector_ids": [4, 6],
+    "status": "active"
+  },
+  {
+    "id": 34,
+    "slug": "sovereign-wealth-crypto",
+    "name": "Sovereign Bitcoin Reserves",
+    "description": "Nation-states accumulating Bitcoin and crypto as strategic reserves",
+    "keywords": ["strategic bitcoin reserve", "sovereign bitcoin", "nation state crypto", "government bitcoin", "bitcoin reserve", "el salvador bitcoin"],
+    "sector_ids": [1, 6],
+    "status": "active"
+  },
+  {
+    "id": 35,
+    "slug": "bittensor-ecosystem",
+    "name": "Bittensor Ecosystem Growth",
+    "description": "Bittensor subnet launches, TAO tokenomics, and decentralized AI network expansion",
+    "keywords": ["bittensor", "tao", "subnet", "dtao", "opentensor", "bittensor subnet", "yuma consensus"],
+    "sector_ids": [1, 7],
+    "status": "active"
+  },
+  {
+    "id": 36,
+    "slug": "crypto-security-incidents",
+    "name": "Crypto Security & Hacks",
+    "description": "Exchange hacks, protocol exploits, bridge vulnerabilities, and security responses",
+    "keywords": ["exchange hack", "protocol exploit", "bridge hack", "funds stolen", "security breach", "smart contract vulnerability", "flash loan attack", "rug pull", "crypto hack"],
+    "sector_ids": [1],
+    "status": "active"
+  },
+  {
+    "id": 37,
+    "slug": "risk-sentiment-cycle",
+    "name": "Risk Sentiment Cycle",
+    "description": "Shifts between risk-on and risk-off market sentiment across asset classes",
+    "keywords": ["risk on", "risk off", "risk appetite", "risk aversion", "flight to safety", "risk rally", "risk asset", "risk sentiment", "safe haven demand"],
+    "sector_ids": [3, 1],
+    "status": "active"
+  },
+  {
+    "id": 38,
+    "slug": "crypto-regulation-global",
+    "name": "Global Crypto Regulation",
+    "description": "Regulatory actions and framework development for crypto worldwide, beyond US",
+    "keywords": ["regulatory tightening", "crypto regulation", "regulatory crackdown", "compliance", "crypto ban", "mica regulation", "crypto framework"],
+    "sector_ids": [1, 6],
+    "status": "active"
+  }
+]

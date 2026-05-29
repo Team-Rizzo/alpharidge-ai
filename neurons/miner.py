@@ -13,6 +13,7 @@ from talisman_ai.base.miner import BaseMinerNeuron
 from talisman_ai.analyzer import setup_analyzer
 from talisman_ai.analyzer import setup_telegram_analyzer
 from talisman_ai.analyzer import setup_news_analyzer
+from talisman_ai.analyzer import setup_article_intelligence_analyzer
 from talisman_ai.utils.api_models import TweetAnalysisBase, TelegramMessageAnalysis, NewsArticleAnalysisBase
 
 
@@ -33,6 +34,13 @@ class Miner(BaseMinerNeuron):
         self.telegram_analyzer = setup_telegram_analyzer()
         self.news_analyzer = setup_news_analyzer()
         bt.logging.info("[Miner] News analyzer initialized")
+
+        try:
+            self.article_intel_analyzer = setup_article_intelligence_analyzer()
+            bt.logging.info("[Miner] ArticleIntelligence analyzer initialized")
+        except Exception as e:
+            bt.logging.warning(f"[Miner] ArticleIntelligence analyzer init failed, falling back to V1: {e}")
+            self.article_intel_analyzer = None
         bt.logging.info("[Miner] Analyzer initialized")
         # NOTE: we intentionally do NOT reuse a single bt.Dendrite across threads/event-loops.
         # Miner responses are sent back to validators from a background thread with its own event loop.
@@ -410,6 +418,61 @@ class Miner(BaseMinerNeuron):
                     bt.logging.warning(f"[Miner] Skipping article {article.id} - no title")
                     continue
 
+                # V2: Full ArticleIntelligence analysis
+                if self.article_intel_analyzer is not None:
+                    intel = self.article_intel_analyzer.analyze(
+                        article_id=article.id,
+                        url=article.url,
+                        title=article.title,
+                        source=article.source,
+                        published=article.published,
+                        summary=article.summary,
+                        content=article.content,
+                        miner_hotkey=self.wallet.hotkey.ss58_address if self.wallet else None,
+                    )
+                    if intel is not None:
+                        article.analysis = NewsArticleAnalysisBase(
+                            sentiment=intel.overall_sentiment.value,
+                            sectorId=intel.topic_signature.primary_sector_id,
+                            sectorSymbol=intel.topic_signature.primary_sector_symbol,
+                            contentType=intel.content_type.value,
+                            technicalQuality=intel.technical_quality if isinstance(intel.technical_quality, str) else intel.technical_quality.value if hasattr(intel.technical_quality, 'value') else str(intel.technical_quality),
+                            marketAnalysis=intel.market_analysis_type.value,
+                            impactPotential=intel.impact_potential.value,
+                            relevanceConfidence="high" if intel.assets else "low",
+                            overallSentimentScore=intel.overall_sentiment_score,
+                            sentimentDirection=intel.sentiment_direction.value,
+                            urgency=intel.urgency.value,
+                            temporalFocus=intel.temporal_focus.value,
+                            factualConfidence=intel.factual_confidence.value,
+                            positioningSignal=intel.positioning_signal.value,
+                            targetAudience=intel.target_audience.value,
+                            credibilityFlag=intel.credibility_flag.value,
+                            primaryGeo=intel.primary_geo.value,
+                            marketSession=intel.market_session.value,
+                            detectedLanguage=intel.detected_language,
+                            stalenessFlag=intel.staleness_flag.value,
+                            forwardEventType=intel.forward_event_type.value,
+                            assets=[a.model_dump() for a in intel.assets],
+                            entities=[e.model_dump() for e in intel.entities],
+                            economicData=[d.model_dump() for d in intel.economic_data],
+                            numericClaims=[c.model_dump() for c in intel.numeric_claims],
+                            quotes=[q.model_dump() for q in intel.quotes],
+                            contagionLinks=[l.model_dump() for l in intel.contagion_links],
+                            chartSummary=intel.chart_summary.model_dump(),
+                            eventFingerprint=intel.event_fingerprint.model_dump(),
+                            narrativeKeywords=intel.narrative_keywords,
+                            topicSignature=intel.topic_signature.model_dump(),
+                            textStats=intel.text_stats.model_dump(),
+                            inferredImpacts=[i.model_dump() for i in intel.inferred_impacts] if intel.inferred_impacts else None,
+                            analysisData=intel.model_dump(),
+                        )
+                        bt.logging.info(f"[Miner] V2 analysis complete for article {article.id}: "
+                                        f"{len(intel.assets)} assets, {len(intel.entities)} entities, "
+                                        f"{len(intel.contagion_links)} contagion links")
+                        continue
+
+                # V1 fallback: original NewsRelevanceAnalyzer
                 classification = self.news_analyzer.classify_article(article.title, article.summary, article.content)
 
                 if classification is None:

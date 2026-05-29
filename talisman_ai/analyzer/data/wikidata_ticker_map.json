@@ -1,0 +1,326 @@
+{
+  "_description": "Wikidata QID to ticker/type mapping. Used to resolve ReFinED entity linking output.",
+  "entities": {
+    "Q131723": {
+      "ticker": "BTC",
+      "name": "Bitcoin",
+      "type": "asset",
+      "asset_class": "crypto"
+    },
+    "Q16783523": {
+      "ticker": "ETH",
+      "name": "Ethereum",
+      "type": "asset",
+      "asset_class": "crypto"
+    },
+    "Q18587561": {
+      "ticker": "XRP",
+      "name": "Ripple",
+      "type": "asset",
+      "asset_class": "crypto"
+    },
+    "Q20958455": {
+      "ticker": "ADA",
+      "name": "Cardano",
+      "type": "asset",
+      "asset_class": "crypto"
+    },
+    "Q47041269": {
+      "ticker": "DOGE",
+      "name": "Dogecoin",
+      "type": "asset",
+      "asset_class": "crypto"
+    },
+    "Q20130061": {
+      "ticker": "COIN",
+      "name": "Coinbase",
+      "type": "exchange",
+      "asset_class": "equity"
+    },
+    "Q312": {
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q2283": {
+      "ticker": "MSFT",
+      "name": "Microsoft",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q95": {
+      "ticker": "GOOGL",
+      "name": "Alphabet/Google",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q3884": {
+      "ticker": "AMZN",
+      "name": "Amazon",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q182477": {
+      "ticker": "NVDA",
+      "name": "Nvidia",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q380": {
+      "ticker": "META",
+      "name": "Meta Platforms",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q478214": {
+      "ticker": "TSLA",
+      "name": "Tesla",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q192314": {
+      "ticker": "JPM",
+      "name": "JPMorgan Chase",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q193326": {
+      "ticker": "GS",
+      "name": "Goldman Sachs",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q219635": {
+      "ticker": "BLK",
+      "name": "BlackRock",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q487907": {
+      "ticker": "BAC",
+      "name": "Bank of America",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q626481": {
+      "ticker": "MS",
+      "name": "Morgan Stanley",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q160112": {
+      "ticker": "BRK.B",
+      "name": "Berkshire Hathaway",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q3271856": {
+      "ticker": "V",
+      "name": "Visa",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q217583": {
+      "ticker": "MA",
+      "name": "Mastercard",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q483915": {
+      "ticker": "JNJ",
+      "name": "Johnson & Johnson",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q504619": {
+      "ticker": "UNH",
+      "name": "UnitedHealth",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q37156": {
+      "ticker": "INTC",
+      "name": "Intel",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q128896": {
+      "ticker": "AMD",
+      "name": "AMD",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q128204": {
+      "ticker": "QCOM",
+      "name": "Qualcomm",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q166661": {
+      "ticker": "NFLX",
+      "name": "Netflix",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q21093332": {
+      "ticker": "UBER",
+      "name": "Uber",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q17073053": {
+      "ticker": "CRM",
+      "name": "Salesforce",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q185399": {
+      "ticker": "BA",
+      "name": "Boeing",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q459965": {
+      "ticker": "XOM",
+      "name": "ExxonMobil",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q335276": {
+      "ticker": "CVX",
+      "name": "Chevron",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q483551": {
+      "ticker": "WMT",
+      "name": "Walmart",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q830765": {
+      "ticker": "DIS",
+      "name": "Walt Disney",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q37093": {
+      "ticker": "KO",
+      "name": "Coca-Cola",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q271960": {
+      "ticker": "PEP",
+      "name": "PepsiCo",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q110354": {
+      "ticker": "PG",
+      "name": "Procter & Gamble",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q54078": {
+      "ticker": "MCD",
+      "name": "McDonald's",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q242345": {
+      "ticker": "SPX",
+      "name": "S&P 500",
+      "type": "index"
+    },
+    "Q180816": {
+      "ticker": "DJI",
+      "name": "Dow Jones",
+      "type": "index"
+    },
+    "Q180817": {
+      "ticker": "IXIC",
+      "name": "NASDAQ Composite",
+      "type": "index"
+    },
+    "Q127301": {
+      "ticker": "TSM",
+      "name": "TSMC",
+      "type": "company",
+      "asset_class": "equity"
+    },
+    "Q53536": {
+      "name": "Federal Reserve",
+      "type": "regulatory_body"
+    },
+    "Q654027": {
+      "name": "Federal Open Market Committee",
+      "type": "regulatory_body"
+    },
+    "Q953944": {
+      "name": "U.S. Securities and Exchange Commission",
+      "type": "regulatory_body"
+    },
+    "Q8901": {
+      "name": "European Central Bank",
+      "type": "regulatory_body"
+    },
+    "Q333101": {
+      "name": "Bank of Japan",
+      "type": "regulatory_body"
+    },
+    "Q169704": {
+      "name": "Bank of England",
+      "type": "regulatory_body"
+    },
+    "Q7804": {
+      "name": "International Monetary Fund",
+      "type": "organization"
+    },
+    "Q7795": {
+      "name": "OPEC",
+      "type": "organization"
+    },
+    "Q6182718": {
+      "name": "Jerome Powell",
+      "type": "person",
+      "role": "fed_chair"
+    },
+    "Q434578": {
+      "name": "Janet Yellen",
+      "type": "person",
+      "role": "treasury_secretary"
+    },
+    "Q317521": {
+      "name": "Elon Musk",
+      "type": "person",
+      "ticker": "TSLA"
+    },
+    "Q1341289": {
+      "name": "Jensen Huang",
+      "type": "person",
+      "ticker": "NVDA"
+    },
+    "Q260730": {
+      "name": "Tim Cook",
+      "type": "person",
+      "ticker": "AAPL"
+    },
+    "Q2147630": {
+      "name": "Satya Nadella",
+      "type": "person",
+      "ticker": "MSFT"
+    },
+    "Q1666011": {
+      "name": "Jamie Dimon",
+      "type": "person",
+      "ticker": "JPM"
+    },
+    "Q17102641": {
+      "name": "Vitalik Buterin",
+      "type": "person",
+      "ticker": "ETH"
+    }
+  }
+}
