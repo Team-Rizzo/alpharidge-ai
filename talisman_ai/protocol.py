@@ -19,7 +19,7 @@
 
 import bittensor as bt
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, List
+from typing import ClassVar, Optional, Dict, Any, List
 from talisman_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring, NewsArticleForScoring
 
 class Score(bt.Synapse):
@@ -85,6 +85,8 @@ class ValidatorRewards(bt.Synapse):
       - sender_hotkey: validator hotkey broadcasting this data
       - seq: monotonically increasing sequence number per sender (we use epoch by default)
     """
+    required_hash_fields: ClassVar[tuple[str, ...]] = ("epoch", "uid_points", "sender_hotkey", "seq")
+
     epoch: int
     uid_points: Dict[int, int]
     sender_hotkey: str
@@ -104,6 +106,8 @@ class ValidatorPenalties(bt.Synapse):
       - sender_hotkey: validator hotkey broadcasting this data
       - seq: monotonically increasing sequence number per sender (we use epoch by default)
     """
+    required_hash_fields: ClassVar[tuple[str, ...]] = ("epoch", "uid_penalties", "sender_hotkey", "seq")
+
     epoch: int
     uid_penalties: Dict[int, int]
     sender_hotkey: str
