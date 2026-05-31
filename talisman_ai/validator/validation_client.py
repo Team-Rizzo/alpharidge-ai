@@ -56,6 +56,8 @@ class ValidationClient:
         self._last_api_submit_epoch: Optional[int] = None
         # Avoid spamming score sends: send at most once per target epoch.
         self._last_score_epoch: Optional[int] = None
+        # Recompute weights/scores at most once per target epoch (deterministic).
+        self._last_weight_epoch: Optional[int] = None
         # Loop cadence. Keep defaults aligned with config.
         self.poll_seconds = poll_seconds if poll_seconds is not None else config.VALIDATION_POLL_SECONDS
         self.scores_block_interval = scores_block_interval if scores_block_interval is not None else config.SCORES_BLOCK_INTERVAL
@@ -441,18 +443,23 @@ class ValidationClient:
                         bt.logging.debug(f"[ValidationClient.run] Could not resolve hotkey for UID={uid}, skipping.")
                         continue
                     penalty_count = uid_validator_counts.get(uid, 0)
-                    # Apply reward if reward_count > 0 AND reward_count > penalty_count
-                    if pts > 0 and pts > penalty_count:
-                        bt.logging.info(f"[REWARDS] Applying reward for UID={uid} hotkey={hk[:12]}... (rewards={pts} > penalties={penalty_count})")
+                    # Apply reward unless 2+ validators (local + broadcast) penalized this UID.
+                    if pts > 0 and uid not in penalized_uids:
+                        bt.logging.info(f"[REWARDS] Applying reward for UID={uid} hotkey={hk[:12]}... (rewards={pts}, penalizing_validators={penalty_count})")
                         rewards.append(Reward(hotkey=hk, reward=int(pts), epoch=target_epoch))
                     else:
-                        bt.logging.info(f"[PENALTIES] Zeroing reward for UID={uid} hotkey={hk[:12]}... (rewards={pts} <= penalties={penalty_count})")
+                        bt.logging.info(f"[PENALTIES] Zeroing reward for UID={uid} hotkey={hk[:12]}... (rewards={pts}, penalizing_validators={penalty_count})")
                         rewards.append(Reward(hotkey=hk, reward=0, epoch=target_epoch))
-                bt.logging.debug(f"[ValidationClient.run] Calculating weights from rewards list (len={len(rewards)})")
-                weights = calculate_weights(rewards, self._validator.metagraph)
-                # bt.logging.info(f"[REWARDS] Weights: {weights}")
-                bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
-                self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())
+                # Recompute weights/scores once per target epoch so the snapshot the
+                # base neuron loop commits on-chain is deterministic (not whatever
+                # mid-aggregation state happens to be live every poll iteration).
+                if self._last_weight_epoch != target_epoch:
+                    bt.logging.debug(f"[ValidationClient.run] Calculating weights from rewards list (len={len(rewards)})")
+                    weights = calculate_weights(rewards, self._validator.metagraph)
+                    # bt.logging.info(f"[REWARDS] Weights: {weights}")
+                    bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
+                    self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())
+                    self._last_weight_epoch = target_epoch
 
                 # Send each active miner their raw reward/penalty counts for this epoch (once per epoch)
                 if self._last_score_epoch != target_epoch:
