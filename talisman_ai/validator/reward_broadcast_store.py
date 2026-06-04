@@ -21,6 +21,13 @@ import bittensor as bt
 
 from talisman_ai import config
 
+# Defense-in-depth bounds on ingested broadcast data. A legit miner earns on the
+# order of 1-50 points per epoch; anything above MAX_POINTS_PER_UID is fabricated
+# (the MITM attacks injected ~65000). Legit broadcasts use seq == epoch, so a seq
+# far from the stated epoch signals a rogue/poisoned broadcaster.
+MAX_POINTS_PER_UID = 500
+MAX_SEQ_EPOCH_SKEW = 100
+
 
 def _default_path() -> Path:
     return Path(getattr(config, "BROADCAST_STATE_LOCATION", str(Path(__file__).resolve().parent.parent / ".broadcast_state.json")))
@@ -83,19 +90,32 @@ class RewardBroadcastStore:
         epoch_i = int(epoch)
         seq_i = int(seq)
 
+        # Legit broadcasters set seq == epoch. A seq far from the stated epoch is a
+        # rogue/poisoned broadcaster (the MITM attacks injected seq ~749000 to poison
+        # last_seen_seq and deadlock all future legit broadcasts). Reject outright so
+        # the poisoned seq never enters last_seen_seq.
+        if abs(seq_i - epoch_i) > MAX_SEQ_EPOCH_SKEW:
+            return False, f"seq_epoch_skew(seq={seq_i}, epoch={epoch_i})"
+
         last = int(self.last_seen_seq.get(sender, -1))
         if seq_i <= last:
-            if last > 0 and seq_i < last // 10:
-                bt.logging.info(
-                    f"[BROADCAST] Resetting stale last_seen_seq for {sender[:12]}.. "
-                    f"(old={last}, new={seq_i}) — likely seq scheme change"
-                )
-                self.last_seen_seq[sender] = seq_i - 1
-                last = seq_i - 1
-            else:
-                return False, f"duplicate_or_old_seq(last={last}, got={seq_i})"
+            return False, f"duplicate_or_old_seq(last={last}, got={seq_i})"
 
-        cleaned = {int(uid): int(pts) for uid, pts in (uid_points or {}).items() if int(pts) > 0}
+        # Drop fabricated point values. A legit miner earns ~1-50 points/epoch; the
+        # MITM attacks injected ~65000 to capture all incentive. Clamp rather than
+        # reject the whole payload so a single bad UID can't suppress real ones.
+        cleaned = {}
+        for uid, pts in (uid_points or {}).items():
+            p = int(pts)
+            if p <= 0:
+                continue
+            if p > MAX_POINTS_PER_UID:
+                bt.logging.warning(
+                    f"[BROADCAST] Dropping out-of-bounds points from {sender[:12]}.. "
+                    f"uid={int(uid)} points={p} (cap={MAX_POINTS_PER_UID})"
+                )
+                continue
+            cleaned[int(uid)] = p
         if not cleaned:
             # Still advance last_seen_seq to prevent spam with empty payloads.
             self.last_seen_seq[sender] = seq_i
@@ -139,15 +159,19 @@ class RewardBroadcastStore:
     # Remote reset helpers
     # ---------------------------------------------------------------------
     def flush_before_epoch(self, epoch: int) -> int:
-        """Remove all broadcast data for epochs <= epoch and reset seq tracking. Returns count of epochs removed."""
+        """Remove all broadcast data for epochs <= epoch and reset seq tracking. Returns count of epochs removed.
+
+        last_seen_seq is always cleared, even when no epoch data was removed: a
+        poisoned seq blocks all ingestion, leaving by_epoch_by_sender empty, so
+        gating the clear on removed>0 made the deadlock unrecoverable via signal.
+        """
         removed = 0
         for old_epoch in list(self.by_epoch_by_sender.keys()):
             if int(old_epoch) <= int(epoch):
                 del self.by_epoch_by_sender[old_epoch]
                 removed += 1
-        if removed:
-            self.last_seen_seq.clear()
-            self.save()
+        self.last_seen_seq.clear()
+        self.save()
         return removed
 
     def purge_hotkeys(self, hotkeys: list) -> None:
