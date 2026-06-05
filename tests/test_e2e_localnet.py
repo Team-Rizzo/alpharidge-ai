@@ -33,10 +33,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import bittensor as bt  # noqa: E402
 from bittensor_wallet import Keypair as WalletKeypair  # noqa: E402
 
-try:
-    from bittensor_wallet import Keypair, KeypairType
-except ImportError:  # pragma: no cover
-    from substrateinterface import Keypair, KeypairType
+from bittensor_wallet import Keypair  # sr25519 (default)
 
 from talisman_ai.protocol import ValidatorRewards          # noqa: E402
 from talisman_ai.utils import attestation_crypto as ac       # noqa: E402
@@ -72,7 +69,7 @@ async def test_localnet_attestation_roundtrip():
     sub = bt.Subtensor(network=WS)
 
     # Pinned API attestation key (root of trust).
-    att_kp = Keypair.create_from_seed("0x" + "7f" * 32, crypto_type=KeypairType.ED25519)
+    att_kp = Keypair.create_from_seed("0x" + "7f" * 32)
     pinned = att_kp.ss58_address
 
     wA = _make_wallet("e2eA", "//Alice", "//e2eA-hot-v1")

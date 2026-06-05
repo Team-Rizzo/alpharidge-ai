@@ -139,7 +139,7 @@ VALIDATOR_CACHE_SECONDS = float(os.getenv("VALIDATOR_CACHE_SECONDS", "120"))
 ALLOW_MANUAL_VALIDATOR_HOTKEYS = os.getenv("ALLOW_MANUAL_VALIDATOR_HOTKEYS", "false").lower() == "true"
 MANUAL_VALIDATOR_HOTKEYS = [hk.strip() for hk in os.getenv("MANUAL_VALIDATOR_HOTKEYS", "").split(",") if hk.strip()]
 
-# Verifiable validator points: pinned API attestation pubkey (ed25519 ss58) and
+# Verifiable validator points: pinned API attestation pubkey (sr25519 ss58) and
 # the fraction of received broadcasts to deep-verify against raw /verdicts.
 API_ATTESTATION_PUBKEY = os.getenv("API_ATTESTATION_PUBKEY", "")
 DEEP_VERIFY_SAMPLE_RATE = float(os.getenv("DEEP_VERIFY_SAMPLE_RATE", "0.1"))

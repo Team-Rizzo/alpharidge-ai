@@ -2,10 +2,7 @@ import pytest
 from talisman_ai.validator.reward_broadcast_store import RewardBroadcastStore
 from talisman_ai.utils import attestation_crypto as ac
 
-try:
-    from bittensor_wallet import Keypair, KeypairType
-except ImportError:  # pragma: no cover
-    from substrateinterface import Keypair, KeypairType
+from bittensor_wallet import Keypair  # sr25519 (default)
 
 
 def _signed_attestation(api_kp, validator_hotkey, epoch, per_miner):
@@ -24,7 +21,7 @@ def store(tmp_path):
 
 
 def test_valid_attestation_ingested_and_mapped_to_uids(store):
-    api_kp = Keypair.create_from_seed("0x" + "11" * 32, crypto_type=KeypairType.ED25519)
+    api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att, sig = _signed_attestation(api_kp, "valiA", 7, {"mhk1": 3.0, "mhk2": 1.0})
     hotkey_to_uid = {"mhk1": 5, "mhk2": 8}
     accepted, reason = store.ingest_attestation(
@@ -35,8 +32,8 @@ def test_valid_attestation_ingested_and_mapped_to_uids(store):
 
 
 def test_forged_signature_rejected(store):
-    api_kp = Keypair.create_from_seed("0x" + "11" * 32, crypto_type=KeypairType.ED25519)
-    wrong_kp = Keypair.create_from_seed("0x" + "99" * 32, crypto_type=KeypairType.ED25519)
+    api_kp = Keypair.create_from_seed("0x" + "11" * 32)
+    wrong_kp = Keypair.create_from_seed("0x" + "99" * 32)
     att, _ = _signed_attestation(api_kp, "valiA", 7, {"mhk1": 3.0})
     forged = wrong_kp.sign(ac.attestation_message("valiA", 7, {"mhk1": 3.0}, 3.0, "deadbeef").encode()).hex()
     accepted, reason = store.ingest_attestation(
@@ -47,7 +44,7 @@ def test_forged_signature_rejected(store):
 
 
 def test_sender_mismatch_rejected(store):
-    api_kp = Keypair.create_from_seed("0x" + "11" * 32, crypto_type=KeypairType.ED25519)
+    api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att, sig = _signed_attestation(api_kp, "valiA", 7, {"mhk1": 3.0})
     accepted, reason = store.ingest_attestation(
         attestation=att, signature=sig, sender_hotkey="someoneElse",
@@ -57,7 +54,7 @@ def test_sender_mismatch_rejected(store):
 
 
 def test_replay_old_seq_rejected(store):
-    api_kp = Keypair.create_from_seed("0x" + "11" * 32, crypto_type=KeypairType.ED25519)
+    api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att1, sig1 = _signed_attestation(api_kp, "valiA", 7, {"mhk1": 1.0})
     store.ingest_attestation(attestation=att1, signature=sig1, sender_hotkey="valiA",
                              hotkey_to_uid={"mhk1": 5}, pinned_pubkey=api_kp.ss58_address)
@@ -70,7 +67,7 @@ def test_replay_old_seq_rejected(store):
 
 def test_per_uid_points_clamped(store):
     from talisman_ai.validator.reward_broadcast_store import MAX_POINTS_PER_UID
-    api_kp = Keypair.create_from_seed("0x" + "11" * 32, crypto_type=KeypairType.ED25519)
+    api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att, sig = _signed_attestation(api_kp, "valiA", 7, {"mhk1": float(MAX_POINTS_PER_UID + 5000)})
     accepted, reason = store.ingest_attestation(
         attestation=att, signature=sig, sender_hotkey="valiA",
@@ -80,7 +77,7 @@ def test_per_uid_points_clamped(store):
 
 
 def test_merkle_root_retained_for_deep_verify(store):
-    api_kp = Keypair.create_from_seed("0x" + "11" * 32, crypto_type=KeypairType.ED25519)
+    api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att, sig = _signed_attestation(api_kp, "valiA", 7, {"mhk1": 1.0})
     store.ingest_attestation(attestation=att, signature=sig, sender_hotkey="valiA",
                              hotkey_to_uid={"mhk1": 5}, pinned_pubkey=api_kp.ss58_address)
@@ -89,7 +86,7 @@ def test_merkle_root_retained_for_deep_verify(store):
 
 def test_wire_seq_cannot_silence_future_epochs(store):
     from talisman_ai.validator.reward_broadcast_store import MAX_SEQ_EPOCH_SKEW
-    api_kp = Keypair.create_from_seed("0x" + "11" * 32, crypto_type=KeypairType.ED25519)
+    api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att, sig = _signed_attestation(api_kp, "valiA", 10, {"mhk1": 1.0})
     # Replay a valid epoch-10 attestation but with an inflated wire seq.
     store.ingest_attestation(attestation=att, signature=sig, sender_hotkey="valiA",
@@ -105,7 +102,7 @@ def test_wire_seq_cannot_silence_future_epochs(store):
 
 
 def test_nonfinite_points_skipped_not_crash(store):
-    api_kp = Keypair.create_from_seed("0x" + "11" * 32, crypto_type=KeypairType.ED25519)
+    api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att, sig = _signed_attestation(api_kp, "valiA", 7, {"mhk1": float("inf"), "mhk2": 2.0})
     accepted, reason = store.ingest_attestation(
         attestation=att, signature=sig, sender_hotkey="valiA",
@@ -116,7 +113,7 @@ def test_nonfinite_points_skipped_not_crash(store):
 
 def test_route_prefers_attestation_when_present(store):
     from talisman_ai.validator import reward_broadcast_store as rbs
-    api_kp = Keypair.create_from_seed("0x" + "11" * 32, crypto_type=KeypairType.ED25519)
+    api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att, sig = _signed_attestation(api_kp, "valiA", 7, {"mhk1": 2.0})
     accepted, reason = rbs.route_reward_broadcast(
         store=store, sender_hotkey="valiA", epoch=7, seq=7,

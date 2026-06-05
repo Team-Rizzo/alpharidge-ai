@@ -10,10 +10,10 @@ import hashlib
 import json
 from typing import Dict, List
 
-try:
-    from bittensor_wallet import Keypair, KeypairType
-except ImportError:  # pragma: no cover
-    from substrateinterface import Keypair, KeypairType
+# sr25519 only (API attestation key + miner hotkeys). bittensor_wallet's Keypair defaults
+# to sr25519 and is the one library guaranteed present on the runtime stack
+# (bittensor-wallet 4.0.1, no substrate-interface, no ed25519/KeypairType).
+from bittensor_wallet import Keypair
 
 # V3 exact-match categorical fields (order matters for categorical_key + hashing).
 ANALYSIS_FIELDS = ("sentiment", "asset_symbol", "content_type",
@@ -102,7 +102,7 @@ def attestation_message(validator_hotkey: str, epoch: int, per_miner_points: Dic
 
 def verify_attestation(pubkey_ss58: str, message: str, signature_hex: str) -> bool:
     try:
-        kp = Keypair(ss58_address=pubkey_ss58, crypto_type=KeypairType.ED25519)
+        kp = Keypair(ss58_address=pubkey_ss58)  # sr25519 (default)
         return bool(kp.verify(message.encode("utf-8"), bytes.fromhex(signature_hex)))
     except Exception:
         return False

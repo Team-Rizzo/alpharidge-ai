@@ -1,9 +1,6 @@
 from talisman_ai.utils import attestation_crypto as ac
 
-try:
-    from bittensor_wallet import Keypair, KeypairType
-except ImportError:  # pragma: no cover
-    from substrateinterface import Keypair, KeypairType
+from bittensor_wallet import Keypair  # sr25519 (default)
 
 
 def test_canonical_json_sorted_compact():
@@ -19,7 +16,7 @@ def test_merkle_root_order_independent():
 
 
 def test_attestation_verify_roundtrip():
-    kp = Keypair.create_from_seed("0x" + "11" * 32, crypto_type=KeypairType.ED25519)
+    kp = Keypair.create_from_seed("0x" + "11" * 32)
     msg = ac.attestation_message("vali1", 7, {"m1": 3.0}, 3.0, "abcd")
     sig = kp.sign(msg.encode("utf-8")).hex()
     assert ac.verify_attestation(kp.ss58_address, msg, sig) is True
@@ -27,7 +24,7 @@ def test_attestation_verify_roundtrip():
 
 
 def test_miner_sign_and_verify():
-    kp = Keypair.create_from_seed("0x" + "22" * 32, crypto_type=KeypairType.SR25519)
+    kp = Keypair.create_from_seed("0x" + "22" * 32)
     ah = ac.analysis_hash({"sentiment": "bull", "asset_symbol": "BTC"})
     msg = ac.miner_sign_message("9", ah, "n1")
     sig = kp.sign(msg.encode("utf-8")).hex()

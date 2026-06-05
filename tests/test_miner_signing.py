@@ -1,10 +1,7 @@
 from talisman_ai.utils import attestation_crypto as ac
 from talisman_ai.utils.miner_signing import sign_items
 
-try:
-    from bittensor_wallet import Keypair, KeypairType
-except ImportError:  # pragma: no cover
-    from substrateinterface import Keypair, KeypairType
+from bittensor_wallet import Keypair  # sr25519 (default)
 
 
 class _Item:
@@ -19,7 +16,7 @@ class _A:
 
 
 def test_sign_items_produces_verifiable_sigs():
-    kp = Keypair.create_from_seed("0x" + "77" * 32, crypto_type=KeypairType.SR25519)
+    kp = Keypair.create_from_seed("0x" + "77" * 32)
     items = [_Item("100", _A()), _Item("200", _A())]
     sigs, nonces = sign_items(kp, items, id_attr="id")
     assert set(sigs) == {"100", "200"} and set(nonces) == {"100", "200"}
