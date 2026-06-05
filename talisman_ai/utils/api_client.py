@@ -359,7 +359,27 @@ class TalismanAPIClient:
         )
         
         return SubmissionResponse(**data)
-    
+
+    # =========================================================================
+    # Verifiable-points methods
+    # =========================================================================
+
+    async def get_attestation(self, epoch: int) -> Dict[str, Any]:
+        """Fetch this validator's own API-signed attestation for `epoch`."""
+        return await self._request("GET", "/attestation", params={"epoch": epoch})
+
+    async def get_verdicts(self, validator: str, epoch: int) -> Dict[str, Any]:
+        """Fetch raw verdict leaves for (validator, epoch) to recompute the Merkle root."""
+        return await self._request("GET", "/verdicts", params={"validator": validator, "epoch": epoch})
+
+    async def post_report(self, accused_hotkey: str, epoch: int, reason: str,
+                          evidence: Dict[str, Any]) -> Dict[str, Any]:
+        """Report a broadcast discrepancy (drives 2+ consensus blacklist)."""
+        return await self._request("POST", "/reports", json={
+            "accused_hotkey": accused_hotkey, "epoch": int(epoch),
+            "reason": reason, "evidence": evidence,
+        })
+
     # =========================================================================
     # Reward Methods
     # =========================================================================

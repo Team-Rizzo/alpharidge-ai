@@ -237,17 +237,22 @@ class Miner(BaseMinerNeuron):
                 )
             
             bt.logging.info(f"[Miner] Background: Finished processing, sending back to validator {validator_hotkey}")
-            
+
+            from talisman_ai.utils.miner_signing import sign_items
+            miner_signatures, nonces = sign_items(self.wallet.hotkey, synapse.tweet_batch, id_attr="id")
+            synapse.miner_signatures = miner_signatures
+            synapse.nonces = nonces
+
             # Find validator UID and axon info from metagraph
             try:
                 validator_uid = self.metagraph.hotkeys.index(validator_hotkey)
             except ValueError:
                 bt.logging.error(f"[Miner] Validator hotkey {validator_hotkey} not found in metagraph")
                 return
-            
+
             validator_axon = self.metagraph.axons[validator_uid]
             bt.logging.info(f"[Miner] Background: Found validator UID {validator_uid}, sending response via dendrite")
-            
+
             # Send the processed batch back to the validator
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -349,17 +354,22 @@ class Miner(BaseMinerNeuron):
                 )
             
             bt.logging.info(f"[Miner] Background: Finished processing telegram messages, sending back to validator {validator_hotkey}")
-            
+
+            from talisman_ai.utils.miner_signing import sign_items
+            miner_signatures, nonces = sign_items(self.wallet.hotkey, synapse.message_batch, id_attr="id")
+            synapse.miner_signatures = miner_signatures
+            synapse.nonces = nonces
+
             # Find validator UID and axon info from metagraph
             try:
                 validator_uid = self.metagraph.hotkeys.index(validator_hotkey)
             except ValueError:
                 bt.logging.error(f"[Miner] Validator hotkey {validator_hotkey} not found in metagraph")
                 return
-            
+
             validator_axon = self.metagraph.axons[validator_uid]
             bt.logging.info(f"[Miner] Background: Found validator UID {validator_uid}, sending telegram response via dendrite")
-            
+
             # Send the processed batch back to the validator
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -428,6 +438,11 @@ class Miner(BaseMinerNeuron):
                 )
 
             bt.logging.info(f"[Miner] Background: Finished processing articles, sending back to validator {validator_hotkey}")
+
+            from talisman_ai.utils.miner_signing import sign_items
+            miner_signatures, nonces = sign_items(self.wallet.hotkey, synapse.article_batch, id_attr="id")
+            synapse.miner_signatures = miner_signatures
+            synapse.nonces = nonces
 
             try:
                 validator_uid = self.metagraph.hotkeys.index(validator_hotkey)

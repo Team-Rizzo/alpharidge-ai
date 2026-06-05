@@ -16,6 +16,7 @@ from talisman_ai.protocol import ValidatorRewards
 from talisman_ai.protocol import ValidatorPenalties
 from talisman_ai.protocol import Score
 from talisman_ai.utils.validators import get_validator_hotkeys
+from talisman_ai.validator import deep_verify
 
 class ValidationClient:
     """
@@ -58,6 +59,8 @@ class ValidationClient:
         self._last_score_epoch: Optional[int] = None
         # Recompute weights/scores at most once per target epoch (deterministic).
         self._last_weight_epoch: Optional[int] = None
+        # Run deep-verify at most once per target epoch to avoid spamming post_report.
+        self._last_deep_verify_epoch: Optional[int] = None
         # Loop cadence. Keep defaults aligned with config.
         self.poll_seconds = poll_seconds if poll_seconds is not None else config.VALIDATION_POLL_SECONDS
         self.scores_block_interval = scores_block_interval if scores_block_interval is not None else config.SCORES_BLOCK_INTERVAL
@@ -287,11 +290,28 @@ class ValidationClient:
                         bt.logging.debug(f"[ValidationClient.run] uid_points for broadcast: {uid_points}")
                         bt.logging.debug(f"[ValidationClient.run] uid_penalties for broadcast: {uid_penalties}")
 
+                        attestation_obj = None
+                        attestation_sig = None
+                        try:
+                            att = await self.api_client.get_attestation(epoch=int(publish_epoch))
+                            attestation_obj = {
+                                "validatorHotkey": att["validator_hotkey"],
+                                "epoch": int(att["epoch"]),
+                                "perMinerPoints": att["per_miner_points"],
+                                "totalPoints": att["total_points"],
+                                "merkleRoot": att["merkle_root"],
+                            }
+                            attestation_sig = att["signature"]
+                        except Exception as e:
+                            bt.logging.debug(f"[BROADCAST] No attestation for epoch={publish_epoch}: {e}")
+
                         rewards_syn = ValidatorRewards(
                             epoch=int(publish_epoch),
                             uid_points=uid_points,
                             sender_hotkey=str(self._validator.wallet.hotkey.ss58_address),
                             seq=int(publish_epoch),
+                            attestation=attestation_obj,
+                            attestation_sig=attestation_sig,
                         )
                         penalties_syn = ValidatorPenalties(
                             epoch=int(publish_epoch),
@@ -460,6 +480,44 @@ class ValidationClient:
                     bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
                     self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())
                     self._last_weight_epoch = target_epoch
+
+                # ---- Sampled deep-verify of received attestations (once per epoch) ----
+                if self._last_deep_verify_epoch != target_epoch:
+                    try:
+                        senders = list((self._validator._reward_broadcasts
+                                        .by_epoch_by_sender.get(int(target_epoch)) or {}).keys())
+                        for sender in senders:
+                            expected_root = self._validator._reward_broadcasts.get_merkle_root(
+                                epoch=int(target_epoch), sender=sender)
+                            if not expected_root:
+                                continue
+                            if not deep_verify.should_sample(config.DEEP_VERIFY_SAMPLE_RATE, random.random()):
+                                continue
+                            try:
+                                resp = await self.api_client.get_verdicts(
+                                    validator=sender, epoch=int(target_epoch))
+                                leaves = [{
+                                    "resource_type": l.get("resource_type"), "resource_id": l.get("resource_id"),
+                                    "miner_hotkey": l.get("miner_hotkey"), "validator_verdict": l.get("validator_verdict"),
+                                    "categorical_key": l.get("categorical_key"), "points_awarded": l.get("points_awarded"),
+                                } for l in resp.get("verdicts", [])]
+                                # NOTE: the attestation's merkleRoot was already API-signature-verified at
+                                # ingest. A mismatch vs live /verdicts therefore signals API-side data drift
+                                # rather than provable sender tampering; report drives 2+ consensus, and this
+                                # runs once per epoch, bounding false-positive blast radius.
+                                reason = deep_verify.merkle_mismatch(expected_root, leaves)
+                                if reason:
+                                    bt.logging.warning(
+                                        f"[DEEP_VERIFY] {sender[:12]}.. epoch={target_epoch} {reason}; reporting")
+                                    await self.api_client.post_report(
+                                        accused_hotkey=sender, epoch=int(target_epoch),
+                                        reason=reason, evidence={"expected_root": expected_root})
+                            except Exception as e:
+                                bt.logging.debug(f"[DEEP_VERIFY] fetch/recompute failed for {sender[:12]}..: {e}")
+                    except Exception as e:
+                        bt.logging.debug(f"[DEEP_VERIFY] pass failed: {e}")
+                    finally:
+                        self._last_deep_verify_epoch = target_epoch
 
                 # Send each active miner their raw reward/penalty counts for this epoch (once per epoch)
                 if self._last_score_epoch != target_epoch:

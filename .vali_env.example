@@ -1,0 +1,4 @@
+# --- Verifiable validator points (validator) ---
+API_ATTESTATION_PUBKEY=            # pinned ed25519 ss58 from the API ops (scripts/gen_attestation_key.py)
+DEEP_VERIFY_SAMPLE_RATE=0.1        # fraction of received attestations to deep-verify
+ENFORCE_SIGNED_ATTESTATIONS=false  # Phase 3: drop unsigned/unverifiable broadcasts
