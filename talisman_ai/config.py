@@ -141,9 +141,12 @@ MANUAL_VALIDATOR_HOTKEYS = [hk.strip() for hk in os.getenv("MANUAL_VALIDATOR_HOT
 
 # Verifiable validator points: pinned API attestation pubkey (sr25519 ss58) and
 # the fraction of received broadcasts to deep-verify against raw /verdicts.
-API_ATTESTATION_PUBKEY = os.getenv("API_ATTESTATION_PUBKEY", "")
+# The pubkey default is the live SN45 attestation key (public by design — safe to
+# ship). Enforcement defaults ON so an updated validator drops fabricated/unsigned
+# broadcasts out of the box (override either via .vali_env if needed).
+API_ATTESTATION_PUBKEY = os.getenv("API_ATTESTATION_PUBKEY", "5DqYRNaJ9FJ2cuJTFxbU5HDLeeotpgj6Zgkrkw4RgS6SA4nf")
 DEEP_VERIFY_SAMPLE_RATE = float(os.getenv("DEEP_VERIFY_SAMPLE_RATE", "0.1"))
-ENFORCE_SIGNED_ATTESTATIONS = os.getenv("ENFORCE_SIGNED_ATTESTATIONS", "false").lower() == "true"
+ENFORCE_SIGNED_ATTESTATIONS = os.getenv("ENFORCE_SIGNED_ATTESTATIONS", "true").lower() == "true"
 
 
 # ============================================================================

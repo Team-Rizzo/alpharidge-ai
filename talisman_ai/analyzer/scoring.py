@@ -242,8 +242,16 @@ def validate_miner_batch(
                 "post_preview": post_text[:100] if post_text else ""
             })
     
+    # Stamp the sampled item's resource id onto each discrepancy so penalties can be
+    # attributed per-item for the dashboard (display-only). Keyed by the existing
+    # post_index; inert if the index is somehow out of range.
+    for _d in discrepancies:
+        _pi = _d.get("post_index")
+        if isinstance(_pi, int) and 0 <= _pi < len(sampled_posts):
+            _d["resource_id"] = getattr(sampled_posts[_pi], "id", None)
+
     is_valid = matches == sample_size and len(discrepancies) == 0
-    
+
     result = {
         "is_valid": is_valid,
         "matches": matches,
@@ -251,12 +259,12 @@ def validate_miner_batch(
         "discrepancies": discrepancies,
         "match_rate": matches / sample_size if sample_size > 0 else 0.0
     }
-    
+
     if is_valid:
         bt.logging.success(f"[Validator] Batch ACCEPTED: {matches}/{sample_size} matches")
     else:
         bt.logging.warning(f"[Validator] Batch REJECTED: {matches}/{sample_size} matches, {len(discrepancies)} discrepancies")
-    
+
     return is_valid, result
 
 
@@ -411,8 +419,15 @@ def validate_miner_telegram_batch(
                 "message_preview": msg_content[:100] if msg_content else ""
             })
     
+    # Stamp the sampled item's resource id onto each discrepancy (display-only
+    # attribution). Keyed by the existing message_index.
+    for _d in discrepancies:
+        _mi = _d.get("message_index")
+        if isinstance(_mi, int) and 0 <= _mi < len(sampled_messages):
+            _d["resource_id"] = getattr(sampled_messages[_mi], "id", None)
+
     is_valid = matches == sample_size and len(discrepancies) == 0
-    
+
     result = {
         "is_valid": is_valid,
         "matches": matches,
@@ -420,12 +435,12 @@ def validate_miner_telegram_batch(
         "discrepancies": discrepancies,
         "match_rate": matches / sample_size if sample_size > 0 else 0.0
     }
-    
+
     if is_valid:
         bt.logging.success(f"[Validator] Telegram batch ACCEPTED: {matches}/{sample_size} matches")
     else:
         bt.logging.warning(f"[Validator] Telegram batch REJECTED: {matches}/{sample_size} matches, {len(discrepancies)} discrepancies")
-    
+
     return is_valid, result
 
 
@@ -857,6 +872,13 @@ def validate_miner_article_batch(
                 },
                 "article_preview": article_preview
             })
+
+    # Stamp the sampled item's resource id onto each discrepancy (display-only
+    # attribution). Keyed by the existing article_index.
+    for _d in discrepancies:
+        _ai = _d.get("article_index")
+        if isinstance(_ai, int) and 0 <= _ai < len(sampled_articles):
+            _d["resource_id"] = getattr(sampled_articles[_ai], "id", None)
 
     is_valid = matches == sample_size and len(discrepancies) == 0
 

@@ -86,6 +86,12 @@ class Validator(BaseValidatorNeuron):
         # Transient per-item verdict metadata (resource_id -> {miner_signature, nonce,
         # validator_verdict, epoch}); populated during validation, drained at submission.
         self._verdict_meta = {}
+        # Display-only penalty attribution buffer for the miner dashboard. DECOUPLED
+        # from consensus: rows here are flushed best-effort to /diagnostics/penalty-detail
+        # and never enter score_verdict / attestation / Merkle. Bounded so it can't grow
+        # without limit if the API is unreachable (appends past the cap are dropped).
+        self._penalty_detail_buffer = []
+        self._penalty_detail_buffer_max = int(getattr(config, "PENALTY_DETAIL_BUFFER_MAX", 5000))
         # Penalties broadcast store: holds validator↔validator penalty messages for delayed application.
         self._penalty_broadcasts = PenaltyBroadcastStore()
         self._penalty_broadcasts.load()
@@ -367,6 +373,65 @@ class Validator(BaseValidatorNeuron):
             if hotkey:
                 self._tweet_cooldown.release(hotkey)
 
+    # ---- Display-only penalty attribution (decoupled from consensus) ----
+    # The following two helpers feed self._penalty_detail_buffer, which is flushed
+    # best-effort to /diagnostics/penalty-detail. None of this touches score_verdict,
+    # attestation, Merkle, rewards, or penalty counts.
+
+    # Map a discrepancy "reason" to the dashboard "cause". validator_classification_failed
+    # is a validator-side failure (not the miner's fault), so it is not surfaced.
+    _PENALTY_CAUSE_BY_REASON = {
+        "classification_mismatch": "classification_mismatch",
+        "missing_miner_classification": "missing_classification",
+        "miner_needs_update": "needs_update",
+    }
+
+    def _buffer_penalty_detail(self, rows):
+        """Append display-only attribution rows, bounded. Never raises."""
+        try:
+            if not rows:
+                return
+            buf = self._penalty_detail_buffer
+            cap = self._penalty_detail_buffer_max
+            for r in rows:
+                if len(buf) >= cap:
+                    # Drop oldest to stay bounded if the API has been unreachable.
+                    del buf[0]
+                buf.append(r)
+        except Exception as e:
+            bt.logging.debug(f"[PENALTY_DETAIL] buffer append skipped: {e}")
+
+    def _penalty_rows_from_discrepancies(self, discrepancies, miner_hotkey, epoch, resource_type):
+        """Build display-only penalty_detail rows from a rejected batch's discrepancies."""
+        rows = []
+        for disc in (discrepancies or []):
+            try:
+                cause = self._PENALTY_CAUSE_BY_REASON.get(disc.get("reason"))
+                if cause is None:
+                    continue  # skip validator-side / non-attributable reasons
+                rid = disc.get("resource_id")
+                if rid is None:
+                    continue
+                field_results = disc.get("field_results") or {}
+                failed_fields = [k for k, ok in field_results.items() if not ok] or None
+                preview = (disc.get("post_preview") or disc.get("message_preview")
+                           or disc.get("article_preview"))
+                rows.append({
+                    "miner_hotkey": miner_hotkey,
+                    "epoch": int(epoch),
+                    "resource_type": resource_type,
+                    "resource_id": str(rid),
+                    "cause": cause,
+                    "failed_fields": failed_fields,
+                    "miner_values": disc.get("miner"),
+                    "validator_values": disc.get("validator"),
+                    "post_preview": preview,
+                })
+            except Exception as e:
+                bt.logging.debug(f"[PENALTY_DETAIL] row build skipped: {e}")
+                continue
+        return rows
+
     async def _handle_miner_batch_response(
         self,
         tweet_batch: List[TweetWithAuthor],
@@ -435,8 +500,11 @@ class Validator(BaseValidatorNeuron):
                     bt.logging.warning(f"[VALIDATION] Rejection for {miner_hotkey}: reason={reason}, preview={preview[:100]}")
             
             current_epoch = self._miner_reward._get_current_epoch()
-            self._verdict_meta.update(
-                collect_verdict_meta(tweet_batch, miner_signatures, nonces, "invalid", current_epoch))
+            # V6: do NOT write invalid entries into _verdict_meta — invalid items are
+            # reset_to_unprocessed and never submitted, so those entries would leak.
+            # V2: record display-only attribution instead (decoupled from consensus).
+            self._buffer_penalty_detail(
+                self._penalty_rows_from_discrepancies(discrepancies, miner_hotkey, current_epoch, "tweet"))
             self._miner_penalty.add_penalty(miner_hotkey, 1)
             for tweet in tweet_batch:
                 try:
@@ -542,8 +610,10 @@ class Validator(BaseValidatorNeuron):
                     bt.logging.warning(f"[VALIDATION] Telegram rejection for {miner_hotkey}: reason={reason}, preview={preview[:100]}")
             
             current_epoch = self._miner_reward._get_current_epoch()
-            self._verdict_meta.update(
-                collect_verdict_meta(message_batch, miner_signatures, nonces, "invalid", current_epoch))
+            # V6/V2: see tweet path — drop the leaking invalid _verdict_meta write and
+            # record decoupled display-only attribution instead.
+            self._buffer_penalty_detail(
+                self._penalty_rows_from_discrepancies(discrepancies, miner_hotkey, current_epoch, "telegram"))
             self._miner_penalty.add_penalty(miner_hotkey, 1)
             for msg in message_batch:
                 try:
@@ -634,8 +704,10 @@ class Validator(BaseValidatorNeuron):
                     bt.logging.warning(f"[VALIDATION] Article rejection for {miner_hotkey}: reason={reason}, preview={preview[:100]}")
 
             current_epoch = self._miner_reward._get_current_epoch()
-            self._verdict_meta.update(
-                collect_verdict_meta(article_batch, miner_signatures, nonces, "invalid", current_epoch))
+            # V6/V2: see tweet path — drop the leaking invalid _verdict_meta write and
+            # record decoupled display-only attribution instead.
+            self._buffer_penalty_detail(
+                self._penalty_rows_from_discrepancies(discrepancies, miner_hotkey, current_epoch, "article"))
             self._miner_penalty.add_penalty(miner_hotkey, 1)
             for article in article_batch:
                 try:

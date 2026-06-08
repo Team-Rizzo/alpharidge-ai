@@ -25,3 +25,11 @@ VALIDATION_FETCH_LIMIT=24
 LLM_CACHE_TTL=300
 # Maximum number of cached classification results held in memory.
 LLM_CACHE_MAX_SIZE=1024
+# --- Verifiable validator points (v2.2.0) ---
+# Both have safe defaults baked into config.py, so you normally don't need to set these.
+# API attestation pubkey used to verify peer reward broadcasts (public; pinned default in code).
+# API_ATTESTATION_PUBKEY=5DqYRNaJ9FJ2cuJTFxbU5HDLeeotpgj6Zgkrkw4RgS6SA4nf
+# Drop unsigned/unverifiable broadcasts (defaults true). Set false only to allow legacy pooling.
+# ENFORCE_SIGNED_ATTESTATIONS=true
+# Fraction of received attestations to deep-verify against the API (default 0.1).
+# DEEP_VERIFY_SAMPLE_RATE=0.1
