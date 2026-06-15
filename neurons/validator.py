@@ -37,6 +37,7 @@ from talisman_ai.protocol import ValidatorPenalties
 from talisman_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch
 from talisman_ai.analyzer import setup_telegram_analyzer
 from talisman_ai.utils.cooldown import MinerCooldownTracker
+from talisman_ai.validator.verdict_payload import build_verdict_fields, collect_verdict_meta  # T5: verdict payload
 class Validator(BaseValidatorNeuron):
     """
     Validator neuron for SN45.
@@ -91,6 +92,9 @@ class Validator(BaseValidatorNeuron):
         # Rewards broadcast store: holds validator↔validator reward messages for delayed application.
         self._reward_broadcasts = RewardBroadcastStore()
         self._reward_broadcasts.load()
+        # Transient per-item verdict metadata (resource_id -> {miner_signature, nonce,
+        # validator_verdict, epoch}); populated during validation, drained at submission.
+        self._verdict_meta = {}
         # Penalties broadcast store: holds validator↔validator penalty messages for delayed application.
         self._penalty_broadcasts = PenaltyBroadcastStore()
         self._penalty_broadcasts.load()
@@ -186,10 +190,12 @@ class Validator(BaseValidatorNeuron):
         # Queue validation as a background task so we return immediately.
         batch_copy = copy.deepcopy(synapse.tweet_batch)
         sent_batch_copy = copy.deepcopy(sent_batch)
+        sigs = dict(getattr(synapse, "miner_signatures", {}) or {})
+        ncs = dict(getattr(synapse, "nonces", {}) or {})
 
         async def _validate_and_release():
             try:
-                await self._handle_miner_batch_response(batch_copy, miner_hotkey, sent_batch_copy)
+                await self._handle_miner_batch_response(batch_copy, miner_hotkey, sent_batch_copy, sigs, ncs)
             finally:
                 self._validating_tweet_ids -= batch_tids
 
@@ -256,10 +262,12 @@ class Validator(BaseValidatorNeuron):
         # Queue validation as a background task so we return immediately.
         batch_copy = copy.deepcopy(synapse.message_batch)
         sent_batch_copy = copy.deepcopy(sent_batch)
+        sigs = dict(getattr(synapse, "miner_signatures", {}) or {})
+        ncs = dict(getattr(synapse, "nonces", {}) or {})
 
         async def _validate_and_release():
             try:
-                await self._handle_telegram_miner_batch_response(batch_copy, miner_hotkey, sent_batch_copy)
+                await self._handle_telegram_miner_batch_response(batch_copy, miner_hotkey, sent_batch_copy, sigs, ncs)
             finally:
                 self._validating_message_ids -= batch_mids
 
@@ -319,10 +327,12 @@ class Validator(BaseValidatorNeuron):
 
         batch_copy = copy.deepcopy(synapse.article_batch)
         sent_batch_copy = copy.deepcopy(sent_batch)
+        sigs = dict(getattr(synapse, "miner_signatures", {}) or {})
+        ncs = dict(getattr(synapse, "nonces", {}) or {})
 
         async def _validate_and_release():
             try:
-                await self._handle_article_miner_batch_response(batch_copy, miner_hotkey, sent_batch_copy)
+                await self._handle_article_miner_batch_response(batch_copy, miner_hotkey, sent_batch_copy, sigs, ncs)
             finally:
                 self._validating_article_ids -= batch_aids
 
@@ -371,6 +381,8 @@ class Validator(BaseValidatorNeuron):
         tweet_batch: List[TweetWithAuthor],
         miner_hotkey: str,
         sent_batch: List[TweetWithAuthor],
+        miner_signatures=None,
+        nonces=None,
     ) -> bool:
         """
         Validate a miner's TweetBatch response and apply rewards/penalties exactly once per tweet.
@@ -431,6 +443,9 @@ class Validator(BaseValidatorNeuron):
                 else:
                     bt.logging.warning(f"[VALIDATION] Rejection for {miner_hotkey}: reason={reason}, preview={preview[:100]}")
             
+            current_epoch = self._miner_reward._get_current_epoch()
+            self._verdict_meta.update(
+                collect_verdict_meta(tweet_batch, miner_signatures, nonces, "invalid", current_epoch))
             self._miner_penalty.add_penalty(miner_hotkey, 1)
             for tweet in tweet_batch:
                 try:
@@ -463,6 +478,9 @@ class Validator(BaseValidatorNeuron):
                 except Exception:
                     pass
 
+        current_epoch = self._miner_reward._get_current_epoch()
+        self._verdict_meta.update(
+            collect_verdict_meta(tweet_batch, miner_signatures, nonces, "valid", current_epoch))
         return True
 
     async def _handle_telegram_miner_batch_response(
@@ -470,6 +488,8 @@ class Validator(BaseValidatorNeuron):
         message_batch: List[TelegramMessageForScoring],
         miner_hotkey: str,
         sent_batch: List[TelegramMessageForScoring],
+        miner_signatures=None,
+        nonces=None,
     ) -> bool:
         """
         Validate a miner's TelegramBatch response and apply rewards/penalties exactly once per message.
@@ -530,6 +550,9 @@ class Validator(BaseValidatorNeuron):
                 else:
                     bt.logging.warning(f"[VALIDATION] Telegram rejection for {miner_hotkey}: reason={reason}, preview={preview[:100]}")
             
+            current_epoch = self._miner_reward._get_current_epoch()
+            self._verdict_meta.update(
+                collect_verdict_meta(message_batch, miner_signatures, nonces, "invalid", current_epoch))
             self._miner_penalty.add_penalty(miner_hotkey, 1)
             for msg in message_batch:
                 try:
@@ -562,6 +585,9 @@ class Validator(BaseValidatorNeuron):
                 except Exception:
                     pass
 
+        current_epoch = self._miner_reward._get_current_epoch()
+        self._verdict_meta.update(
+            collect_verdict_meta(message_batch, miner_signatures, nonces, "valid", current_epoch))
         return True
 
     async def _handle_article_miner_batch_response(
@@ -569,6 +595,8 @@ class Validator(BaseValidatorNeuron):
         article_batch: List[NewsArticleForScoring],
         miner_hotkey: str,
         sent_batch: List[NewsArticleForScoring],
+        miner_signatures=None,
+        nonces=None,
     ) -> bool:
         if len(article_batch) != len(sent_batch):
             bt.logging.warning(
@@ -627,6 +655,9 @@ class Validator(BaseValidatorNeuron):
                 else:
                     bt.logging.warning(f"[VALIDATION] Article rejection for {miner_hotkey}: reason={reason}, preview={preview[:100]}")
 
+            current_epoch = self._miner_reward._get_current_epoch()
+            self._verdict_meta.update(
+                collect_verdict_meta(article_batch, miner_signatures, nonces, "invalid", current_epoch))
             self._miner_penalty.add_penalty(miner_hotkey, 1)
             for article in article_batch:
                 try:
@@ -662,6 +693,9 @@ class Validator(BaseValidatorNeuron):
                 except Exception:
                     pass
 
+        current_epoch = self._miner_reward._get_current_epoch()
+        self._verdict_meta.update(
+            collect_verdict_meta(article_batch, miner_signatures, nonces, "valid", current_epoch))
         return True
 
     async def _on_tweets(self, tweets: List[TweetWithAuthor]):
@@ -1021,20 +1055,32 @@ class Validator(BaseValidatorNeuron):
             except (KeyError, Exception):
                 hotkey = None
 
-            completed_tweets.append(
-                CompletedTweetSubmission(
-                    tweet_id=tweet.id,
-                    sentiment=tweet.analysis.sentiment or "neutral",
-                    asset_id=tweet.analysis.asset_id,
-                    asset_symbol=tweet.analysis.asset_symbol,
-                    content_type=tweet.analysis.content_type,
-                    technical_quality=tweet.analysis.technical_quality,
-                    market_analysis=tweet.analysis.market_analysis,
-                    impact_potential=tweet.analysis.impact_potential,
-                    relevance_confidence=getattr(tweet.analysis, "relevance_confidence", None),
-                    miner_hotkey=hotkey,
-                )
-            )
+            # T5 wiring: build base submission dict so extra verdict fields can be merged.
+            # miner_signature, nonce, validator_verdict, points_awarded, and epoch are NOT
+            # available here — they live on the TweetBatch response synapse (consumed in
+            # _handle_miner_batch_response) and in validation_client.py's epoch loop.
+            # To complete the wiring, store sig/nonce/verdict on TweetStoreItem when the
+            # batch is accepted in _handle_miner_batch_response, then read them back here.
+            base = CompletedTweetSubmission(
+                tweet_id=tweet.id,
+                sentiment=tweet.analysis.sentiment or "neutral",
+                asset_id=tweet.analysis.asset_id,
+                asset_symbol=tweet.analysis.asset_symbol,
+                content_type=tweet.analysis.content_type,
+                technical_quality=tweet.analysis.technical_quality,
+                market_analysis=tweet.analysis.market_analysis,
+                impact_potential=tweet.analysis.impact_potential,
+                relevance_confidence=getattr(tweet.analysis, "relevance_confidence", None),
+                miner_hotkey=hotkey,
+            ).model_dump(exclude_none=True)
+            meta = self._verdict_meta.pop(str(tweet.id), None)
+            if meta and hotkey:
+                base.update(build_verdict_fields(
+                    miner_hotkey=hotkey, miner_signature=meta["miner_signature"],
+                    nonce=meta["nonce"], analysis=tweet.analysis,
+                    validator_verdict=meta["validator_verdict"],
+                    points_awarded=1.0, epoch=meta["epoch"]))
+            completed_tweets.append(base)
         response = await self._validation_client.api_client.submit_completed_tweets(completed_tweets)
         return response
 
@@ -1054,20 +1100,29 @@ class Validator(BaseValidatorNeuron):
             except (KeyError, Exception):
                 hotkey = None
 
-            completed_messages.append(
-                CompletedTelegramMessageSubmission(
-                    message_id=msg.id,
-                    sentiment=msg.analysis.sentiment or "neutral",
-                    asset_id=msg.analysis.asset_id,
-                    asset_symbol=msg.analysis.asset_symbol,
-                    content_type=msg.analysis.content_type,
-                    technical_quality=msg.analysis.technical_quality,
-                    market_analysis=msg.analysis.market_analysis,
-                    impact_potential=msg.analysis.impact_potential,
-                    relevance_confidence=getattr(msg.analysis, "relevance_confidence", None),
-                    miner_hotkey=hotkey,
-                )
-            )
+            # T5 wiring: same as tweet path — sig/nonce/verdict/epoch not in scope here.
+            # Needs TelegramStoreItem to carry miner_signature, nonce, validator_verdict,
+            # and epoch (stored in _handle_telegram_miner_batch_response when accepted).
+            base = CompletedTelegramMessageSubmission(
+                message_id=msg.id,
+                sentiment=msg.analysis.sentiment or "neutral",
+                asset_id=msg.analysis.asset_id,
+                asset_symbol=msg.analysis.asset_symbol,
+                content_type=msg.analysis.content_type,
+                technical_quality=msg.analysis.technical_quality,
+                market_analysis=msg.analysis.market_analysis,
+                impact_potential=msg.analysis.impact_potential,
+                relevance_confidence=getattr(msg.analysis, "relevance_confidence", None),
+                miner_hotkey=hotkey,
+            ).model_dump(exclude_none=True)
+            meta = self._verdict_meta.pop(str(msg.id), None)
+            if meta and hotkey:
+                base.update(build_verdict_fields(
+                    miner_hotkey=hotkey, miner_signature=meta["miner_signature"],
+                    nonce=meta["nonce"], analysis=msg.analysis,
+                    validator_verdict=meta["validator_verdict"],
+                    points_awarded=1.0, epoch=meta["epoch"]))
+            completed_messages.append(base)
         response = await self._validation_client.api_client.submit_completed_telegram_messages(completed_messages)
         return response
 
@@ -1086,20 +1141,29 @@ class Validator(BaseValidatorNeuron):
             except (KeyError, Exception):
                 hotkey = None
 
-            completed_articles.append(
-                CompletedNewsArticleSubmission(
-                    article_id=article.id,
-                    sentiment=article.analysis.sentiment or "neutral",
-                    sector_id=article.analysis.sector_id,
-                    sector_symbol=article.analysis.sector_symbol,
-                    content_type=article.analysis.content_type,
-                    technical_quality=article.analysis.technical_quality,
-                    market_analysis=article.analysis.market_analysis,
-                    impact_potential=article.analysis.impact_potential,
-                    relevance_confidence=getattr(article.analysis, "relevance_confidence", None),
-                    miner_hotkey=hotkey,
-                )
-            )
+            # T5 wiring: same as tweet/telegram paths — sig/nonce/verdict/epoch not in scope.
+            # Needs ArticleStoreItem to carry miner_signature, nonce, validator_verdict,
+            # and epoch (stored in _handle_article_miner_batch_response when accepted).
+            base = CompletedNewsArticleSubmission(
+                article_id=article.id,
+                sentiment=article.analysis.sentiment or "neutral",
+                sector_id=article.analysis.sector_id,
+                sector_symbol=article.analysis.sector_symbol,
+                content_type=article.analysis.content_type,
+                technical_quality=article.analysis.technical_quality,
+                market_analysis=article.analysis.market_analysis,
+                impact_potential=article.analysis.impact_potential,
+                relevance_confidence=getattr(article.analysis, "relevance_confidence", None),
+                miner_hotkey=hotkey,
+            ).model_dump(exclude_none=True)
+            meta = self._verdict_meta.pop(str(article.id), None)
+            if meta and hotkey:
+                base.update(build_verdict_fields(
+                    miner_hotkey=hotkey, miner_signature=meta["miner_signature"],
+                    nonce=meta["nonce"], analysis=article.analysis,
+                    validator_verdict=meta["validator_verdict"],
+                    points_awarded=1.0, epoch=meta["epoch"]))
+            completed_articles.append(base)
         response = await self._validation_client.api_client.submit_completed_articles(completed_articles)
         return response
 
@@ -1175,11 +1239,20 @@ class Validator(BaseValidatorNeuron):
         """
         try:
             authenticated_hotkey = synapse.dendrite.hotkey
-            accepted, reason = self._reward_broadcasts.ingest(
+            hotkey_to_uid = {hk: i for i, hk in enumerate(self.metagraph.hotkeys)}
+            from talisman_ai.validator.reward_broadcast_store import route_reward_broadcast
+            accepted, reason = route_reward_broadcast(
+                store=self._reward_broadcasts,
                 sender_hotkey=authenticated_hotkey,
                 epoch=synapse.epoch,
                 seq=synapse.seq,
                 uid_points=synapse.uid_points,
+                attestation=getattr(synapse, "attestation", None),
+                attestation_sig=getattr(synapse, "attestation_sig", None),
+                hotkey_to_uid=hotkey_to_uid,
+                pinned_pubkey=config.API_ATTESTATION_PUBKEY,
+                blacklisted=set(config.BLACKLISTED_MINER_HOTKEYS),
+                enforce_signed=config.ENFORCE_SIGNED_ATTESTATIONS,
             )
             # Persist quickly so we can apply E-2 even after restart.
             self._reward_broadcasts.save()

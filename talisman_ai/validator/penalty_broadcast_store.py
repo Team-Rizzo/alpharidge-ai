@@ -21,6 +21,13 @@ import bittensor as bt
 
 from talisman_ai import config
 
+# Defense-in-depth bounds on ingested broadcast data. A miner accrues at most a
+# handful of penalties per epoch; anything above MAX_COUNT_PER_UID is fabricated.
+# Legit broadcasts use seq == epoch, so a seq far from the stated epoch signals a
+# rogue/poisoned broadcaster.
+MAX_COUNT_PER_UID = 500
+MAX_SEQ_EPOCH_SKEW = 100
+
 
 def _default_path() -> Path:
     return Path(getattr(config, "PENALTY_BROADCAST_STATE_LOCATION", str(Path(__file__).resolve().parent.parent / ".penalty_broadcast_state.json")))
@@ -83,11 +90,28 @@ class PenaltyBroadcastStore:
         epoch_i = int(epoch)
         seq_i = int(seq)
 
+        # Legit broadcasters set seq == epoch. Reject a seq far from the stated epoch
+        # so a poisoned seq never enters last_seen_seq and deadlocks ingestion.
+        if abs(seq_i - epoch_i) > MAX_SEQ_EPOCH_SKEW:
+            return False, f"seq_epoch_skew(seq={seq_i}, epoch={epoch_i})"
+
         last = int(self.last_seen_seq.get(sender, -1))
         if seq_i <= last:
             return False, f"duplicate_or_old_seq(last={last}, got={seq_i})"
 
-        cleaned = {int(uid): int(cnt) for uid, cnt in (uid_penalties or {}).items() if int(cnt) > 0}
+        # Drop fabricated penalty counts; clamp per-UID rather than reject the payload.
+        cleaned = {}
+        for uid, cnt in (uid_penalties or {}).items():
+            c = int(cnt)
+            if c <= 0:
+                continue
+            if c > MAX_COUNT_PER_UID:
+                bt.logging.warning(
+                    f"[PENALTY_BROADCAST] Dropping out-of-bounds count from {sender[:12]}.. "
+                    f"uid={int(uid)} count={c} (cap={MAX_COUNT_PER_UID})"
+                )
+                continue
+            cleaned[int(uid)] = c
         if not cleaned:
             # Still advance last_seen_seq to prevent spam with empty payloads.
             self.last_seen_seq[sender] = seq_i
@@ -124,14 +148,16 @@ class PenaltyBroadcastStore:
     # Remote reset helpers
     # -------------------------------------------------------------------------
     def flush_before_epoch(self, epoch: int) -> int:
-        """Remove all broadcast data for epochs <= epoch. Returns count of epochs removed."""
+        """Remove all broadcast data for epochs <= epoch and reset seq tracking. Returns count of epochs removed."""
         removed = 0
         for old_epoch in list(self.by_epoch_by_sender.keys()):
             if int(old_epoch) <= int(epoch):
                 del self.by_epoch_by_sender[old_epoch]
                 removed += 1
-        if removed:
-            self.save()
+        # Always clear seq tracking — a poisoned seq leaves by_epoch_by_sender empty,
+        # so gating on removed>0 made the deadlock unrecoverable via signal.
+        self.last_seen_seq.clear()
+        self.save()
         return removed
 
     def purge_hotkeys(self, hotkeys: list) -> None:

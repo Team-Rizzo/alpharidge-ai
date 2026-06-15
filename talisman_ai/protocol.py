@@ -19,7 +19,7 @@
 
 import bittensor as bt
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, List
+from typing import ClassVar, Optional, Dict, Any, List
 from talisman_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring, NewsArticleForScoring
 
 class Score(bt.Synapse):
@@ -54,22 +54,24 @@ class IsAlive(bt.Synapse):
     is_alive: bool 
     
 class TweetBatch(bt.Synapse):
-    """
-    Synapse for sending tweet batch from miner to validator.
-    """
-    tweet_batch: List[TweetWithAuthor] 
+    """Synapse for sending tweet batch from miner to validator."""
+    tweet_batch: List[TweetWithAuthor]
+    miner_signatures: Dict[str, str] = {}   # resource_id -> hex sr25519 sig over the item
+    nonces: Dict[str, str] = {}             # resource_id -> per-item nonce
 
 
 class TelegramBatch(bt.Synapse):
-    """
-    Synapse for sending telegram message batch from miner to validator.
-    """
+    """Synapse for sending telegram message batch from miner to validator."""
     message_batch: List[TelegramMessageForScoring]
+    miner_signatures: Dict[str, str] = {}
+    nonces: Dict[str, str] = {}
 
 
 class ArticleBatch(bt.Synapse):
     """Synapse for sending news article batch from miner to validator."""
     article_batch: List[NewsArticleForScoring]
+    miner_signatures: Dict[str, str] = {}
+    nonces: Dict[str, str] = {}
 
 
 class ValidatorRewards(bt.Synapse):
@@ -85,10 +87,16 @@ class ValidatorRewards(bt.Synapse):
       - sender_hotkey: validator hotkey broadcasting this data
       - seq: monotonically increasing sequence number per sender (we use epoch by default)
     """
+    required_hash_fields: ClassVar[tuple[str, ...]] = ("epoch", "uid_points", "sender_hotkey", "seq")
+
     epoch: int
     uid_points: Dict[int, int]
     sender_hotkey: str
     seq: int
+    # Verifiable-points payload (Phase 2+). Receivers verify offline with the pinned
+    # API pubkey; uid_points stays for legacy receivers during the grace window.
+    attestation: Optional[Dict[str, Any]] = None   # {validatorHotkey, epoch, perMinerPoints, totalPoints, merkleRoot}
+    attestation_sig: Optional[str] = None
 
 
 class ValidatorPenalties(bt.Synapse):
@@ -104,6 +112,8 @@ class ValidatorPenalties(bt.Synapse):
       - sender_hotkey: validator hotkey broadcasting this data
       - seq: monotonically increasing sequence number per sender (we use epoch by default)
     """
+    required_hash_fields: ClassVar[tuple[str, ...]] = ("epoch", "uid_penalties", "sender_hotkey", "seq")
+
     epoch: int
     uid_penalties: Dict[int, int]
     sender_hotkey: str
