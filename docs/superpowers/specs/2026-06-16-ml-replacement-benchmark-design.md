@@ -33,22 +33,30 @@ deterministic and out of scope.
 ## Decision bar: fidelity to GLM
 
 GLM 5.1 is both the **training teacher** and the **evaluation reference**. We split
-the 5,000 GLM-labeled articles into **train / test** (stratified per field where
-possible; default 80/20 with a fixed seed). A candidate is scored by its agreement
-with GLM on the **held-out test split**, using the existing `eval/metrics`
-(categorical exact-match, ordinal sentiment ladder, numeric tolerance, list/struct
-set-F1, keyword Jaccard, text ROUGE/embedding).
+the 5,000 GLM-labeled articles **three ways by article id** — train / calib / test
+(default 70/15/15 with a fixed seed). The candidate is *fit* on train; any
+confidence gate is *selected* on calib; all reported numbers are measured on the
+held-out **test** split. This separation matters: selecting the gate threshold on
+the same set it is reported on inflates coverage (in-sample tuning). Scoring uses
+the existing `eval/metrics` (categorical exact-match, ordinal sentiment ladder,
+numeric tolerance, list/struct set-F1, keyword Jaccard, text ROUGE/embedding).
 
-Per field, let **f = candidate-vs-GLM agreement on held-out test**.
+Per field, let **f = candidate-vs-GLM agreement on the TEST split**.
 
-- **f ≥ τ_field → REPLACE.** Default `τ` = 0.90 for categorical/boolean, metric-
-  appropriate for ordinal/numeric/list (configurable per field). The candidate
-  reproduces GLM closely enough to stand in for it.
-- **f < τ_field → confidence-gated hybrid.** Find a confidence threshold `c` such
-  that on items with `candidate.confidence ≥ c`, agreement-with-GLM ≥ τ_field.
-  Auto-handle those with the candidate; **fall back to the LLM** for the rest.
-  **Coverage** (fraction auto-handled) = projected LLM-call reduction for that field.
-- **Coverage < 20% → KEEP** (the candidate is not worth the added machinery).
+- **calib f ≥ τ_field → REPLACE.** Default `τ` = 0.90 for categorical/boolean,
+  metric-appropriate for ordinal/numeric (configurable per field). The candidate
+  reproduces GLM closely enough to stand in for it; reported fidelity is the test value.
+- **else → confidence-gated hybrid.** Select on **calib** the confidence threshold
+  `c` with maximum coverage whose retained-subset mean reaches τ. Then apply that
+  fixed `c` to **test**: report `coverage` (fraction auto-handled = projected
+  LLM-call reduction) and `gate_acc` (accuracy above `c`). The HYBRID only stands
+  if the gate **still clears τ out-of-sample** (`gate_acc ≥ τ`) and `coverage ≥ 20%`.
+- **otherwise → KEEP** (the gate did not generalize, or isn't worth the machinery).
+
+Regressor fields emit a constant per-item confidence, so the gate sweep cannot
+fire — they are **REPLACE-or-KEEP only**. Classifier confidences are raw
+`predict_proba` maxima (uncalibrated); the out-of-sample `gate_acc ≥ τ` check is
+what keeps a HYBRID honest despite that. Probability calibration is a Plan-2 lever.
 
 **Secondary diagnostics (informational only, never gate a decision):** alongside
 GLM fidelity, the report also shows each candidate's agreement with the **Opus
