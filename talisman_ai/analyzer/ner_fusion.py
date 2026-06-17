@@ -44,6 +44,11 @@ class ResolvedEntity:
     end: int = 0
     sentiment_toward: Optional[str] = None
     is_primary_subject: bool = False
+    # All surface strings this entity was matched by (names/aliases/cashtags as
+    # they appeared in the article). Used for per-asset aspect sentiment so we
+    # find an asset's sentences by what the prose actually says ("Tesla"), not
+    # only its ticker symbol ("TSLA"). None for non-keyword-resolved entities.
+    surface_forms: Optional[List[str]] = None
 
 
 @dataclass
@@ -253,6 +258,7 @@ class NERFusionEngine:
                 confidence=m.disambiguation_confidence,
                 source="keyword",
                 is_primary_subject=m.is_primary_subject,
+                surface_forms=list(dict.fromkeys((m.evidence_spans or []) + [m.asset_name])),
             ))
 
         # 3. spaCy always runs for MONEY/PERCENT/DATE spans (numeric, language

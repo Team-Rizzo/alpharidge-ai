@@ -298,7 +298,10 @@ class ArticleIntelligenceAnalyzer:
             # NER-resolved tickers (NOT all_tickers, which includes non-deterministic
             # LLM-suggested additional_tickers) so they match across the consensus boundary.
             ner_tickers = [e.ticker for e in ner_result.resolved_assets if e.ticker]
-            asset_sentiments = self._finbert_asset_sentiments(ner_tickers, ner_result)
+            overall_dir = call1.get("sentiment") or "neutral"
+            asset_sentiments = self._finbert_asset_sentiments(
+                [e for e in ner_result.resolved_assets if e.ticker],
+                ner_result, fallback_direction=overall_dir)
             assets = self._build_assets(ner_result, asset_sentiments)
             entities = self._build_entities_from_ner(ner_result)
             inferred = self._compute_inferred_impacts(all_tickers)
@@ -630,38 +633,58 @@ class ArticleIntelligenceAnalyzer:
                     return links
         return links
 
-    def _finbert_asset_sentiments(self, tickers: List[str], ner_result) -> List[dict]:
-        """Per-asset sentiment via FinBERT aspect over each asset's mention sentences.
+    def _finbert_asset_sentiments(self, resolved_assets, ner_result,
+                                  fallback_direction: str = "neutral") -> List[dict]:
+        """Per-asset sentiment via FinBERT over each asset's mention sentences.
 
-        Deterministic (CPU FinBERT, no sampling). Reuses the FinBERT pipeline already
-        loaded by the NER engine — no second model load. Returns dicts shaped for
-        `_build_assets`: direction (and short/medium/long-term outlooks) from the
-        FinBERT vote; magnitude/confidence from the mean FinBERT score; causal_driver
-        a templated string. Outlooks all mirror `direction` (no horizon signal in FinBERT).
+        Finds an asset's sentences by ANY surface form it was matched on — the
+        canonical name and the strings that actually appeared in the prose
+        ("Tesla"), not just the ticker symbol ("TSLA") which rarely appears in
+        article text. That is the fix for the old always-neutral behavior. When
+        an asset still has no matched sentence, we fall back to the article-level
+        direction instead of hard "neutral", so a clearly bullish article does
+        not flatten its subject to neutral.
+
+        Deterministic (CPU FinBERT, no sampling). Reuses the per-sentence FinBERT
+        labels the NER engine already computed — no second model load.
         """
-        # Reuse the per-sentence FinBERT labels the NER engine already computed.
+        import re as _re
         scored = getattr(ner_result, "sentence_sentiments", None) or []
 
         out = []
-        for tk in tickers:
+        for e in resolved_assets:
+            tk = getattr(e, "ticker", None)
             if not tk:
                 continue
-            mentions = [s for s in scored if tk.upper() in (s.get("text") or "").upper()]
+            forms = {tk}
+            name = getattr(e, "canonical_name", None)
+            if name:
+                forms.add(name)
+            for extra in (getattr(e, "surface_forms", None) or []):
+                if extra:
+                    forms.add(extra)
+            pats = [_re.compile(rf"\b{_re.escape(f)}\b", _re.IGNORECASE)
+                    for f in forms if len(f) >= 2]
+            mentions = [s for s in scored
+                        if any(p.search(s.get("text") or "") for p in pats)]
             if mentions:
-                labels = [m["sentiment"] for m in mentions]  # already bullish/bearish/neutral
+                labels = [m["sentiment"] for m in mentions]  # bullish/bearish/neutral
                 direction = max(set(labels), key=labels.count)
                 magnitude = sum(float(m.get("score", 0.5)) for m in mentions) / len(mentions)
+                conf = magnitude
+                driver = f"FinBERT over {len(mentions)} mention sentence(s) matched by surface form"
             else:
-                direction, magnitude = "neutral", 0.5
+                direction, magnitude, conf = fallback_direction, 0.5, 0.3
+                driver = "No asset-specific sentence; fell back to article-level sentiment"
             out.append({
                 "ticker": tk,
                 "direction": direction,
                 "magnitude": max(0.0, min(1.0, magnitude)),
-                "confidence": max(0.0, min(1.0, magnitude)),
+                "confidence": max(0.0, min(1.0, conf)),
                 "short_term": direction,
                 "medium_term": direction,
                 "long_term": direction,
-                "causal_driver": f"FinBERT aspect sentiment over {len(mentions)} mention sentence(s)",
+                "causal_driver": driver,
             })
         return out
 
