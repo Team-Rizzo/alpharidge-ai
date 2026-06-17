@@ -17,3 +17,20 @@ tweepy>=4.14.0
 openai>=1.0.0
 sentence-transformers>=2.2.0
 substrateinterface>=1.0.0
+
+# --- NER / entity-recognition stack ---------------------------------------
+# These power the deterministic NER fusion engine (talisman_ai/analyzer).
+# They MUST be present and version-aligned on both miner and validator: the
+# validator re-runs this exact pipeline and hard-gates output determinism, so
+# a version skew between sides breaks consensus. Pinned (not >=) for that reason.
+spacy==3.8.14            # also requires: python -m spacy download en_core_web_trf (==3.8.0)
+gliner==0.2.27           # urchade/gliner_base + urchade/gliner_multi-v2.1
+wordfreq==3.1.1            # deterministic word-frequency table -> common-word ticker ambiguity gate
+flair==0.15.1            # flair/ner-english-ontonotes-large (English path)
+refined==1.0             # Amazon ReFinED aida_model + wikidata (English entity linking)
+transformers==4.53.2     # FinBERT + WikiNEuRal multilingual NER backbone
+langdetect==1.0.9        # deterministic language detection (seeded)
+trafilatura==2.1.0       # HTML main-content extraction (boilerplate removal)
+jusText==3.0.2           # stopword lists + heuristic for plain-text boilerplate
+# WikiNEuRal multilingual NER model: Babelscape/wikineural-multilingual-ner
+# (pulled at runtime via transformers; no extra dependency)

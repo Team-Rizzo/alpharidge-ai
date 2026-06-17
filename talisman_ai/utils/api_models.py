@@ -532,6 +532,12 @@ class NewsArticleForScoring(BaseModel):
     title: str
     summary: Optional[str] = None
     content: Optional[str] = None
+    # Raw HTML of the article as fetched, before plain-text stripping. When
+    # present, the analyzer runs trafilatura on the real DOM structure for far
+    # cleaner boilerplate removal; falls back to `content` when absent. Both
+    # miner and validator analyze the same article object, so this stays
+    # deterministic across sides.
+    raw_html: Optional[str] = None
     published: Optional[str] = None
     source: str
     topic: Optional[str] = None

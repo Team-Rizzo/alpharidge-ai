@@ -1229,6 +1229,7 @@ def validate_miner_article_intelligence_batch(
             published=article.published,
             summary=article.summary,
             content=article.content,
+            raw_html=getattr(article, "raw_html", None),
         )
         if validator_intel is None:
             discrepancies.append({"article_index": i, "reason": "validator_analysis_failed"})

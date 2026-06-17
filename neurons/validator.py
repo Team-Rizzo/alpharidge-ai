@@ -124,10 +124,13 @@ class Validator(BaseValidatorNeuron):
 
     def resync_metagraph(self):
         super().resync_metagraph()
+        # resync can fire during base __init__ (e.g. on a fast localnet) before the
+        # cooldown trackers are created; skip pruning until they exist.
+        if not hasattr(self, "_tweet_cooldown"):
+            return
         active = set(self.metagraph.hotkeys)
         for tracker in (self._tweet_cooldown, self._telegram_cooldown, self._article_cooldown):
-            if hasattr(self, "_tweet_cooldown"):
-                tracker.prune(active)
+            tracker.prune(active)
 
     async def forward_tweets(self, synapse: talisman_ai.protocol.TweetBatch) -> talisman_ai.protocol.TweetBatch:
         """
@@ -1154,6 +1157,7 @@ class Validator(BaseValidatorNeuron):
                 market_analysis=article.analysis.market_analysis,
                 impact_potential=article.analysis.impact_potential,
                 relevance_confidence=getattr(article.analysis, "relevance_confidence", None),
+                analysis_data=getattr(article.analysis, "analysis_data", None),
                 miner_hotkey=hotkey,
             ).model_dump(exclude_none=True)
             meta = self._verdict_meta.pop(str(article.id), None)

@@ -438,6 +438,7 @@ class Miner(BaseMinerNeuron):
                         published=article.published,
                         summary=article.summary,
                         content=article.content,
+                        raw_html=getattr(article, "raw_html", None),
                         miner_hotkey=self.wallet.hotkey.ss58_address if self.wallet else None,
                     )
                     if intel is not None:

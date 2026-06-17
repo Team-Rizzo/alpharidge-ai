@@ -240,6 +240,7 @@ class ArticleIntelligenceAnalyzer:
         self, article_id: int, url: str, title: str, source: str,
         published: Optional[str] = None, summary: Optional[str] = None,
         content: Optional[str] = None, miner_hotkey: Optional[str] = None,
+        raw_html: Optional[str] = None,
     ) -> Optional[ArticleIntelligence]:
         start_ms = int(time.time() * 1000)
         body = content or summary or ""
@@ -248,8 +249,15 @@ class ArticleIntelligenceAnalyzer:
 
         try:
             # ── STAGE 1: Deterministic + NER (~1s) ──
+            # text_stats/content_hash stay on the plain `content` (Tier-2 gated
+            # fields must not move). Only the NER/entity path consumes raw_html,
+            # which lets the content extractor run trafilatura on real DOM.
             text_stats = compute_text_stats(title, body)
-            ner_result = self.ner_engine.extract_and_resolve(title, body_truncated)
+            ner_result = self.ner_engine.extract_and_resolve(
+                title, body_truncated, raw_html=raw_html)
+            # Real detected language (was hardcoded "en"). Drives both the Tier-1
+            # detected_language gate and text_stats.language deterministically.
+            text_stats.language = ner_result.detected_language
             content_hash = ArticleIntelligence.compute_content_hash(title, body)
             source_meta = self._build_source_metadata(source)
             market_sess = self._compute_market_session(published)
@@ -487,7 +495,7 @@ class ArticleIntelligenceAnalyzer:
                     long_term_outlook=_safe_enum(Sentiment, s.get("long_term"), Sentiment.NEUTRAL),
                     causal_driver=(s.get("causal_driver") or "No specific driver identified")[:500],
                     relevance_score=min(1.0, e.confidence),
-                    is_primary_subject=e.confidence >= 0.9,
+                    is_primary_subject=getattr(e, "is_primary_subject", False),
                     evidence_spans=[e.text],
                 ))
             except Exception as ex:

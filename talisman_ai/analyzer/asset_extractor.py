@@ -17,8 +17,90 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+from wordfreq import zipf_frequency
+
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+
+# An identifier/alias keyword is "ambiguous" when it is a single short alpha
+# token that collides with ordinary words (English or foreign) or single
+# letters — e.g. "ada" (a name), "uso" (Italian "use"), "gold", lone "V".
+# A match whose ONLY evidence is an ambiguous keyword is emitted solely when
+# corroborated (cashtag / exact ticker / non-ambiguous name / financial cue).
+_AMBIGUOUS_MAX_LEN = 4
+# A longer alias that is also an ordinary English word (e.g. "block", "target",
+# "apple", "gold") is ambiguous too — length alone misses these. We treat any
+# alias whose English word-frequency is at/above this Zipf level as ambiguous,
+# so it is only emitted when a financial cue corroborates it. Genuine ticker
+# tokens ("aapl"=2.4, "nvda"=2.1) sit well below; common words ("block"=4.9,
+# "target"=4.8, "apple"=4.8) sit above. wordfreq is a static table -> deterministic.
+_AMBIGUOUS_ZIPF = 3.0
+# A *very* common word (e.g. "visa", "cost", "target", "optimism", "block",
+# "gold") is an ordinary English dictionary word whose keyword match must NOT be
+# salvaged by mere ambient financial language — financial articles are saturated
+# with "$", "revenue", "stock", so that cue corroborates these on unrelated text
+# (a travel "visa", a "price target", "optimism" the mood). Such a word is only
+# emitted with STRONG evidence (cashtag / exact ticker / a distinctive
+# non-ambiguous name) or via the NER organization path. Membership is the
+# `common_english_words.txt` set (NLTK dictionary ∩ Zipf >= 3.0): asset-only
+# names that merely happen to be frequent ("bitcoin", "ethereum", "costco",
+# "nvidia") are NOT in it and keep context-based corroboration.
+# Case-sensitive identifiers this short (e.g. "V", "ON") are also ambiguous.
+_AMBIGUOUS_CS_MAX_LEN = 2
+# Window (chars) around an ambiguous match in which we look for a financial cue.
+_CONTEXT_WINDOW = 100
+
+# Financial-context cues. "$" and "%" are checked separately (not word chars).
+_FIN_CONTEXT = re.compile(
+    r"(?i)\b(?:etfs?|funds?|stocks?|shares?|ticker|nasdaq|nyse|cboe|futures|"
+    r"options?|tokens?|coins?|crypto|cryptocurrency|blockchain|staking|"
+    r"trading|traded|traders?|investors?|rally|rallied|rallies|surged?|"
+    r"surges|plunged?|plunges|tumbled?|gains?|gained|selloff|sell-off|"
+    r"bullish|bearish|yields?|bonds?|index|indices|markets?|exchange|"
+    r"earnings|revenue|prices?|spot|bullion|equit(?:y|ies)|valuations?|"
+    r"market\s+cap|safe\s+haven)\b"
+)
+
+
+def _has_fin_context(window: str) -> bool:
+    return ("$" in window) or ("%" in window) or bool(_FIN_CONTEXT.search(window))
+
+
+def _is_ambiguous_word(token: str) -> bool:
+    """Ambiguous when a single alpha token that collides with ordinary words:
+    either short (<= _AMBIGUOUS_MAX_LEN chars) or a common English word
+    (Zipf frequency >= _AMBIGUOUS_ZIPF, e.g. "block"/"target"/"apple")."""
+    t = token.strip()
+    if not t.isalpha():
+        return False
+    if len(t) <= _AMBIGUOUS_MAX_LEN:
+        return True
+    return zipf_frequency(t.lower(), "en") >= _AMBIGUOUS_ZIPF
+
+
+def _load_wordset(filename: str) -> frozenset:
+    path = os.path.join(DATA_DIR, filename)
+    if not os.path.exists(path):
+        return frozenset()
+    with open(path) as f:
+        return frozenset(line.strip() for line in f if line.strip())
+
+
+# Ordinary common English words that collide with tickers/aliases (see note above).
+_COMMON_WORDS = _load_wordset("common_english_words.txt")
+
+
+def _is_very_common_word(token: str) -> bool:
+    """A keyword so common that nearby financial language is NOT evidence it is
+    the asset: a single letter, or an ordinary English dictionary word. Asset-only
+    names ("bitcoin", "costco") and multi-word/distinctive aliases ("elon musk")
+    are not in the common-word set and never count as very common."""
+    t = token.strip().lower()
+    if not t.isalpha():
+        return False
+    if len(t) <= 1:
+        return True
+    return t in _COMMON_WORDS
 
 
 @dataclass
@@ -35,6 +117,9 @@ class AssetMatch:
     evidence_spans: List[str] = field(default_factory=list)
     disambiguation_method: str = "none"
     disambiguation_confidence: float = 1.0
+    # Corroboration bookkeeping (not part of the public payload).
+    strong_evidence: bool = field(default=False, repr=False)
+    context_corroborated: bool = field(default=False, repr=False)
 
 
 def _load_json(filename: str) -> list:
@@ -63,16 +148,18 @@ class AssetExtractor:
             self.assets[asset["id"]] = asset
 
         self._cashtag_index: Dict[str, int] = {}
-        self._case_sensitive_index: Dict[str, int] = {}
-        self._identifier_patterns: List[Tuple[re.Pattern, int, str]] = []
-        self._alias_patterns: List[Tuple[re.Pattern, int, str]] = []
+        self._case_sensitive_index: Dict[str, Tuple[int, bool]] = {}
+        # (pattern, asset_id, raw_keyword, ambiguous)
+        self._identifier_patterns: List[Tuple[re.Pattern, int, str, bool]] = []
+        self._alias_patterns: List[Tuple[re.Pattern, int, str, bool]] = []
 
         for aid, data in self.assets.items():
             for tag in data.get("cashtags", []):
                 self._cashtag_index[tag.lower()] = aid
 
             for cs_id in data.get("case_sensitive_identifiers", []):
-                self._case_sensitive_index[cs_id] = aid
+                ambiguous = len(cs_id) <= _AMBIGUOUS_CS_MAX_LEN
+                self._case_sensitive_index[cs_id] = (aid, ambiguous)
 
             for uid in data.get("unique_identifiers", []):
                 uid_lower = uid.lower()
@@ -80,7 +167,8 @@ class AssetExtractor:
                     continue
                 try:
                     pattern = re.compile(rf"\b{re.escape(uid_lower)}\b")
-                    self._identifier_patterns.append((pattern, aid, uid))
+                    self._identifier_patterns.append(
+                        (pattern, aid, uid, _is_ambiguous_word(uid_lower)))
                 except re.error:
                     pass
 
@@ -90,7 +178,8 @@ class AssetExtractor:
                     continue
                 try:
                     pattern = re.compile(rf"\b{re.escape(alias_lower)}\b")
-                    self._alias_patterns.append((pattern, aid, alias))
+                    self._alias_patterns.append(
+                        (pattern, aid, alias, _is_ambiguous_word(alias_lower)))
                 except re.error:
                     pass
 
@@ -99,6 +188,7 @@ class AssetExtractor:
         title: str,
         body: str,
         max_assets: int = 20,
+        language: str = "en",
     ) -> List[AssetMatch]:
         """Extract all matching assets from article text.
 
@@ -106,6 +196,12 @@ class AssetExtractor:
             title: Article headline.
             body: Article body text.
             max_assets: Maximum number of assets to return.
+            language: Detected language code (e.g. "en", "it"). Matches whose
+                only evidence is an ambiguous dictionary-word/foreign-word/
+                single-letter keyword are dropped unless corroborated by a
+                cashtag, an exact case-sensitive ticker, a non-ambiguous name,
+                or a financial cue near the mention. This is what stops
+                "uso"->USO on Italian text and "Ada"->ADA on a soap opera.
 
         Returns:
             List of AssetMatch objects sorted by relevance_score descending.
@@ -113,6 +209,10 @@ class AssetExtractor:
         full_text = f"{title}\n{body}"
         text_lower = full_text.lower()
         title_lower = title.lower()
+
+        def _ctx(start: int, end: int) -> bool:
+            return _has_fin_context(
+                text_lower[max(0, start - _CONTEXT_WINDOW):end + _CONTEXT_WINDOW])
 
         # Track matches per asset: {asset_id: AssetMatch}
         matches: Dict[int, AssetMatch] = {}
@@ -130,7 +230,7 @@ class AssetExtractor:
                 )
             return matches[aid]
 
-        # Phase 1: Cashtag matching (highest confidence)
+        # Phase 1: Cashtag matching (highest confidence, unambiguous by design)
         for tag_lower, aid in self._cashtag_index.items():
             if tag_lower in text_lower:
                 m = _get_or_create(aid)
@@ -138,14 +238,15 @@ class AssetExtractor:
                 m.relevance_score += 3.0
                 m.disambiguation_method = "cashtag"
                 m.disambiguation_confidence = 1.0
+                m.strong_evidence = True
                 if tag_lower in title_lower:
                     m.relevance_score += 3.0
 
-        # Phase 2: Case-sensitive identifiers
-        for cs_id, aid in self._case_sensitive_index.items():
+        # Phase 2: Case-sensitive identifiers (exact-case tickers)
+        for cs_id, (aid, ambiguous) in self._case_sensitive_index.items():
             pattern = re.compile(rf"\b{re.escape(cs_id)}\b")
-            found_in_body = pattern.search(full_text)
-            if found_in_body:
+            hit = pattern.search(full_text)
+            if hit:
                 m = _get_or_create(aid)
                 if cs_id not in m.evidence_spans:
                     m.evidence_spans.append(cs_id)
@@ -155,24 +256,33 @@ class AssetExtractor:
                     m.disambiguation_confidence = 0.95
                 if pattern.search(title):
                     m.relevance_score += 2.0
+                if not ambiguous:
+                    m.strong_evidence = True
+                elif _ctx(hit.start(), hit.end()):
+                    m.context_corroborated = True
 
         # Phase 3: Unique identifiers (case-insensitive, word boundary)
-        for pattern, aid, raw_id in self._identifier_patterns:
-            all_matches = pattern.findall(text_lower)
-            if all_matches:
+        for pattern, aid, raw_id, ambiguous in self._identifier_patterns:
+            hits = list(pattern.finditer(text_lower))
+            if hits:
                 m = _get_or_create(aid)
                 if raw_id not in m.evidence_spans:
                     m.evidence_spans.append(raw_id)
-                m.relevance_score += 1.0 + 0.3 * (len(all_matches) - 1)
+                m.relevance_score += 1.0 + 0.3 * (len(hits) - 1)
                 if m.disambiguation_method == "none":
                     m.disambiguation_method = "keyword_high"
                     m.disambiguation_confidence = 0.9
                 if pattern.search(title_lower):
                     m.relevance_score += 2.0
+                if not ambiguous:
+                    m.strong_evidence = True
+                elif any(_ctx(h.start(), h.end()) for h in hits):
+                    m.context_corroborated = True
 
         # Phase 4: Aliases (lowest confidence)
-        for pattern, aid, raw_alias in self._alias_patterns:
-            if pattern.search(text_lower):
+        for pattern, aid, raw_alias, ambiguous in self._alias_patterns:
+            hits = list(pattern.finditer(text_lower))
+            if hits:
                 m = _get_or_create(aid)
                 if raw_alias not in m.evidence_spans:
                     m.evidence_spans.append(raw_alias)
@@ -180,17 +290,39 @@ class AssetExtractor:
                 if m.disambiguation_method == "none":
                     m.disambiguation_method = "keyword_contextual"
                     m.disambiguation_confidence = 0.7
+                if not ambiguous:
+                    m.strong_evidence = True
+                elif any(_ctx(h.start(), h.end()) for h in hits):
+                    m.context_corroborated = True
+
+        # Corroboration gate. Keep an asset when:
+        #   * it has STRONG evidence (cashtag / exact ticker / distinctive
+        #     non-ambiguous name), OR
+        #   * it was context-corroborated AND at least one piece of its evidence
+        #     is NOT a very-common word. Ambient financial language alone never
+        #     rescues an asset whose only evidence is a very-common word — this
+        #     is what kills "visa"->V on a travel story, "cost"->COST,
+        #     "target"->TGT ("price target"), "optimism"->OP. Real single-word
+        #     companies still arrive via the NER organization path.
+        def _kept(m: AssetMatch) -> bool:
+            if m.strong_evidence:
+                return True
+            if not m.context_corroborated:
+                return False
+            return any(not _is_very_common_word(ev) for ev in m.evidence_spans)
+
+        kept = {aid: m for aid, m in matches.items() if _kept(m)}
 
         # Determine primary subjects
-        if matches:
-            max_score = max(m.relevance_score for m in matches.values())
-            for m in matches.values():
+        if kept:
+            max_score = max(m.relevance_score for m in kept.values())
+            for m in kept.values():
                 if m.relevance_score >= max_score * 0.8 and m.relevance_score >= 3.0:
                     m.is_primary_subject = True
 
         # Sort by relevance descending, then by ticker for stability
         result = sorted(
-            matches.values(),
+            kept.values(),
             key=lambda m: (-m.relevance_score, m.ticker),
         )
 
