@@ -228,11 +228,34 @@ class ArticleIntelligenceAnalyzer:
         import numpy as _np
         self._narr_slugs = []
         self._narr_cent = None
+        self._narr_crypto_only = []  # per-narrative: True when sector_ids subset of {crypto}
+        self._crypto_terms = ()
+        self._crypto_re = None
         self._narr_tau = float(getattr(config, "NARRATIVE_TAU", 0.30)) if config else 0.30
+        _CRYPTO_SECTOR_ID = 1
         try:
+            # Crypto vocabulary (sector 1) used to gate crypto-only narratives so a
+            # rates/yield article can't be tagged bitcoin-halving-cycle / defi-revival.
+            import re as _re
+            sectors = _load_json("sectors.json")
+            if isinstance(sectors, list):
+                for s in sectors:
+                    if s.get("id") == _CRYPTO_SECTOR_ID:
+                        terms = [t.lower() for t in s.get("unique_identifiers", [])]
+                        terms += [c.lstrip("$").lower() for c in s.get("cashtags", [])]
+                        self._crypto_terms = tuple(sorted({t for t in terms if t}, key=len, reverse=True))
+            # Word-boundary match: short cashtag stems ("sol","eth","ada","dot")
+            # are substrings of ordinary words, so substring matching mis-fires.
+            self._crypto_re = (
+                _re.compile(r"\b(?:" + "|".join(_re.escape(t) for t in self._crypto_terms) + r")\b", _re.I)
+                if self._crypto_terms else None)
             narr = _load_json("narratives.json")
             if isinstance(narr, list) and narr and self.ner_engine._embedder is not None:
                 self._narr_slugs = [n["slug"] for n in narr]
+                self._narr_crypto_only = [
+                    bool(n.get("sector_ids")) and set(n["sector_ids"]) <= {_CRYPTO_SECTOR_ID}
+                    for n in narr
+                ]
                 texts = [n["name"] + ": " + ", ".join(n.get("keywords") or []) for n in narr]
                 self._narr_cent = _np.asarray(
                     self.ner_engine._embedder.encode(texts, normalize_embeddings=True))
@@ -240,16 +263,32 @@ class ArticleIntelligenceAnalyzer:
             bt.logging.warning(f"[ARTICLE_INTEL] narrative index unavailable: {ex}")
 
     def _select_narratives(self, title: str, one_liner: str, ctx: str) -> List[str]:
-        """Return up to 3 taxonomy slugs whose centroid clears tau; [] if none."""
+        """Return up to 3 taxonomy slugs whose centroid clears tau; [] if none.
+
+        Crypto-only narratives are suppressed unless the article actually mentions
+        a crypto signal — embedding similarity alone confuses dividend/treasury
+        'yield' with DeFi 'yield', so this gate enforces topical presence.
+        """
         if self._narr_cent is None or not self._narr_slugs:
             return []
         import numpy as _np
-        vec = self.ner_engine.encode_text(f"{title}. {one_liner} {ctx}"[:2000])
+        text = f"{title}. {one_liner} {ctx}"[:2000]
+        vec = self.ner_engine.encode_text(text)
         if not vec:
             return []
+        has_crypto = bool(self._crypto_re.search(text)) if self._crypto_re else False
         sims = self._narr_cent @ _np.asarray(vec)
         order = sorted(range(len(sims)), key=lambda i: -float(sims[i]))
-        return [self._narr_slugs[i] for i in order if float(sims[i]) >= self._narr_tau][:3]
+        out = []
+        for i in order:
+            if float(sims[i]) < self._narr_tau:
+                break
+            if self._narr_crypto_only[i] and not has_crypto:
+                continue
+            out.append(self._narr_slugs[i])
+            if len(out) == 3:
+                break
+        return out
 
     def analyze(
         self, article_id: int, url: str, title: str, source: str,
