@@ -103,6 +103,28 @@ def _is_very_common_word(token: str) -> bool:
     return t in _COMMON_WORDS
 
 
+# Uppercase tokens that are valid tickers but collide with common non-financial
+# acronyms; treated as ambiguous AND non-corroborating so they need a cashtag,
+# a distinctive name, or another evidence span to be emitted.
+_ACRONYM_BLOCKLIST = frozenset({
+    "LEO", "SUI", "ICP", "AI", "IT", "ON", "OP", "ATOM", "GAS",
+    "USD", "EUR", "GBP", "JPY", "CNY",  # ISO currency codes seen as tickers
+    "GOLD", "ALL", "CAR",               # common-word tickers needing corroboration
+})
+
+
+def _is_noncorroborating(token: str) -> bool:
+    """Evidence too generic to rescue an asset on its own.
+
+    Returns True when the token is either a very-common English word or a
+    blocklisted acronym that collides with non-financial usage. Such a token
+    cannot self-rescue an ambiguous asset match even when ambient financial
+    language is present — the asset needs a cashtag, an exact ticker with
+    non-blocklisted CS identifier, or a distinctive (non-common) name.
+    """
+    return _is_very_common_word(token) or token.strip() in _ACRONYM_BLOCKLIST
+
+
 @dataclass
 class AssetMatch:
     """A single asset detected in article text via keyword matching."""
@@ -158,7 +180,9 @@ class AssetExtractor:
                 self._cashtag_index[tag.lower()] = aid
 
             for cs_id in data.get("case_sensitive_identifiers", []):
-                ambiguous = len(cs_id) <= _AMBIGUOUS_CS_MAX_LEN
+                ambiguous = (len(cs_id) <= _AMBIGUOUS_CS_MAX_LEN
+                             or _is_very_common_word(cs_id)
+                             or cs_id in _ACRONYM_BLOCKLIST)
                 self._case_sensitive_index[cs_id] = (aid, ambiguous)
 
             for uid in data.get("unique_identifiers", []):
@@ -299,17 +323,19 @@ class AssetExtractor:
         #   * it has STRONG evidence (cashtag / exact ticker / distinctive
         #     non-ambiguous name), OR
         #   * it was context-corroborated AND at least one piece of its evidence
-        #     is NOT a very-common word. Ambient financial language alone never
-        #     rescues an asset whose only evidence is a very-common word — this
+        #     is NOT a very-common word and NOT a blocklisted acronym.
+        #     Ambient financial language alone never rescues an asset whose only
+        #     evidence is a very-common word or a blocklisted acronym — this
         #     is what kills "visa"->V on a travel story, "cost"->COST,
-        #     "target"->TGT ("price target"), "optimism"->OP. Real single-word
-        #     companies still arrive via the NER organization path.
+        #     "target"->TGT ("price target"), "optimism"->OP, "leo"->LEO on
+        #     space news. Real single-word companies still arrive via the NER
+        #     organization path.
         def _kept(m: AssetMatch) -> bool:
             if m.strong_evidence:
                 return True
             if not m.context_corroborated:
                 return False
-            return any(not _is_very_common_word(ev) for ev in m.evidence_spans)
+            return any(not _is_noncorroborating(ev) for ev in m.evidence_spans)
 
         kept = {aid: m for aid, m in matches.items() if _kept(m)}
 
