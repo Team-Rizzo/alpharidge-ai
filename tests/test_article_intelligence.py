@@ -800,7 +800,7 @@ class TestValidationAgreement:
 
         print(f"\n  Validation result: valid={is_valid}, composite={composite:.4f}")
         print(f"  Tier 1: {sum(1 for v in details['tier1'].values() if v['match'])}/{len(details['tier1'])} match")
-        print(f"  Tier 2: {sum(1 for v in details['tier2'].values() if v['match'])}/{len(details['tier2'])} match")
+        print(f"  Tier 2: {sum(1 for v in details['tier2'].values() if v.get('match'))}/{len(details['tier2'])} match")
         for field, info in details["tier3"].items():
             if field != "composite":
                 print(f"  Tier 3 {field}: {info['score']:.4f} (weight={info['weight']})")
@@ -813,7 +813,7 @@ class TestValidationAgreement:
                 print(f"  TIER 1 FAIL: {f}: miner={d['miner']} validator={d['validator']}")
 
         # Tier 2 should always pass (deterministic)
-        tier2_failures = [k for k, v in details["tier2"].items() if not v["match"]]
+        tier2_failures = [k for k, v in details["tier2"].items() if v.get("match") is False]
         assert len(tier2_failures) == 0, f"Tier 2 failures (should be impossible): {tier2_failures}"
 
         print(f"\n  Overall: composite={composite:.4f}, threshold=0.80")
@@ -993,3 +993,180 @@ class TestBatchQualityReport:
         print("\n" + "=" * 80)
         print("END QUALITY REPORT")
         print("=" * 80)
+
+
+# ============================================================================
+# Section 8: Off-LLM builders + hybrid validation contract (no LLM, no models)
+# ============================================================================
+
+from talisman_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
+from talisman_ai.analyzer.scoring import (
+    validate_article_intelligence, _ordinal_score, _ev,
+    _SENTIMENT_LADDER, _IMPACT_LADDER,
+)
+
+
+def _bare_analyzer():
+    """An analyzer instance with NO model loads — only the attrs the off-LLM
+    builders touch are set."""
+    az = ArticleIntelligenceAnalyzer.__new__(ArticleIntelligenceAnalyzer)
+    az.dependency_graph = {
+        "ETH": {"dependents": [
+            {"ticker": "STETH", "asset_class": "crypto", "relationship": "liquid_staking_derivative"},
+            {"ticker": "ARB", "asset_class": "crypto", "relationship": "ecosystem_token"},
+        ]},
+        "NVDA": {"dependents": [
+            {"ticker": "TSM", "asset_class": "equity", "relationship": "supply_chain"},
+        ]},
+    }
+    return az
+
+
+class TestGraphContagion:
+    def test_builds_links_from_graph(self):
+        az = _bare_analyzer()
+        links = az._build_contagion_from_graph(["ETH", "NVDA"])
+        pairs = {(l.source_ticker, l.target_ticker) for l in links}
+        assert pairs == {("ETH", "STETH"), ("ETH", "ARB"), ("NVDA", "TSM")}
+
+    def test_mechanism_mapping_and_defaults(self):
+        az = _bare_analyzer()
+        links = {l.target_ticker: l for l in az._build_contagion_from_graph(["ETH", "NVDA"])}
+        assert links["STETH"].mechanism.value == "protocol_dependency"
+        assert links["TSM"].mechanism.value == "supply_chain"
+        # deterministic priors: NEUTRAL direction, fixed 0.7 strength/confidence
+        assert links["TSM"].direction.value == "neutral"
+        assert links["TSM"].strength == 0.7 and links["TSM"].confidence == 0.7
+
+    def test_unknown_relationship_falls_back_to_correlation(self):
+        az = _bare_analyzer()
+        az.dependency_graph = {"X": {"dependents": [
+            {"ticker": "Y", "asset_class": "crypto", "relationship": "totally_unknown"}]}}
+        links = az._build_contagion_from_graph(["X"])
+        assert links[0].mechanism.value == "correlation"
+
+    def test_no_tickers_no_links(self):
+        assert _bare_analyzer()._build_contagion_from_graph([]) == []
+
+
+class TestFinBERTAspect:
+    def test_majority_vote_direction(self):
+        az = _bare_analyzer()
+        ner = types.SimpleNamespace(sentence_sentiments=[
+            {"text": "NVDA earnings crushed estimates", "sentiment": "bullish", "score": 0.9},
+            {"text": "NVDA guidance raised sharply", "sentiment": "bullish", "score": 0.8},
+            {"text": "NVDA faces some export risk", "sentiment": "bearish", "score": 0.6},
+        ])
+        out = {d["ticker"]: d for d in az._finbert_asset_sentiments(["NVDA"], ner)}
+        assert out["NVDA"]["direction"] == "bullish"
+        # outlooks mirror direction; magnitude/confidence from mean score
+        assert out["NVDA"]["short_term"] == "bullish"
+        assert out["NVDA"]["long_term"] == "bullish"
+        assert 0.0 <= out["NVDA"]["magnitude"] <= 1.0
+
+    def test_no_mention_defaults_neutral(self):
+        az = _bare_analyzer()
+        ner = types.SimpleNamespace(sentence_sentiments=[
+            {"text": "Bitcoin rallied", "sentiment": "bullish", "score": 0.9}])
+        out = {d["ticker"]: d for d in az._finbert_asset_sentiments(["NVDA"], ner)}
+        assert out["NVDA"]["direction"] == "neutral"
+        assert out["NVDA"]["magnitude"] == 0.5
+
+
+class TestScoringHelpers:
+    def test_ordinal_exact(self):
+        assert _ordinal_score("bullish", "bullish", _SENTIMENT_LADDER) == 1.0
+
+    def test_ordinal_adjacent_partial_credit(self):
+        s = _ordinal_score("very_bullish", "bullish", _SENTIMENT_LADDER)
+        assert 0.8 < s < 1.0  # one step on a 7-rung ladder
+
+    def test_ordinal_off_ladder_zero(self):
+        assert _ordinal_score("mixed", "neutral", _SENTIMENT_LADDER) == 0.0
+
+    def test_ev_handles_enum_and_str(self):
+        assert _ev(ImpactPotential.HIGH) == "high"
+        assert _ev("HIGH") == "high"
+
+
+def _make_intel(**ov):
+    base = dict(
+        article_id=1, url="https://example.com", title="Fed cuts rates 25bps",
+        published_at="2026-01-01T12:00:00Z", analyzed_at="2026-01-01T12:00:00Z",
+        source=SourceMetadata(source_id="reuters", source_name="Reuters", credibility_score=1.0),
+        content_type=ArticleContentType.BREAKING_NEWS,
+        market_analysis_type=MarketAnalysisType.MACRO,
+        impact_potential=ImpactPotential.HIGH,
+        technical_quality="medium",
+        urgency=Urgency.BREAKING,
+        temporal_focus=TemporalFocus.CURRENT,
+        overall_sentiment=Sentiment.BULLISH,
+        overall_sentiment_score=0.5,
+        sentiment_direction=SentimentDirection.POSITIVE,
+        chart_summary=ChartSummary(headline="Fed cuts rates 25bps",
+                                   one_liner="The Federal Reserve cut interest rates by 25bps today",
+                                   context_paragraph="A paragraph describing the rate decision and its market impact."),
+        event_fingerprint=EventFingerprint(event_type=EventType.MONETARY_POLICY,
+                                           event_title="Fed rate cut", event_date="2026-01-01",
+                                           content_hash="hash123", semantic_fingerprint=["fed", "rate", "cut"]),
+        topic_signature=TopicSignature(primary_sector_id=2, primary_sector_symbol="MONETARY"),
+        text_stats=compute_text_stats("Fed cuts rates 25bps", "The Federal Reserve cut interest rates by 25bps today."),
+        factual_confidence=FactualConfidence.CONFIRMED,
+        primary_geo=GeoImpactZone.US,
+        target_audience=TargetAudience.INSTITUTIONAL,
+        credibility_flag=CredibilityFlag.VERIFIED_SOURCE,
+    )
+    base.update(ov)
+    return ArticleIntelligence(**base)
+
+
+class TestHybridValidationContract:
+    def test_identical_passes(self):
+        ok, comp, _ = validate_article_intelligence(_make_intel(), _make_intel())
+        assert ok and comp > 0.99
+
+    def test_subjective_enum_diff_now_passes(self):
+        # overall_sentiment off by one ordinal rung: hard-failed Tier-1 before,
+        # now scored with partial credit -> still valid.
+        miner = _make_intel(overall_sentiment=Sentiment.VERY_BULLISH,
+                            impact_potential=ImpactPotential.MEDIUM)
+        ok, comp, details = validate_article_intelligence(miner, _make_intel())
+        assert ok, f"expected pass, composite={comp} details={details['tier3']}"
+
+    def test_llm_enum_diff_no_longer_hard_fails(self):
+        # content_type is LLM-derived -> now tolerant-scored, not a hard gate.
+        miner = _make_intel(content_type=ArticleContentType.OPINION)
+        ok, comp, _ = validate_article_intelligence(miner, _make_intel())
+        assert ok, f"content_type diff should be tolerated, composite={comp}"
+
+    def test_deterministic_field_diff_hard_fails(self):
+        # primary_sector_id is gazetteer-deterministic -> a mismatch is a Tier-1 gate fail.
+        miner = _make_intel(topic_signature=TopicSignature(
+            primary_sector_id=7, primary_sector_symbol="TECH"))
+        ok, comp, details = validate_article_intelligence(miner, _make_intel())
+        assert not ok and comp == 0.0
+        assert details["tier1"]["primary_sector_id"]["match"] is False
+
+    def test_contagion_determinism_gate(self):
+        miner = _make_intel(contagion_links=[
+            ContagionLink(source_ticker="ETH", target_ticker="STETH",
+                          target_asset_class=AssetClass.CRYPTO,
+                          mechanism=ContagionMechanism.PROTOCOL_DEPENDENCY,
+                          direction=SentimentDirection.NEUTRAL, strength=0.7, confidence=0.7,
+                          reasoning="dependency_graph")])
+        validator = _make_intel()  # no contagion links
+        ok, comp, details = validate_article_intelligence(miner, validator)
+        assert not ok and details["tier2"]["contagion_determinism"]["jaccard"] < 0.9
+
+    def test_asset_sentiment_determinism_gate(self):
+        def _asset(direction):
+            return AssetSentiment(
+                ticker="NVDA", asset_name="NVIDIA", asset_class=AssetClass.EQUITY,
+                direction=direction, magnitude=0.5, confidence=0.5,
+                short_term_outlook=direction, medium_term_outlook=direction,
+                long_term_outlook=direction, causal_driver="x",
+                relevance_score=1.0, is_primary_subject=True, evidence_spans=["NVDA"])
+        miner = _make_intel(assets=[_asset(Sentiment.BULLISH)])
+        validator = _make_intel(assets=[_asset(Sentiment.BEARISH)])
+        ok, comp, details = validate_article_intelligence(miner, validator)
+        assert not ok and details["tier2"]["asset_sentiment_determinism"]["direction_rate"] < 0.9

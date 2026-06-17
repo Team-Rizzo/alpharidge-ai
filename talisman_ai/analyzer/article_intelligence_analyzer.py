@@ -6,10 +6,12 @@ Stage 1: Deterministic + NER (~1s)
   - Override dict + Wikidata QID resolution
 Stage 2: LLM Call 1 "Extract & Classify" (~8-12s)
   - Full article text + NER hints → classification enums, economic data, quotes, event fingerprint
-Stage 3: LLM Call 2 "Reason & Summarize" (~5-8s)
-  - Structured fact sheet (NOT raw article) → per-asset sentiment, contagion, chart summaries
+Stage 3: LLM Call 2 "Reason & Summarize" (~3-5s)
+  - Structured fact sheet (NOT raw article) → chart summaries + narrative keywords only.
+  - Per-asset sentiment (FinBERT aspect) and contagion (dependency-graph) are computed
+    deterministically off-LLM in assembly — they are no longer asked of the LLM.
 
-Total: ~15-22s per article with Claude Haiku 4.5 via OpenRouter.
+Total: ~12-18s per article via OpenRouter (default model: deepseek/deepseek-v4-flash).
 """
 
 from __future__ import annotations
@@ -88,6 +90,32 @@ def _load_json(filename: str):
         return json.load(f)
 
 
+# Map dependency_graph relationship strings -> ContagionMechanism enum values.
+# Deterministic, used by the off-LLM graph contagion builder.
+_RELATION_MECHANISM_MAP = {
+    "supply_chain": "supply_chain",
+    "competitor": "competitive",
+    "regulatory_spillover": "regulatory_spillover",
+    "capital_flow": "capital_flow",
+    "ecosystem_dependency": "protocol_dependency",
+    "protocol_dependency": "protocol_dependency",
+    "collateral": "collateral",
+    "macro_sensitivity": "macro_sensitivity",
+    "correlation": "correlation",
+    "narrative": "narrative",
+    "liquid_staking_derivative": "protocol_dependency",
+    "ecosystem_token": "protocol_dependency",
+}
+
+
+def _relation_to_mechanism(label: str) -> str:
+    return _RELATION_MECHANISM_MAP.get(str(label).lower().strip(), "correlation")
+
+
+# FinBERT 3-class label -> our coarse sentiment direction (lowercase, matches enum values).
+_FINBERT_DIRECTION = {"positive": "bullish", "negative": "bearish", "neutral": "neutral"}
+
+
 # ============================================================================
 # LLM Tool Definitions — Two calls only
 # ============================================================================
@@ -157,28 +185,10 @@ REASON_SUMMARIZE_TOOL = {
     "type": "function",
     "function": {
         "name": "reason_and_summarize",
-        "description": "Generate per-asset sentiment, contagion predictions, and chart summaries from extracted facts",
+        "description": "Generate chart-ready summaries and narrative keywords from extracted facts",
         "parameters": {
             "type": "object",
             "properties": {
-                "asset_sentiments": {"type": "array", "items": {"type": "object", "properties": {
-                    "ticker": {"type": "string"},
-                    "direction": {"type": "string", "enum": [e.value for e in Sentiment]},
-                    "magnitude": {"type": "number", "description": "0.0-1.0"},
-                    "confidence": {"type": "number", "description": "0.0-1.0"},
-                    "short_term": {"type": "string", "enum": [e.value for e in Sentiment]},
-                    "medium_term": {"type": "string", "enum": [e.value for e in Sentiment]},
-                    "long_term": {"type": "string", "enum": [e.value for e in Sentiment]},
-                    "causal_driver": {"type": "string"},
-                }, "required": ["ticker", "direction", "magnitude", "confidence", "causal_driver"]}},
-                "contagion_links": {"type": "array", "items": {"type": "object", "properties": {
-                    "source_ticker": {"type": "string"}, "target_ticker": {"type": "string"},
-                    "target_asset_class": {"type": "string"},
-                    "mechanism": {"type": "string", "enum": [e.value for e in ContagionMechanism]},
-                    "direction": {"type": "string", "enum": [e.value for e in SentimentDirection]},
-                    "strength": {"type": "number"}, "confidence": {"type": "number"},
-                    "lag_hours": {"type": "number"}, "reasoning": {"type": "string"},
-                }, "required": ["source_ticker", "target_ticker", "mechanism", "direction", "strength", "reasoning"]}},
                 "headline": {"type": "string", "description": "Max 120 chars"},
                 "one_liner": {"type": "string", "description": "Max 280 chars"},
                 "context_paragraph": {"type": "string", "description": "2-3 sentences, max 1000 chars"},
@@ -188,8 +198,7 @@ REASON_SUMMARIZE_TOOL = {
                     + ", ".join(_load_narrative_slugs())
                     + ". Only invent a new slug for genuinely new themes not covered above."},
             },
-            "required": ["asset_sentiments", "contagion_links", "headline", "one_liner",
-                         "context_paragraph", "narrative_keywords"],
+            "required": ["headline", "one_liner", "context_paragraph", "narrative_keywords"],
         },
     },
 }
@@ -270,14 +279,19 @@ class ArticleIntelligenceAnalyzer:
             fact_sheet = self._build_fact_sheet(title, source, published, primary_sector,
                                                 call1, ner_result, all_tickers)
             call2_prompt = (
-                f"Based on these extracted facts, provide per-asset sentiment analysis with causal reasoning, "
-                f"cross-market contagion predictions, and chart-ready summaries.\n\n"
+                f"Based on these extracted facts, write chart-ready summaries (headline, one-liner, "
+                f"context paragraph) and 0-3 narrative keyword slugs.\n\n"
                 f"{fact_sheet}"
             )
             call2 = self._llm_call(call2_prompt, REASON_SUMMARIZE_TOOL, "reason_and_summarize")
 
             # ── ASSEMBLY ──
-            assets = self._build_assets(ner_result, call2.get("asset_sentiments", []))
+            # Contagion + per-asset sentiment are computed off-LLM from the DETERMINISTIC
+            # NER-resolved tickers (NOT all_tickers, which includes non-deterministic
+            # LLM-suggested additional_tickers) so they match across the consensus boundary.
+            ner_tickers = [e.ticker for e in ner_result.resolved_assets if e.ticker]
+            asset_sentiments = self._finbert_asset_sentiments(ner_tickers, ner_result)
+            assets = self._build_assets(ner_result, asset_sentiments)
             entities = self._build_entities_from_ner(ner_result)
             inferred = self._compute_inferred_impacts(all_tickers)
             elapsed_ms = int(time.time() * 1000) - start_ms
@@ -314,7 +328,7 @@ class ArticleIntelligenceAnalyzer:
                 economic_data=self._build_economic_data(call1.get("economic_data", [])),
                 numeric_claims=self._build_numeric_claims(call1.get("numeric_claims", [])),
                 quotes=self._build_quotes(call1.get("quotes", [])),
-                contagion_links=self._build_contagion_links(call2.get("contagion_links", [])),
+                contagion_links=self._build_contagion_from_graph(ner_tickers),
                 chart_summary=ChartSummary(
                     headline=headline,
                     one_liner=one_liner,
@@ -546,23 +560,80 @@ class ArticleIntelligenceAnalyzer:
                 pass
         return quotes
 
-    def _build_contagion_links(self, raw: list) -> List[ContagionLink]:
+    def _build_contagion_from_graph(self, tickers: List[str]) -> List[ContagionLink]:
+        """Deterministic contagion links from the curated dependency_graph.
+
+        For each detected ticker, emit one ContagionLink per known dependent edge.
+        Direction is NEUTRAL and strength/confidence a fixed 0.7 prior (the graph
+        encodes structure, not event-specific magnitude). Replaces the former
+        LLM-reasoned contagion — both miner and validator compute this identically,
+        so it is deterministic across the consensus boundary.
+        """
         links = []
-        for l in (raw or [])[:8]:
-            try:
-                links.append(ContagionLink(
-                    source_ticker=l["source_ticker"], target_ticker=l["target_ticker"],
-                    target_asset_class=_safe_enum(AssetClass, l.get("target_asset_class"), AssetClass.UNKNOWN),
-                    mechanism=_safe_enum(ContagionMechanism, l["mechanism"], ContagionMechanism.CORRELATION),
-                    direction=_safe_enum(SentimentDirection, l["direction"], SentimentDirection.NEUTRAL),
-                    strength=max(0.0, min(1.0, float(l.get("strength", 0.5) or 0.5))),
-                    confidence=max(0.0, min(1.0, float(l.get("confidence", 0.5) or 0.5))),
-                    lag_hours=l.get("lag_hours"),
-                    reasoning=(l.get("reasoning") or "")[:300],
-                ))
-            except Exception:
-                pass
+        seen = set()
+        for t in tickers:
+            for dep in self.dependency_graph.get(t, {}).get("dependents", []):
+                target = dep.get("ticker")
+                if not target:
+                    continue
+                key = (t, target)
+                if key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    links.append(ContagionLink(
+                        source_ticker=t,
+                        target_ticker=target,
+                        target_asset_class=_safe_enum(AssetClass, dep.get("asset_class"), AssetClass.UNKNOWN),
+                        mechanism=_safe_enum(ContagionMechanism,
+                                             _relation_to_mechanism(dep.get("relationship", "")),
+                                             ContagionMechanism.CORRELATION),
+                        direction=SentimentDirection.NEUTRAL,
+                        strength=0.7,
+                        confidence=0.7,
+                        lag_hours=None,
+                        reasoning=f"dependency_graph: {t} -> {target} ({dep.get('relationship', 'correlation')})"[:300],
+                    ))
+                except Exception:
+                    pass
+                if len(links) >= 8:
+                    return links
         return links
+
+    def _finbert_asset_sentiments(self, tickers: List[str], ner_result) -> List[dict]:
+        """Per-asset sentiment via FinBERT aspect over each asset's mention sentences.
+
+        Deterministic (CPU FinBERT, no sampling). Reuses the FinBERT pipeline already
+        loaded by the NER engine — no second model load. Returns dicts shaped for
+        `_build_assets`: direction (and short/medium/long-term outlooks) from the
+        FinBERT vote; magnitude/confidence from the mean FinBERT score; causal_driver
+        a templated string. Outlooks all mirror `direction` (no horizon signal in FinBERT).
+        """
+        # Reuse the per-sentence FinBERT labels the NER engine already computed.
+        scored = getattr(ner_result, "sentence_sentiments", None) or []
+
+        out = []
+        for tk in tickers:
+            if not tk:
+                continue
+            mentions = [s for s in scored if tk.upper() in (s.get("text") or "").upper()]
+            if mentions:
+                labels = [m["sentiment"] for m in mentions]  # already bullish/bearish/neutral
+                direction = max(set(labels), key=labels.count)
+                magnitude = sum(float(m.get("score", 0.5)) for m in mentions) / len(mentions)
+            else:
+                direction, magnitude = "neutral", 0.5
+            out.append({
+                "ticker": tk,
+                "direction": direction,
+                "magnitude": max(0.0, min(1.0, magnitude)),
+                "confidence": max(0.0, min(1.0, magnitude)),
+                "short_term": direction,
+                "medium_term": direction,
+                "long_term": direction,
+                "causal_driver": f"FinBERT aspect sentiment over {len(mentions)} mention sentence(s)",
+            })
+        return out
 
     def _build_source_metadata(self, source: str) -> SourceMetadata:
         key = source.lower().replace(" ", "_").replace("-", "_")

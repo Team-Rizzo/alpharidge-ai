@@ -921,6 +921,35 @@ def _normalize_text(text: str) -> str:
     return " ".join(t.split())
 
 
+# ---- Tolerant scoring for subjective LLM-derived enums ----
+# These fields come from the LLM and are NOT deterministic across two independent
+# temp=0 calls (miner vs validator), so they are scored with partial credit inside
+# the Tier-3 composite rather than hard-gated. Ordinal enums use distance-based
+# partial credit; nominal enums use exact (1.0/0.0) within the averaged group.
+_SENTIMENT_LADDER = ["very_bullish", "bullish", "slightly_bullish", "neutral",
+                     "slightly_bearish", "bearish", "very_bearish"]
+_SENTIMENT_DIRECTION_LADDER = ["positive", "neutral", "negative"]  # "mixed" -> nominal
+_IMPACT_LADDER = ["critical", "high", "medium", "low", "negligible"]
+_TECH_QUALITY_LADDER = ["exceptional", "high", "medium", "low", "none"]
+_URGENCY_LADDER = ["flash", "breaking", "developing", "same_day", "evergreen"]
+_FACTUAL_CONF_LADDER = ["confirmed", "attributed", "speculative", "conditional", "rumor"]
+
+
+def _ev(x) -> str:
+    """Enum value as lowercase string, robust to enum or raw-string inputs."""
+    return (x.value if hasattr(x, "value") else str(x)).lower()
+
+
+def _ordinal_score(pred: str, gold: str, ladder: List[str]) -> float:
+    """1.0 on exact match; otherwise 1 - normalized ladder distance. 0.0 if off-ladder."""
+    if pred == gold:
+        return 1.0
+    if pred not in ladder or gold not in ladder:
+        return 0.0
+    dist = abs(ladder.index(pred) - ladder.index(gold))
+    return max(0.0, 1.0 - dist / (len(ladder) - 1))
+
+
 def validate_article_intelligence(
     miner_intel: ArticleIntelligence,
     validator_intel: ArticleIntelligence,
@@ -932,40 +961,17 @@ def validate_article_intelligence(
     m, v = miner_intel, validator_intel
     details = {"tier1": {}, "tier2": {}, "tier3": {}}
 
-    # ---- Tier 1: Exact enum match ----
+    # ---- Tier 1: DETERMINISTIC fields only (exact match, HARD GATE) ----
+    # Empirically (deepseek-vs-deepseek), NO LLM-generated enum survives an exact-match
+    # gate across two independent temp=0 calls — even "objective" ones like content_type
+    # and primary_geo vary. So only fields computed deterministically by both sides
+    # (date-derived session, text-derived language, gazetteer-derived sector) are gated;
+    # all LLM enums are scored with partial credit in Tier 3.
     tier1_fields = [
-        ("content_type", m.content_type.value, v.content_type.value),
-        ("overall_sentiment", m.overall_sentiment.value, v.overall_sentiment.value),
-        ("market_analysis_type", m.market_analysis_type.value, v.market_analysis_type.value),
-        ("impact_potential", m.impact_potential.value, v.impact_potential.value),
-        ("technical_quality", str(m.technical_quality), str(v.technical_quality)),
-        ("urgency", m.urgency.value, v.urgency.value),
-        ("temporal_focus", m.temporal_focus.value, v.temporal_focus.value),
-        ("sentiment_direction", m.sentiment_direction.value, v.sentiment_direction.value),
-        ("factual_confidence", m.factual_confidence.value, v.factual_confidence.value),
-        ("positioning_signal", m.positioning_signal.value, v.positioning_signal.value),
-        ("primary_geo", m.primary_geo.value, v.primary_geo.value),
-        ("target_audience", m.target_audience.value, v.target_audience.value),
-        ("forward_event_type", m.forward_event_type.value, v.forward_event_type.value),
-        ("staleness_flag", m.staleness_flag.value, v.staleness_flag.value),
-        ("credibility_flag", m.credibility_flag.value, v.credibility_flag.value),
-        ("detected_language", m.detected_language, v.detected_language),
-        ("market_session", m.market_session.value, v.market_session.value),
-        ("event_type", m.event_fingerprint.event_type.value, v.event_fingerprint.event_type.value),
-        ("event_date", m.event_fingerprint.event_date or "none", v.event_fingerprint.event_date or "none"),
+        ("market_session", _ev(m.market_session), _ev(v.market_session)),
+        ("detected_language", str(m.detected_language).lower(), str(v.detected_language).lower()),
         ("primary_sector_id", str(m.topic_signature.primary_sector_id), str(v.topic_signature.primary_sector_id)),
     ]
-
-    m_primaries = sorted([a for a in m.assets if a.is_primary_subject], key=lambda a: a.ticker)
-    v_primaries = sorted([a for a in v.assets if a.is_primary_subject], key=lambda a: a.ticker)
-    for mp, vp in zip(m_primaries, v_primaries):
-        if mp.ticker == vp.ticker:
-            tier1_fields.extend([
-                (f"asset_{mp.ticker}_direction", mp.direction.value, vp.direction.value),
-                (f"asset_{mp.ticker}_st", mp.short_term_outlook.value, vp.short_term_outlook.value),
-                (f"asset_{mp.ticker}_mt", mp.medium_term_outlook.value, vp.medium_term_outlook.value),
-                (f"asset_{mp.ticker}_lt", mp.long_term_outlook.value, vp.long_term_outlook.value),
-            ])
 
     tier1_pass = True
     for field_name, m_val, v_val in tier1_fields:
@@ -978,7 +984,7 @@ def validate_article_intelligence(
     if not tier1_pass:
         return False, 0.0, details
 
-    # ---- Tier 2: Deterministic match ----
+    # ---- Tier 2: deterministic content + off-LLM ML fields (HARD GATE) ----
     tier2_checks = [
         ("content_hash", m.event_fingerprint.content_hash, v.event_fingerprint.content_hash),
         ("word_count", m.text_stats.word_count, v.text_stats.word_count),
@@ -998,49 +1004,126 @@ def validate_article_intelligence(
     if not tier2_pass:
         return False, 0.0, details
 
+    # Tier 2b: off-LLM ML fields — deterministic across miner & validator because both
+    # run the same FinBERT (per-asset direction/outlooks) and the same dependency_graph
+    # (contagion pairs). A small slack (0.9) tolerates rare cross-install drift only.
+    DETERMINISM_TOL = 0.9
+
+    m_assets = {a.ticker: a for a in m.assets}
+    v_assets = {a.ticker: a for a in v.assets}
+    common_assets = set(m_assets) & set(v_assets)
+    if common_assets:
+        dir_rate = sum(
+            1 for t in common_assets
+            if _ev(m_assets[t].direction) == _ev(v_assets[t].direction)
+        ) / len(common_assets)
+        outlook_rate = sum(
+            1 for t in common_assets
+            if _ev(m_assets[t].short_term_outlook) == _ev(v_assets[t].short_term_outlook)
+            and _ev(m_assets[t].medium_term_outlook) == _ev(v_assets[t].medium_term_outlook)
+            and _ev(m_assets[t].long_term_outlook) == _ev(v_assets[t].long_term_outlook)
+        ) / len(common_assets)
+        details["tier2"]["asset_sentiment_determinism"] = {
+            "direction_rate": round(dir_rate, 4), "outlook_rate": round(outlook_rate, 4),
+            "common_assets": len(common_assets)}
+        if dir_rate < DETERMINISM_TOL or outlook_rate < DETERMINISM_TOL:
+            bt.logging.warning(f"[V2_VALIDATE] Tier 2 FAIL: asset sentiment determinism "
+                               f"dir={dir_rate:.2f} outlook={outlook_rate:.2f}")
+            return False, 0.0, details
+
+    m_cont = {(l.source_ticker, l.target_ticker) for l in m.contagion_links}
+    v_cont = {(l.source_ticker, l.target_ticker) for l in v.contagion_links}
+    cont_jac = _jaccard(m_cont, v_cont)
+    details["tier2"]["contagion_determinism"] = {"jaccard": round(cont_jac, 4)}
+    if cont_jac < DETERMINISM_TOL:
+        bt.logging.warning(f"[V2_VALIDATE] Tier 2 FAIL: contagion determinism jaccard={cont_jac:.2f}")
+        return False, 0.0, details
+
     # ---- Tier 2.5: Embedding verification ----
+    # Format checks (dim / non-zero / normalized) are anti-cheat HARD GATES for both
+    # embeddings. Cosine similarity is a HARD GATE only for title_embedding (its input,
+    # the title, is deterministic so it must match). narrative_embedding is built from
+    # LLM-generated headline+keywords, which vary call-to-call, so its cosine is SCORED
+    # in Tier 3 rather than gated — gating it zeroed out honest miners.
     details["tier2_5"] = {}
     EMBEDDING_DIM = 384
 
-    def _check_embedding(name, m_emb, v_emb, threshold):
-        if m_emb and v_emb and len(m_emb) == EMBEDDING_DIM and len(v_emb) == EMBEDDING_DIM:
-            m_norm = np.linalg.norm(m_emb)
-            v_norm = np.linalg.norm(v_emb)
-            if m_norm < 0.01 or v_norm < 0.01:
-                details["tier2_5"][name] = {"status": "fail", "reason": "zero_vector"}
-                return False
-            if abs(m_norm - 1.0) > 0.05 or abs(v_norm - 1.0) > 0.05:
-                details["tier2_5"][name] = {"status": "fail", "reason": "not_normalized",
-                                            "m_norm": round(m_norm, 4), "v_norm": round(v_norm, 4)}
-                return False
-            sim = float(np.dot(m_emb, v_emb))
-            details["tier2_5"][name] = {"sim": round(sim, 4), "threshold": threshold}
-            if sim < threshold:
-                bt.logging.warning(f"[V2_VALIDATE] Tier 2.5 FAIL: {name} cosine={sim:.4f} < {threshold}")
-                return False
-        return True
+    def _embedding_cosine(name, m_emb, v_emb):
+        """Return cosine sim, or None if absent. Hard-fail (raise) on bad format."""
+        if not (m_emb and v_emb and len(m_emb) == EMBEDDING_DIM and len(v_emb) == EMBEDDING_DIM):
+            return None
+        m_norm = float(np.linalg.norm(m_emb))
+        v_norm = float(np.linalg.norm(v_emb))
+        if m_norm < 0.01 or v_norm < 0.01:
+            details["tier2_5"][name] = {"status": "fail", "reason": "zero_vector"}
+            raise ValueError("zero_vector")
+        if abs(m_norm - 1.0) > 0.05 or abs(v_norm - 1.0) > 0.05:
+            details["tier2_5"][name] = {"status": "fail", "reason": "not_normalized",
+                                        "m_norm": round(m_norm, 4), "v_norm": round(v_norm, 4)}
+            raise ValueError("not_normalized")
+        sim = float(np.dot(m_emb, v_emb))
+        details["tier2_5"][name] = {"sim": round(sim, 4)}
+        return sim
 
-    if not _check_embedding("title_embedding", m.title_embedding, v.title_embedding, 0.90):
-        return False, 0.0, details
-    if not _check_embedding("narrative_embedding", m.narrative_embedding, v.narrative_embedding, 0.80):
+    try:
+        title_sim_emb = _embedding_cosine("title_embedding", m.title_embedding, v.title_embedding)
+        narr_sim_emb = _embedding_cosine("narrative_embedding", m.narrative_embedding, v.narrative_embedding)
+    except ValueError as e:
+        bt.logging.warning(f"[V2_VALIDATE] Tier 2.5 FAIL: embedding format {e}")
         return False, 0.0, details
 
-    # ---- Tier 3: Near-deterministic with tolerances ----
+    # title_embedding cosine IS gated (deterministic input).
+    if title_sim_emb is not None and title_sim_emb < 0.90:
+        details["tier2_5"]["title_embedding"]["threshold"] = 0.90
+        bt.logging.warning(f"[V2_VALIDATE] Tier 2.5 FAIL: title_embedding cosine={title_sim_emb:.4f} < 0.90")
+        return False, 0.0, details
+
+    # ---- Tier 3: tolerant scoring (subjective LLM enums + text/extraction) ----
     tier3_scores = {}
 
+    # (a) Subjective classification enums — partial credit. Ordinal enums use
+    # ladder distance; nominal enums use exact match. Averaged into one component
+    # so no single borderline disagreement can fail an otherwise-honest miner.
+    enum_scores = []
+    enum_detail = {}
+
+    def _score_enum(name, ladder=None):
+        mv, vv = _ev(getattr(m, name)), _ev(getattr(v, name))
+        s = _ordinal_score(mv, vv, ladder) if ladder else (1.0 if mv == vv else 0.0)
+        enum_scores.append(s)
+        enum_detail[name] = {"score": round(s, 4), "miner": mv, "validator": vv}
+
+    _score_enum("overall_sentiment", _SENTIMENT_LADDER)
+    _score_enum("sentiment_direction", _SENTIMENT_DIRECTION_LADDER)
+    _score_enum("impact_potential", _IMPACT_LADDER)
+    _score_enum("technical_quality", _TECH_QUALITY_LADDER)
+    _score_enum("urgency", _URGENCY_LADDER)
+    _score_enum("factual_confidence", _FACTUAL_CONF_LADDER)
+    _score_enum("temporal_focus")
+    _score_enum("market_analysis_type")
+    _score_enum("positioning_signal")
+    _score_enum("target_audience")
+    _score_enum("forward_event_type")
+    _score_enum("staleness_flag")
+    _score_enum("credibility_flag")
+    _score_enum("content_type")      # LLM, but objective-ish -> nominal partial credit
+    _score_enum("primary_geo")       # LLM, varies across calls -> nominal partial credit
+
+    def _score_pair(name, mv, vv):
+        s = 1.0 if mv == vv else 0.0
+        enum_scores.append(s)
+        enum_detail[name] = {"score": s, "miner": mv, "validator": vv}
+
+    # Nested / LLM-extracted nominal fields.
+    _score_pair("event_type", _ev(m.event_fingerprint.event_type), _ev(v.event_fingerprint.event_type))
+    _score_pair("event_date", m.event_fingerprint.event_date or "none", v.event_fingerprint.event_date or "none")
+    tier3_scores["classification_enums"] = sum(enum_scores) / len(enum_scores)
+    details["tier3_enums"] = enum_detail
+
+    # (b) Extraction + free-text components (kept from prior contract).
     m_tickers = {a.ticker for a in m.assets}
     v_tickers = {a.ticker for a in v.assets}
     tier3_scores["asset_extraction"] = _jaccard(m_tickers, v_tickers)
-
-    m_sent_map = {a.ticker: a.direction.value for a in m.assets}
-    v_sent_map = {a.ticker: a.direction.value for a in v.assets}
-    common_tickers = m_tickers & v_tickers
-    if common_tickers:
-        tier3_scores["asset_sentiment"] = sum(
-            1 for t in common_tickers if m_sent_map.get(t) == v_sent_map.get(t)
-        ) / len(common_tickers)
-    else:
-        tier3_scores["asset_sentiment"] = 1.0 if not m_tickers and not v_tickers else 0.0
 
     headline_sim = _levenshtein_ratio(
         _normalize_text(m.chart_summary.headline), _normalize_text(v.chart_summary.headline))
@@ -1066,28 +1149,35 @@ def validate_article_intelligence(
     fp_sim = _jaccard(set(m.event_fingerprint.semantic_fingerprint), set(v.event_fingerprint.semantic_fingerprint))
     tier3_scores["event_fingerprint"] = 0.5 * title_sim + 0.5 * fp_sim
 
-    m_cont = {(l.source_ticker, l.target_ticker) for l in m.contagion_links}
-    v_cont = {(l.source_ticker, l.target_ticker) for l in v.contagion_links}
-    tier3_scores["contagion"] = _jaccard(m_cont, v_cont)
-
     m_narr = {kw.lower() for kw in m.narrative_keywords}
     v_narr = {kw.lower() for kw in v.narrative_keywords}
     tier3_scores["narrative_keywords"] = _jaccard(m_narr, v_narr)
 
+    # narrative_embedding cosine: scored (not gated) since its LLM-text input varies.
+    # Map [0,1] cosine straight through; clamp negatives to 0.
+    tier3_scores["narrative_embedding"] = max(0.0, narr_sim_emb) if narr_sim_emb is not None else 1.0
+
+    # Asset sentiment + contagion are NOT scored here — they are deterministic and
+    # already hard-gated in Tier 2b. Weights re-normalized to sum to 1.0.
     weights = {
-        "asset_extraction": 0.20, "asset_sentiment": 0.20, "chart_summary": 0.15,
-        "entities": 0.10, "economic_data": 0.10, "event_fingerprint": 0.10,
-        "contagion": 0.10, "narrative_keywords": 0.05,
+        "classification_enums": 0.42, "asset_extraction": 0.15, "chart_summary": 0.10,
+        "entities": 0.08, "economic_data": 0.07, "event_fingerprint": 0.08,
+        "narrative_keywords": 0.05, "narrative_embedding": 0.05,
     }
     composite = sum(tier3_scores[k] * weights[k] for k in weights)
     details["tier3"] = {k: {"score": round(tier3_scores[k], 4), "weight": weights[k]} for k in weights}
     details["tier3"]["composite"] = round(composite, 4)
 
-    is_valid = composite >= 0.80
+    # Threshold tuned empirically: deepseek-vs-deepseek (miner vs validator, same model)
+    # honest composites cluster 0.74-0.93 (median ~0.87). 0.75 passes ~honest-floor while
+    # anti-cheat is enforced by the deterministic Tier-1/2/2.5 gates, not this composite.
+    # NOTE: set on n=20; widen the sample before mainnet to finalize.
+    TIER3_THRESHOLD = 0.75
+    is_valid = composite >= TIER3_THRESHOLD
     if is_valid:
         bt.logging.success(f"[V2_VALIDATE] Article ACCEPTED: composite={composite:.4f}")
     else:
-        bt.logging.warning(f"[V2_VALIDATE] Article REJECTED: composite={composite:.4f} < 0.80")
+        bt.logging.warning(f"[V2_VALIDATE] Article REJECTED: composite={composite:.4f} < {TIER3_THRESHOLD}")
 
     return is_valid, composite, details
 
