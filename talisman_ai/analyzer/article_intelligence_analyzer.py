@@ -51,23 +51,6 @@ except ImportError:
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 MAX_CONTENT_CHARS = 3000
 
-_NARRATIVE_SLUGS: Optional[List[str]] = None
-
-
-def _load_narrative_slugs() -> List[str]:
-    global _NARRATIVE_SLUGS
-    if _NARRATIVE_SLUGS is not None:
-        return _NARRATIVE_SLUGS
-    try:
-        path = os.path.join(DATA_DIR, "narratives.json")
-        with open(path) as f:
-            data = json.load(f)
-        _NARRATIVE_SLUGS = [n["slug"] for n in data]
-    except Exception:
-        _NARRATIVE_SLUGS = []
-    return _NARRATIVE_SLUGS
-
-
 def _safe_enum(enum_cls, value, default=None):
     if value is None:
         return default
@@ -193,12 +176,8 @@ REASON_SUMMARIZE_TOOL = {
                 "one_liner": {"type": "string", "description": "Max 280 chars"},
                 "context_paragraph": {"type": "string", "description": "2-3 sentences, max 1000 chars"},
                 "what_changed": {"type": "string", "description": "Regime shift description or null"},
-                "narrative_keywords": {"type": "array", "items": {"type": "string"},
-                    "description": "0-3 narrative slugs. USE these known narratives when applicable: "
-                    + ", ".join(_load_narrative_slugs())
-                    + ". Only invent a new slug for genuinely new themes not covered above."},
             },
-            "required": ["headline", "one_liner", "context_paragraph", "narrative_keywords"],
+            "required": ["headline", "one_liner", "context_paragraph"],
         },
     },
 }
@@ -233,8 +212,44 @@ class ArticleIntelligenceAnalyzer:
         )
         self.source_profiles = _load_json("source_profiles.json").get("profiles", {})
         self.dependency_graph = _load_json("dependency_graph.json").get("dependencies", {})
+        self._init_narrative_index()
 
         bt.logging.info(f"[ARTICLE_INTEL] Ready: model={self.model} endpoint={self.llm_base}")
+
+    # Cosine threshold for narrative-slug selection (calibrated on the GLM gold
+    # calibration split: tau=0.30 maximizes mean Jaccard at ~0.371, ~70% of the
+    # GLM-vs-Opus ceiling). Overridable via config.NARRATIVE_TAU.
+    def _init_narrative_index(self):
+        """Precompute one embedding centroid per narrative (name + keywords).
+
+        Narrative slugs are then selected deterministically by cosine similarity
+        against the article embedding — no LLM, abstaining when nothing is close.
+        """
+        import numpy as _np
+        self._narr_slugs = []
+        self._narr_cent = None
+        self._narr_tau = float(getattr(config, "NARRATIVE_TAU", 0.30)) if config else 0.30
+        try:
+            narr = _load_json("narratives.json")
+            if isinstance(narr, list) and narr and self.ner_engine._embedder is not None:
+                self._narr_slugs = [n["slug"] for n in narr]
+                texts = [n["name"] + ": " + ", ".join(n.get("keywords") or []) for n in narr]
+                self._narr_cent = _np.asarray(
+                    self.ner_engine._embedder.encode(texts, normalize_embeddings=True))
+        except Exception as ex:
+            bt.logging.warning(f"[ARTICLE_INTEL] narrative index unavailable: {ex}")
+
+    def _select_narratives(self, title: str, one_liner: str, ctx: str) -> List[str]:
+        """Return up to 3 taxonomy slugs whose centroid clears tau; [] if none."""
+        if self._narr_cent is None or not self._narr_slugs:
+            return []
+        import numpy as _np
+        vec = self.ner_engine.encode_text(f"{title}. {one_liner} {ctx}"[:2000])
+        if not vec:
+            return []
+        sims = self._narr_cent @ _np.asarray(vec)
+        order = sorted(range(len(sims)), key=lambda i: -float(sims[i]))
+        return [self._narr_slugs[i] for i in order if float(sims[i]) >= self._narr_tau][:3]
 
     def analyze(
         self, article_id: int, url: str, title: str, source: str,
@@ -287,8 +302,8 @@ class ArticleIntelligenceAnalyzer:
             fact_sheet = self._build_fact_sheet(title, source, published, primary_sector,
                                                 call1, ner_result, all_tickers)
             call2_prompt = (
-                f"Based on these extracted facts, write chart-ready summaries (headline, one-liner, "
-                f"context paragraph) and 0-3 narrative keyword slugs.\n\n"
+                f"Based on these extracted facts, write chart-ready summaries: a headline, "
+                f"a one-liner, and a context paragraph.\n\n"
                 f"{fact_sheet}"
             )
             call2 = self._llm_call(call2_prompt, REASON_SUMMARIZE_TOOL, "reason_and_summarize")
@@ -311,7 +326,10 @@ class ArticleIntelligenceAnalyzer:
             headline = (call2.get("headline") or title[:120])[:120]
             one_liner = (call2.get("one_liner") or title[:280])[:280]
             ctx_para = (call2.get("context_paragraph") or "")[:1000]
-            narr_kws = (call2.get("narrative_keywords") or [])[:3]
+            # Narrative slugs are selected deterministically from the taxonomy by
+            # embedding similarity (with abstention), NOT by the LLM — this kills
+            # the generic-crypto-slug hallucination and removes the field from Call 2.
+            narr_kws = self._select_narratives(headline, one_liner, ctx_para)
 
             title_emb = self.ner_engine.encode_text(title)
             body_emb = self.ner_engine.encode_text(f"{one_liner} {ctx_para}")
