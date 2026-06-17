@@ -17,6 +17,7 @@ Pure Python and order-independent => deterministic (validator-safe).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -62,6 +63,32 @@ _STOPWORDS = {
 }
 
 
+# Adjectival / appositive NER slips. NER backends sometimes hand us a real
+# entity glued to a trailing modifier ("Elon Musk-backed") or a common-noun
+# appositive ("Anthropic principle"). We trim the tail back to the entity
+# rather than drop the candidate, so the real entity still grounds.
+_HYPHEN_MODIFIER = re.compile(
+    r"^(.*?)-(?:backed|led|owned|run|based|controlled|style|era|related|linked|"
+    r"funded|driven|focused|themed|branded|sponsored|affiliated)\b.*$",
+    re.IGNORECASE)
+_APPOSITIVE_TAIL = re.compile(
+    r"^(.+?)\s+(?:principle|effect|equation|paradox|theorem|conjecture|law|"
+    r"constant|hypothesis)$",
+    re.IGNORECASE)
+
+
+def _normalize_entity_text(text: str) -> str:
+    """Trim adjectival/appositive tails off an NER span, back to the entity."""
+    t = text.strip()
+    m = _HYPHEN_MODIFIER.match(t)
+    if m and m.group(1).strip():
+        t = m.group(1).strip()
+    m = _APPOSITIVE_TAIL.match(t)
+    if m and m.group(1).strip():
+        t = m.group(1).strip()
+    return t
+
+
 def in_salient_range(start: int, end: int, salient_ranges: List[Tuple[int, int]]) -> bool:
     """True if [start, end) lies within any salient (verb-bearing) sentence."""
     return any(s <= start and end <= e for s, e in salient_ranges)
@@ -102,6 +129,10 @@ class EntityFilter:
 
     def filter(self, candidates: List[Candidate], language: str = "en") -> List[Candidate]:
         """Return grounded, deduplicated candidates sorted by start offset."""
+        # 0. Trim adjectival/appositive tails ("Elon Musk-backed" -> "Elon Musk",
+        #    "Anthropic principle" -> "Anthropic") before any gating.
+        for c in candidates:
+            c.text = _normalize_entity_text(c.text)
         # 1. Drop noise floor + blocklist hits.
         kept = [c for c in candidates
                 if c.score >= self.floor and not self._blocked(c.text, language)]
