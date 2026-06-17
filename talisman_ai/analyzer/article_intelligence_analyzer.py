@@ -503,22 +503,44 @@ class ArticleIntelligenceAnalyzer:
         return assets
 
     def _build_entities_from_ner(self, ner_result) -> List[ExtractedEntity]:
-        entities = []
+        # Deduplicate by (canonical name, type): the same entity resolved from
+        # several spans (e.g. "Medtronic" x4) must collapse to one record — which
+        # is also how the eval `entities` metric keys (name.lower()). On collision
+        # keep the highest-confidence representative and merge in a more specific
+        # role / a sentiment signal so we never lose information to dedup.
+        best = {}  # (name_lower, etype) -> (confidence, ExtractedEntity)
         for e in ner_result.resolved_entities:
             try:
                 etype = _safe_enum(EntityType, e.entity_type, EntityType.ORGANIZATION)
                 if etype is None:
                     etype = EntityType.ORGANIZATION
-                entities.append(ExtractedEntity(
+                role = _safe_enum(EntityRole, e.role, EntityRole.MENTIONED)
+                ent = ExtractedEntity(
                     name=e.canonical_name,
                     entity_type=etype,
-                    role=_safe_enum(EntityRole, e.role, EntityRole.MENTIONED),
+                    role=role,
                     ticker=e.ticker,
                     sentiment_toward=_safe_enum(Sentiment, e.sentiment_toward, None),
-                ))
+                )
+                key = (e.canonical_name.lower(), etype)
+                conf = float(getattr(e, "confidence", 0.0) or 0.0)
+                if key not in best:
+                    best[key] = (conf, ent)
+                else:
+                    prev_conf, prev = best[key]
+                    if prev.role == EntityRole.MENTIONED and role != EntityRole.MENTIONED:
+                        prev.role = role
+                    if prev.sentiment_toward is None and ent.sentiment_toward is not None:
+                        prev.sentiment_toward = ent.sentiment_toward
+                    if conf > prev_conf:
+                        # keep the higher-confidence record, preserving any merged role/sentiment
+                        ent.role = ent.role if ent.role != EntityRole.MENTIONED else prev.role
+                        if ent.sentiment_toward is None:
+                            ent.sentiment_toward = prev.sentiment_toward
+                        best[key] = (conf, ent)
             except Exception:
                 pass
-        return entities[:15]
+        return [v[1] for v in best.values()][:15]
 
     def _build_economic_data(self, raw: list) -> List[EconomicDataPoint]:
         points = []
