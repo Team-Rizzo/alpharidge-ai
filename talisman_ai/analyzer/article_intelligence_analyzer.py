@@ -324,19 +324,6 @@ EXTRACT_CLASSIFY_TOOL = {
                 "forward_event_description": {"type": "string"},
                 "additional_tickers": {"type": "array", "items": {"type": "string"},
                     "description": "Asset tickers the NER may have missed"},
-                "asset_horizons": {"type": "array", "description": (
-                    "Per-asset directional outlook at THREE INDEPENDENT time horizons. "
-                    "They can and often should differ (an earnings miss is bearish "
-                    "short-term while a strong multi-year strategy is bullish long-term)."
-                ), "items": {"type": "object", "properties": {
-                    "ticker": {"type": "string"},
-                    "short_term": {"type": "string", "enum": [e.value for e in Sentiment],
-                                   "description": "days to a few weeks"},
-                    "medium_term": {"type": "string", "enum": [e.value for e in Sentiment],
-                                    "description": "months to a couple of quarters"},
-                    "long_term": {"type": "string", "enum": [e.value for e in Sentiment],
-                                  "description": "a year or more"},
-                }, "required": ["ticker", "short_term", "medium_term", "long_term"]}},
             },
             "required": ["content_type", "sentiment", "sentiment_score", "sentiment_direction",
                          "market_analysis_type", "impact_potential", "technical_quality",
@@ -518,11 +505,7 @@ class ArticleIntelligenceAnalyzer:
                 f"Analyze this financial news article. Pre-detected entities are provided as hints — "
                 f"confirm, correct, or supplement them.\n\n"
                 f"Article:\n\"\"\"{article_text}\"\"\"\n\n"
-                f"Pre-detected (NER):\n{ner_hints}\n\n"
-                f"For each detected asset, also fill asset_horizons with its outlook at three "
-                f"INDEPENDENT horizons (short=days-weeks, medium=months-quarters, long=a year+); "
-                f"judge each horizon on its own — they should differ when the catalyst is "
-                f"near-term vs structural."
+                f"Pre-detected (NER):\n{ner_hints}"
             )
             call1 = self._llm_call(call1_prompt, EXTRACT_CLASSIFY_TOOL, "extract_and_classify")
 
@@ -550,10 +533,10 @@ class ArticleIntelligenceAnalyzer:
             asset_sentiments = score_assets(
                 [e for e in ner_result.resolved_assets if e.ticker],
                 ner_result, self._aspect_scorer, fallback_direction=overall_dir)
-            # Per-asset DIRECTION stays deterministic FinABSA; HORIZONS come from the
-            # LLM (semantic, independent across horizons) when provided, else the
-            # deterministic rule projector value already in the dict.
-            self._merge_llm_horizons(asset_sentiments, call1.get("asset_horizons"))
+            # Per-asset DIRECTION and HORIZONS both stay deterministic (FinABSA +
+            # off-LLM temporal projector) so they survive the validator's outlook
+            # determinism gate; reconcile direction against the horizons only.
+            self._reconcile_asset_directions(asset_sentiments)
             assets = self._build_assets(ner_result, asset_sentiments)
             # Drop sell-side banks that are only the analyst roster of an earnings
             # transcript (participants, not the article's subject).
@@ -742,30 +725,21 @@ class ArticleIntelligenceAnalyzer:
     # Assembly Helpers
     # ========================================================================
 
-    def _merge_llm_horizons(self, sentiments_raw: list, llm_horizons) -> None:
-        """Override per-asset short/medium/long outlooks with the LLM's values.
+    def _reconcile_asset_directions(self, sentiments_raw: list) -> None:
+        """Reconcile each asset's deterministic FinABSA `direction` against its
+        deterministic horizon outlooks.
 
-        Per-asset `direction` is left untouched (deterministic FinABSA). Horizons
-        the LLM omits keep the rule-projector value already in the dict. Invalid
-        enum strings are coerced to NEUTRAL downstream by `_safe_enum`.
+        Horizons come ONLY from the off-LLM temporal projector (`project_horizons`,
+        already in the dict from `score_assets`). They are NEVER overridden by the
+        LLM: the validator hard-gates per-asset outlook determinism (scoring.py
+        Tier-2b, tol=0.9) and two separate miner/validator LLM calls are not
+        bit-identical even at temperature 0 — an LLM override drops outlook
+        determinism and gets the whole batch rejected. When the FinABSA direction
+        contradicts ALL horizons, the horizons are the stronger (multi-bucket)
+        signal, so reconcile the direction toward them; the horizons themselves
+        stay untouched.
         """
-        if not llm_horizons:
-            return
-        by_tk = {}
-        for h in llm_horizons:
-            tk = (h.get("ticker") or "").upper() if isinstance(h, dict) else ""
-            if tk:
-                by_tk[tk] = h
         for s in sentiments_raw:
-            h = by_tk.get((s.get("ticker") or "").upper())
-            if not h:
-                continue
-            for f in ("short_term", "medium_term", "long_term"):
-                v = h.get(f)
-                if v:
-                    s[f] = v
-            # If the deterministic FinABSA direction now contradicts ALL of the
-            # (LLM-overridden) horizons, FinABSA is the weaker signal — reconcile.
             s["direction"] = reconcile_direction_with_horizons(
                 s.get("direction") or "neutral",
                 s.get("short_term") or "neutral",

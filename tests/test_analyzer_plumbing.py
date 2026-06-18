@@ -160,3 +160,39 @@ def test_past_year_textual_dropped():
 
 def test_future_textual_kept():
     assert sanitize_forward_event_date("Q1 2027", PUB) == "Q1 2027"
+
+
+# ── _reconcile_asset_directions: horizons MUST stay deterministic ──────────────
+# The validator hard-gates per-asset outlook determinism (scoring.py Tier-2b,
+# tol=0.9). Horizons therefore come ONLY from the off-LLM temporal projector and
+# must NEVER be overridden by the LLM (two miner/validator LLM calls are not
+# bit-identical even at temperature 0). This pass only reconciles `direction`
+# against those already-deterministic horizons.
+def _bare_analyzer():
+    from talisman_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
+    return ArticleIntelligenceAnalyzer.__new__(ArticleIntelligenceAnalyzer)
+
+def test_reconcile_leaves_deterministic_horizons_untouched():
+    a = _bare_analyzer()
+    sents = [{"ticker": "AAPL", "direction": "bullish",
+              "short_term": "bullish", "medium_term": "slightly_bullish", "long_term": "neutral"}]
+    a._reconcile_asset_directions(sents)
+    assert sents[0]["short_term"] == "bullish"
+    assert sents[0]["medium_term"] == "slightly_bullish"
+    assert sents[0]["long_term"] == "neutral"
+
+def test_reconcile_flips_direction_against_all_opposing_horizons():
+    a = _bare_analyzer()
+    sents = [{"ticker": "X", "direction": "bullish",
+              "short_term": "bearish", "medium_term": "bearish", "long_term": "slightly_bearish"}]
+    a._reconcile_asset_directions(sents)
+    assert sents[0]["direction"] == "bearish"
+    # horizons unchanged by reconciliation
+    assert sents[0]["short_term"] == "bearish" and sents[0]["long_term"] == "slightly_bearish"
+
+def test_reconcile_keeps_direction_when_a_horizon_agrees():
+    a = _bare_analyzer()
+    sents = [{"ticker": "X", "direction": "bullish",
+              "short_term": "bullish", "medium_term": "neutral", "long_term": "bearish"}]
+    a._reconcile_asset_directions(sents)
+    assert sents[0]["direction"] == "bullish"
