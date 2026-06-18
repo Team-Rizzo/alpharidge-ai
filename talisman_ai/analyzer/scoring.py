@@ -15,6 +15,7 @@ Validator Flow:
 
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple
+import os
 import random
 import bittensor as bt
 import numpy as np
@@ -950,6 +951,63 @@ def _ordinal_score(pred: str, gold: str, ladder: List[str]) -> float:
     return max(0.0, 1.0 - dist / (len(ladder) - 1))
 
 
+# ── Tolerant per-asset sentiment determinism ───────────────────────────────────
+# Miner and validator run the same off-LLM sentiment models, but cross-hardware
+# neural inference is NOT bit-identical, so the per-asset direction/outlook can
+# differ by a class at a decision boundary (e.g. bullish vs slightly_bullish).
+# We compare on the ordinal sentiment ladder with adjacent-class tolerance and
+# average across the batch's common assets: inherent jitter scores ~1.0 while a
+# true sign reversal (a miner running a different/forged model) scores low.
+_SENTIMENT_LADDER = ["very_bullish", "bullish", "slightly_bullish", "neutral",
+                     "slightly_bearish", "bearish", "very_bearish"]
+_SENTIMENT_IDX = {v: i for i, v in enumerate(_SENTIMENT_LADDER)}
+
+# Mean per-asset agreement a miner must clear. Honest miners agree ~1.0 (measured
+# 38/38 exact cross-process); a different-model miner reverses signs and falls far
+# below. Env-overridable for field tuning.
+DET_AGREEMENT_THRESHOLD = float(os.getenv("DET_AGREEMENT_THRESHOLD", "0.80"))
+
+
+def _sentiment_agreement(a: str, b: str) -> float:
+    """Agreement in [0,1] between two 7-class sentiment labels on the ordinal
+    ladder. Adjacent classes (distance <=1) are inherent cross-hardware jitter and
+    count as full agreement; credit then decays linearly to 0.0 at a full sign
+    reversal (very_bullish vs very_bearish). Off-ladder labels fall back to exact
+    match."""
+    ia, ib = _SENTIMENT_IDX.get(a), _SENTIMENT_IDX.get(b)
+    if ia is None or ib is None:
+        return 1.0 if a == b else 0.0
+    dist = abs(ia - ib)
+    if dist <= 1:
+        return 1.0
+    # distance 2..6 -> credit 1.0..0.0 (denominator = max distance minus the
+    # one free adjacent step)
+    return max(0.0, 1.0 - (dist - 1) / (len(_SENTIMENT_LADDER) - 2))
+
+
+def asset_sentiment_agreement(m_assets: dict, v_assets: dict) -> Tuple[float, int]:
+    """Mean per-asset sentiment agreement over tickers common to both sides.
+
+    Each asset's score averages agreement on direction + the three horizon
+    outlooks. Returns (agreement, n_common); n_common == 0 -> (1.0, 0) since there
+    is nothing to disagree on.
+    """
+    common = set(m_assets) & set(v_assets)
+    if not common:
+        return 1.0, 0
+    per_asset = []
+    for t in common:
+        ma, va = m_assets[t], v_assets[t]
+        fields = [
+            (_ev(ma.direction), _ev(va.direction)),
+            (_ev(ma.short_term_outlook), _ev(va.short_term_outlook)),
+            (_ev(ma.medium_term_outlook), _ev(va.medium_term_outlook)),
+            (_ev(ma.long_term_outlook), _ev(va.long_term_outlook)),
+        ]
+        per_asset.append(sum(_sentiment_agreement(x, y) for x, y in fields) / len(fields))
+    return sum(per_asset) / len(per_asset), len(common)
+
+
 def validate_article_intelligence(
     miner_intel: ArticleIntelligence,
     validator_intel: ArticleIntelligence,
@@ -1004,33 +1062,27 @@ def validate_article_intelligence(
     if not tier2_pass:
         return False, 0.0, details
 
-    # Tier 2b: off-LLM ML fields — deterministic across miner & validator because both
-    # run the same FinBERT (per-asset direction/outlooks) and the same dependency_graph
-    # (contagion pairs). A small slack (0.9) tolerates rare cross-install drift only.
-    DETERMINISM_TOL = 0.9
-
+    # Tier 2b: off-LLM ML fields. Miner and validator run the same sentiment
+    # models, but cross-hardware neural inference is NOT bit-identical, so per-asset
+    # direction/outlook can differ by a class at a decision boundary. Exact-match
+    # is therefore unachievable AND, at the 1-6 assets an article resolves, a rate
+    # threshold collapses to exact-match (one of two assets disagreeing = 0.50).
+    # Instead require the MEAN ordinal agreement across the batch's common assets to
+    # clear a threshold: adjacent-class jitter scores ~1.0, a sign reversal (a forged
+    # or different model) scores low and drags the mean below threshold.
     m_assets = {a.ticker: a for a in m.assets}
     v_assets = {a.ticker: a for a in v.assets}
-    common_assets = set(m_assets) & set(v_assets)
-    if common_assets:
-        dir_rate = sum(
-            1 for t in common_assets
-            if _ev(m_assets[t].direction) == _ev(v_assets[t].direction)
-        ) / len(common_assets)
-        outlook_rate = sum(
-            1 for t in common_assets
-            if _ev(m_assets[t].short_term_outlook) == _ev(v_assets[t].short_term_outlook)
-            and _ev(m_assets[t].medium_term_outlook) == _ev(v_assets[t].medium_term_outlook)
-            and _ev(m_assets[t].long_term_outlook) == _ev(v_assets[t].long_term_outlook)
-        ) / len(common_assets)
+    agreement, n_common = asset_sentiment_agreement(m_assets, v_assets)
+    if n_common:
         details["tier2"]["asset_sentiment_determinism"] = {
-            "direction_rate": round(dir_rate, 4), "outlook_rate": round(outlook_rate, 4),
-            "common_assets": len(common_assets)}
-        if dir_rate < DETERMINISM_TOL or outlook_rate < DETERMINISM_TOL:
-            bt.logging.warning(f"[V2_VALIDATE] Tier 2 FAIL: asset sentiment determinism "
-                               f"dir={dir_rate:.2f} outlook={outlook_rate:.2f}")
+            "agreement": round(agreement, 4), "common_assets": n_common,
+            "threshold": DET_AGREEMENT_THRESHOLD}
+        if agreement < DET_AGREEMENT_THRESHOLD:
+            bt.logging.warning(f"[V2_VALIDATE] Tier 2 FAIL: asset sentiment agreement "
+                               f"{agreement:.3f} < {DET_AGREEMENT_THRESHOLD} over {n_common} asset(s)")
             return False, 0.0, details
 
+    DETERMINISM_TOL = 0.9
     m_cont = {(l.source_ticker, l.target_ticker) for l in m.contagion_links}
     v_cont = {(l.source_ticker, l.target_ticker) for l in v.contagion_links}
     cont_jac = _jaccard(m_cont, v_cont)
