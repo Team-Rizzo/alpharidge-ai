@@ -289,7 +289,11 @@ class NERFusionEngine:
 
         # 6. FinBERT sentence sentiments (on cleaned text).
         if self._finbert:
-            sentences = [s.strip() for s in re.split(r"[.!?]+", full_text) if len(s.strip()) > 20]
+            # Split on sentence punctuation OR newlines, but NOT on decimals
+            # ("$94.8" must stay intact) — target-aware ABSA downstream needs whole
+            # sentences with the asset named, not fragments truncated at a decimal.
+            sentences = [s.strip() for s in re.split(r"(?<!\d)[.!?]+(?!\d)\s+|\n+", full_text)
+                         if len(s.strip()) > 20]
             for sent in sentences[:20]:
                 try:
                     fb_result = self._finbert(sent, truncation=True, max_length=512)[0]

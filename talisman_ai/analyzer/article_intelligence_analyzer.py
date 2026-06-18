@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 import traceback
@@ -42,6 +43,8 @@ from talisman_ai.models.article_intelligence import (
 from talisman_ai.analyzer.text_stats import compute_text_stats
 from talisman_ai.analyzer.ner_fusion import NERFusionEngine
 from talisman_ai.analyzer.llm_cache import LLMCache
+from talisman_ai.analyzer.aspect_sentiment import AspectSentimentScorer, score_assets
+from talisman_ai.analyzer.horizon import reconcile_direction_with_horizons
 
 try:
     from talisman_ai import config
@@ -50,6 +53,174 @@ except ImportError:
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 MAX_CONTENT_CHARS = 3000
+
+
+def count_entity_mentions(text: str, forms: List[str]) -> tuple:
+    """Deterministic (count, first_offset) for an entity given its surface forms.
+
+    Counts non-overlapping occurrences of ANY form (word-boundary, case-insensitive)
+    by merging match intervals — so "Apple" inside "Apple Inc." is counted once, not
+    twice. Floors at 1: the NER detected the entity even if no form matches verbatim
+    (e.g. it was resolved from a coreference). Pure → miner/validator agree.
+    """
+    text_l = (text or "").lower()
+    intervals = []
+    for f in forms or []:
+        f = (f or "").strip().lower()
+        if len(f) < 3:  # skip tickers / 1-2 char forms — too noisy to count in prose
+            continue
+        for m in re.finditer(rf"\b{re.escape(f)}\b", text_l):
+            intervals.append((m.start(), m.end()))
+    if not intervals:
+        return 1, None
+    intervals.sort()
+    merged = 0
+    cur_end = -1
+    first = intervals[0][0]
+    for s, e in intervals:
+        if s >= cur_end:       # disjoint from the previous kept interval
+            merged += 1
+            cur_end = e
+        elif e > cur_end:      # overlapping (e.g. Apple ⊂ Apple Inc.) — extend, no new count
+            cur_end = e
+    return max(1, merged), first
+
+
+def sanitize_forward_event_date(raw, published_iso: Optional[str]):
+    """Drop fabricated/junk forward-event dates.
+
+    A *forward* event cannot predate publication, yet the LLM routinely emits stale
+    past dates (e.g. "2025-09-25" on a 2026 article). Returns the cleaned string, or
+    None for null-ish junk and any date whose year/full-date is before publication.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    s = raw.strip()
+    if s.lower() in ("", "null", "none", "n/a", "na", "tbd", "unknown", "-"):
+        return None
+    ym = re.search(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", s)
+    if not ym:
+        return s  # non-dated phrasing ("next quarter") — keep as-is
+    pub_year = pub_full = None
+    if published_iso:
+        pm = re.search(r"(\d{4})-(\d{2})-(\d{2})", published_iso)
+        if pm:
+            pub_year = int(pm.group(1))
+            pub_full = pm.group(0)
+    year = int(ym.group(1))
+    if pub_year is not None:
+        if year < pub_year:
+            return None
+        # same year with a full date that's strictly before publication -> stale
+        if year == pub_year and ym.group(2) and ym.group(3) and pub_full:
+            if ym.group(0) < pub_full:
+                return None
+    return s
+
+
+# GICS / exchange sector strings -> the coarse 9-bucket topic taxonomy (sectors.json).
+_GICS_SECTOR_MAP = {
+    "information technology": (7, "TECH"),
+    "technology": (7, "TECH"),
+    "communication services": (7, "TECH"),
+    "communications": (7, "TECH"),
+    "health care": (8, "SCIENCE"),
+    "healthcare": (8, "SCIENCE"),
+    "energy": (5, "COMMODITIES"),
+    "materials": (5, "COMMODITIES"),
+    "basic materials": (5, "COMMODITIES"),
+    "financials": (4, "EQUITIES"),
+    "financial services": (4, "EQUITIES"),
+    "finance": (4, "EQUITIES"),
+    "consumer discretionary": (4, "EQUITIES"),
+    "consumer staples": (4, "EQUITIES"),
+    "consumer cyclical": (4, "EQUITIES"),
+    "consumer defensive": (4, "EQUITIES"),
+    "industrials": (4, "EQUITIES"),
+    "utilities": (4, "EQUITIES"),
+    "real estate": (4, "EQUITIES"),
+}
+
+
+_ANALYST_DESK_RE = re.compile(
+    r"\b(Research Division|Securities|Capital Markets|Equity Research|Research Analyst|"
+    r"Research,? LLC|Global Markets)\b", re.I)
+_TRANSCRIPT_MARKERS = ("research division", "conference call participants",
+                       "earnings call transcript", "prepared remarks")
+
+
+# Footer/disclosure boilerplate markers (Motley Fool, Seeking Alpha, generic).
+# These start the "stocks mentioned" + position-disclosure tail, which lists tickers
+# that are NOT the article's subject and inject noise assets. High-precision phrases
+# (not the bare word "disclosure") so real prose isn't truncated.
+_DISCLOSURE_RE = re.compile(
+    r"(?i)("
+    r"\bDisclosure\s*:|"
+    r"The Motley Fool (has|owns|recommends|disclosure)|"
+    r"\bhas (positions? in|no position)\b|"
+    r"\bI\s*/\s*we have (a beneficial|no\b)|"
+    r"\bowns shares of\b|"
+    r"Past performance is no guarantee|"
+    r"\bhas a (beneficial )?(long|short) position\b|"
+    r"expresses (my|his|her|their) own opinions"
+    r")")
+
+
+def strip_disclosure_tail(text: str) -> str:
+    """Truncate a disclosure/footer tail so its "stocks mentioned" ticker list does
+    not become noise assets. Only cuts at a marker in the back portion (>=40% in),
+    so an early use of a disclosure-ish phrase in real content is left intact."""
+    if not text:
+        return text
+    floor = len(text) * 0.4
+    for m in _DISCLOSURE_RE.finditer(text):
+        if m.start() >= floor:
+            return text[:m.start()].rstrip()
+    return text
+
+
+def _looks_like_transcript(text: str) -> bool:
+    t = (text or "").lower()
+    return any(mk in t for mk in _TRANSCRIPT_MARKERS)
+
+
+def strip_analyst_roster_assets(assets: list, text: str) -> list:
+    """Drop sell-side banks that appear only as the analyst roster in an earnings
+    transcript (``Bryan Keane - Citigroup Inc., Research Division``). They are
+    participants, not the article's subject. Only fires on transcript-shaped text,
+    never drops the primary subject, and keeps any bank that also appears in a
+    non-attribution (subject) context. Pure → deterministic across the boundary.
+    """
+    if not _looks_like_transcript(text):
+        return assets
+    text_l = (text or "").lower()
+    kept = []
+    for a in assets:
+        if getattr(a, "is_primary_subject", False):
+            kept.append(a)
+            continue
+        forms = [f for f in ([getattr(a, "asset_name", "")] + list(getattr(a, "evidence_spans", []) or []))
+                 if f and len(f) >= 3]
+        positions = []
+        for f in forms:
+            for m in re.finditer(rf"\b{re.escape(f.lower())}\b", text_l):
+                positions.append((m.start(), m.end()))
+        if not positions:
+            kept.append(a)  # can't verify -> keep (conservative)
+            continue
+        # An occurrence is an analyst attribution if a desk suffix follows closely.
+        all_attrib = all(_ANALYST_DESK_RE.search(text[e:e + 40]) for _, e in positions)
+        if not all_attrib:
+            kept.append(a)
+    return kept
+
+
+def map_gics_to_sector(gics: Optional[str]) -> tuple:
+    """Map a GICS/exchange sector label to (sector_id, symbol) in the 9-bucket
+    taxonomy. Unknown/empty -> (9, "OTHER"). Pure → deterministic across miner/validator."""
+    key = (gics or "").strip().lower()
+    return _GICS_SECTOR_MAP.get(key, (9, "OTHER"))
+
 
 def _safe_enum(enum_cls, value, default=None):
     if value is None:
@@ -153,6 +324,19 @@ EXTRACT_CLASSIFY_TOOL = {
                 "forward_event_description": {"type": "string"},
                 "additional_tickers": {"type": "array", "items": {"type": "string"},
                     "description": "Asset tickers the NER may have missed"},
+                "asset_horizons": {"type": "array", "description": (
+                    "Per-asset directional outlook at THREE INDEPENDENT time horizons. "
+                    "They can and often should differ (an earnings miss is bearish "
+                    "short-term while a strong multi-year strategy is bullish long-term)."
+                ), "items": {"type": "object", "properties": {
+                    "ticker": {"type": "string"},
+                    "short_term": {"type": "string", "enum": [e.value for e in Sentiment],
+                                   "description": "days to a few weeks"},
+                    "medium_term": {"type": "string", "enum": [e.value for e in Sentiment],
+                                    "description": "months to a couple of quarters"},
+                    "long_term": {"type": "string", "enum": [e.value for e in Sentiment],
+                                  "description": "a year or more"},
+                }, "required": ["ticker", "short_term", "medium_term", "long_term"]}},
             },
             "required": ["content_type", "sentiment", "sentiment_score", "sentiment_direction",
                          "market_analysis_type", "impact_potential", "technical_quality",
@@ -210,6 +394,9 @@ class ArticleIntelligenceAnalyzer:
             enable_refined=enable_refined,
             enable_flair=enable_flair,
         )
+        # Per-asset direction: target-aware FinABSA on CPU for bit-exact output
+        # across the miner/validator consensus boundary (lazy model load).
+        self._aspect_scorer = AspectSentimentScorer(device="cpu")
         self.source_profiles = _load_json("source_profiles.json").get("profiles", {})
         self.dependency_graph = _load_json("dependency_graph.json").get("dependencies", {})
         self._init_narrative_index()
@@ -298,7 +485,10 @@ class ArticleIntelligenceAnalyzer:
     ) -> Optional[ArticleIntelligence]:
         start_ms = int(time.time() * 1000)
         body = content or summary or ""
-        body_truncated = body[:MAX_CONTENT_CHARS]
+        # Strip the disclosure/footer tail for the EXTRACTION path only (NER, assets,
+        # LLM, sectors) so a "stocks mentioned" footer doesn't inject noise tickers.
+        # text_stats/content_hash below still use the full `body` (Tier-2 unchanged).
+        body_truncated = strip_disclosure_tail(body[:MAX_CONTENT_CHARS])
         article_text = f"{title}\n\n{summary or ''}\n\n{body_truncated}".strip()
 
         try:
@@ -328,7 +518,11 @@ class ArticleIntelligenceAnalyzer:
                 f"Analyze this financial news article. Pre-detected entities are provided as hints — "
                 f"confirm, correct, or supplement them.\n\n"
                 f"Article:\n\"\"\"{article_text}\"\"\"\n\n"
-                f"Pre-detected (NER):\n{ner_hints}"
+                f"Pre-detected (NER):\n{ner_hints}\n\n"
+                f"For each detected asset, also fill asset_horizons with its outlook at three "
+                f"INDEPENDENT horizons (short=days-weeks, medium=months-quarters, long=a year+); "
+                f"judge each horizon on its own — they should differ when the catalyst is "
+                f"near-term vs structural."
             )
             call1 = self._llm_call(call1_prompt, EXTRACT_CLASSIFY_TOOL, "extract_and_classify")
 
@@ -353,12 +547,29 @@ class ArticleIntelligenceAnalyzer:
             # LLM-suggested additional_tickers) so they match across the consensus boundary.
             ner_tickers = [e.ticker for e in ner_result.resolved_assets if e.ticker]
             overall_dir = call1.get("sentiment") or "neutral"
-            asset_sentiments = self._finbert_asset_sentiments(
+            asset_sentiments = score_assets(
                 [e for e in ner_result.resolved_assets if e.ticker],
-                ner_result, fallback_direction=overall_dir)
+                ner_result, self._aspect_scorer, fallback_direction=overall_dir)
+            # Per-asset DIRECTION stays deterministic FinABSA; HORIZONS come from the
+            # LLM (semantic, independent across horizons) when provided, else the
+            # deterministic rule projector value already in the dict.
+            self._merge_llm_horizons(asset_sentiments, call1.get("asset_horizons"))
             assets = self._build_assets(ner_result, asset_sentiments)
-            entities = self._build_entities_from_ner(ner_result)
+            # Drop sell-side banks that are only the analyst roster of an earnings
+            # transcript (participants, not the article's subject).
+            assets = strip_analyst_roster_assets(assets, article_text)
+            entities = self._build_entities_from_ner(ner_result, article_text)
             inferred = self._compute_inferred_impacts(all_tickers)
+
+            # Sector from the primary-subject asset's GICS metadata. The keyword
+            # sector classifier often returns OTHER for a single-stock article
+            # ("Micron: ..." -> OTHER); the covered asset knows its sector, so use
+            # it to fill gics_sector/industry and to replace an OTHER primary sector.
+            gics_sector, gics_industry = self._primary_asset_gics(assets)
+            if gics_sector and primary_sector.get("id") == 9:
+                sid, sym = map_gics_to_sector(gics_sector)
+                if sym != "OTHER":
+                    primary_sector = {"id": sid, "symbol": sym}
             elapsed_ms = int(time.time() * 1000) - start_ms
 
             # ── STAGE 4: Embeddings (~45ms) ──
@@ -418,6 +629,8 @@ class ArticleIntelligenceAnalyzer:
                     primary_sector_id=primary_sector["id"],
                     primary_sector_symbol=primary_sector["symbol"],
                     secondary_sector_ids=[s["id"] for s in sector_matches[1:4]],
+                    gics_sector=gics_sector or None,
+                    gics_industry=gics_industry or None,
                 ),
                 text_stats=text_stats,
                 factual_confidence=_safe_enum(FactualConfidence, call1.get("factual_confidence"), FactualConfidence.SPECULATIVE),
@@ -431,7 +644,8 @@ class ArticleIntelligenceAnalyzer:
                 staleness_flag=_safe_enum(StalenessFlag, call1.get("staleness_flag"), StalenessFlag.UNKNOWN),
                 event_timestamp=call1.get("event_timestamp"),
                 forward_event_type=_safe_enum(ForwardEventType, call1.get("forward_event_type"), ForwardEventType.NONE),
-                forward_event_date_approximate=call1.get("forward_event_date"),
+                forward_event_date_approximate=sanitize_forward_event_date(
+                    call1.get("forward_event_date"), published),
                 forward_event_description=call1.get("forward_event_description"),
                 inferred_impacts=inferred if inferred else None,
             )
@@ -528,6 +742,36 @@ class ArticleIntelligenceAnalyzer:
     # Assembly Helpers
     # ========================================================================
 
+    def _merge_llm_horizons(self, sentiments_raw: list, llm_horizons) -> None:
+        """Override per-asset short/medium/long outlooks with the LLM's values.
+
+        Per-asset `direction` is left untouched (deterministic FinABSA). Horizons
+        the LLM omits keep the rule-projector value already in the dict. Invalid
+        enum strings are coerced to NEUTRAL downstream by `_safe_enum`.
+        """
+        if not llm_horizons:
+            return
+        by_tk = {}
+        for h in llm_horizons:
+            tk = (h.get("ticker") or "").upper() if isinstance(h, dict) else ""
+            if tk:
+                by_tk[tk] = h
+        for s in sentiments_raw:
+            h = by_tk.get((s.get("ticker") or "").upper())
+            if not h:
+                continue
+            for f in ("short_term", "medium_term", "long_term"):
+                v = h.get(f)
+                if v:
+                    s[f] = v
+            # If the deterministic FinABSA direction now contradicts ALL of the
+            # (LLM-overridden) horizons, FinABSA is the weaker signal — reconcile.
+            s["direction"] = reconcile_direction_with_horizons(
+                s.get("direction") or "neutral",
+                s.get("short_term") or "neutral",
+                s.get("medium_term") or "neutral",
+                s.get("long_term") or "neutral")
+
     def _build_assets(self, ner_result, sentiments_raw: list) -> List[AssetSentiment]:
         sentiment_by_ticker = {}
         for s in sentiments_raw:
@@ -562,13 +806,32 @@ class ArticleIntelligenceAnalyzer:
                 bt.logging.debug(f"[ARTICLE_INTEL] Skip asset {e.ticker}: {ex}")
         return assets
 
-    def _build_entities_from_ner(self, ner_result) -> List[ExtractedEntity]:
+    def _primary_asset_gics(self, assets) -> tuple:
+        """(gics_sector, gics_industry) for the primary-subject asset, from the
+        static universe metadata. Falls back to the highest-relevance asset."""
+        if not assets:
+            return None, None
+        if not hasattr(self, "_ticker_gics"):
+            self._ticker_gics = {}
+            for a in self.ner_engine._asset_extractor.assets.values():
+                tk = a.get("symbol") or a.get("ticker")
+                if tk:
+                    self._ticker_gics[tk] = (a.get("sector") or None, a.get("industry") or None)
+        # Only the PRIMARY subject's sector describes the article. A merely-mentioned
+        # asset (e.g. BTC in a Fed-policy piece) must not set gics_sector.
+        primary = next((a for a in assets if getattr(a, "is_primary_subject", False)), None)
+        if primary is None:
+            return None, None
+        return self._ticker_gics.get(primary.ticker, (None, None))
+
+    def _build_entities_from_ner(self, ner_result, text: str = "") -> List[ExtractedEntity]:
         # Deduplicate by (canonical name, type): the same entity resolved from
         # several spans (e.g. "Medtronic" x4) must collapse to one record — which
         # is also how the eval `entities` metric keys (name.lower()). On collision
         # keep the highest-confidence representative and merge in a more specific
         # role / a sentiment signal so we never lose information to dedup.
         best = {}  # (name_lower, etype) -> (confidence, ExtractedEntity)
+        forms_by_key = {}  # key -> set of surface forms (for mention counting)
         for e in ner_result.resolved_entities:
             try:
                 etype = _safe_enum(EntityType, e.entity_type, EntityType.ORGANIZATION)
@@ -583,6 +846,10 @@ class ArticleIntelligenceAnalyzer:
                     sentiment_toward=_safe_enum(Sentiment, e.sentiment_toward, None),
                 )
                 key = (e.canonical_name.lower(), etype)
+                forms = forms_by_key.setdefault(key, set())
+                forms.add(e.canonical_name)
+                for sf in (getattr(e, "surface_forms", None) or []):
+                    forms.add(sf)
                 conf = float(getattr(e, "confidence", 0.0) or 0.0)
                 if key not in best:
                     best[key] = (conf, ent)
@@ -600,6 +867,13 @@ class ArticleIntelligenceAnalyzer:
                         best[key] = (conf, ent)
             except Exception:
                 pass
+        # Real per-entity mention_count / first_mention_offset from the article text
+        # (was hardcoded to the model default of 1). Deterministic.
+        for key, (_, ent) in best.items():
+            cnt, off = count_entity_mentions(text, sorted(forms_by_key.get(key, set())))
+            ent.mention_count = cnt
+            if off is not None:
+                ent.first_mention_offset = off
         return [v[1] for v in best.values()][:15]
 
     def _build_economic_data(self, raw: list) -> List[EconomicDataPoint]:
@@ -689,61 +963,6 @@ class ArticleIntelligenceAnalyzer:
                 if len(links) >= 8:
                     return links
         return links
-
-    def _finbert_asset_sentiments(self, resolved_assets, ner_result,
-                                  fallback_direction: str = "neutral") -> List[dict]:
-        """Per-asset sentiment via FinBERT over each asset's mention sentences.
-
-        Finds an asset's sentences by ANY surface form it was matched on — the
-        canonical name and the strings that actually appeared in the prose
-        ("Tesla"), not just the ticker symbol ("TSLA") which rarely appears in
-        article text. That is the fix for the old always-neutral behavior. When
-        an asset still has no matched sentence, we fall back to the article-level
-        direction instead of hard "neutral", so a clearly bullish article does
-        not flatten its subject to neutral.
-
-        Deterministic (CPU FinBERT, no sampling). Reuses the per-sentence FinBERT
-        labels the NER engine already computed — no second model load.
-        """
-        import re as _re
-        scored = getattr(ner_result, "sentence_sentiments", None) or []
-
-        out = []
-        for e in resolved_assets:
-            tk = getattr(e, "ticker", None)
-            if not tk:
-                continue
-            forms = {tk}
-            name = getattr(e, "canonical_name", None)
-            if name:
-                forms.add(name)
-            for extra in (getattr(e, "surface_forms", None) or []):
-                if extra:
-                    forms.add(extra)
-            pats = [_re.compile(rf"\b{_re.escape(f)}\b", _re.IGNORECASE)
-                    for f in forms if len(f) >= 2]
-            mentions = [s for s in scored
-                        if any(p.search(s.get("text") or "") for p in pats)]
-            if mentions:
-                labels = [m["sentiment"] for m in mentions]  # bullish/bearish/neutral
-                direction = max(set(labels), key=labels.count)
-                magnitude = sum(float(m.get("score", 0.5)) for m in mentions) / len(mentions)
-                conf = magnitude
-                driver = f"FinBERT over {len(mentions)} mention sentence(s) matched by surface form"
-            else:
-                direction, magnitude, conf = fallback_direction, 0.5, 0.3
-                driver = "No asset-specific sentence; fell back to article-level sentiment"
-            out.append({
-                "ticker": tk,
-                "direction": direction,
-                "magnitude": max(0.0, min(1.0, magnitude)),
-                "confidence": max(0.0, min(1.0, conf)),
-                "short_term": direction,
-                "medium_term": direction,
-                "long_term": direction,
-                "causal_driver": driver,
-            })
-        return out
 
     def _build_source_metadata(self, source: str) -> SourceMetadata:
         key = source.lower().replace(" ", "_").replace("-", "_")

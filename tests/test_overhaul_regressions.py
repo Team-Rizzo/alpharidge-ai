@@ -47,10 +47,41 @@ def analyzer():
     return a
 
 
+def _sign(d):
+    """Coarsen a 7-class Sentiment value to directional sign for 3-class gold."""
+    if d is None:
+        return None
+    if "bull" in d:
+        return "bullish"
+    if "bear" in d:
+        return "bearish"
+    return "neutral"
+
+
+def _article_direction(ner):
+    """Deterministic stand-in for production's ``overall_dir`` (LLM call-1
+    sentiment), which the live analyzer passes as ``fallback_direction``. The
+    deterministic test path has no LLM, so aggregate FinBERT's per-sentence
+    sentiments (already computed by NER) into a coarse article-level read."""
+    agg = {}
+    for s in getattr(ner, "sentence_sentiments", None) or []:
+        agg[s.get("sentiment")] = agg.get(s.get("sentiment"), 0.0) + float(s.get("score", 0) or 0)
+    return max(agg, key=agg.get) if agg else "neutral"
+
+
 def _analyze(a, art):
+    from talisman_ai.analyzer.aspect_sentiment import score_assets, AspectSentimentScorer
+    global _ASPECT_SCORER
+    try:
+        _ASPECT_SCORER
+    except NameError:
+        _ASPECT_SCORER = AspectSentimentScorer(device="cpu")
     ner = a.ner_engine.extract_and_resolve(art["title"], art["content"])
     ner_assets = [e for e in ner.resolved_assets if e.ticker]
-    sents = a._finbert_asset_sentiments(ner_assets, ner, fallback_direction="neutral")
+    # Mirror production: weak/inconclusive per-asset FinABSA defers to the
+    # article-level direction, NOT a hardcoded "neutral".
+    sents = score_assets(ner_assets, ner, _ASPECT_SCORER,
+                         fallback_direction=_article_direction(ner))
     assets = a._build_assets(ner, sents)
     entities = a._build_entities_from_ner(ner)
     one_liner = (art["content"][:200])
@@ -82,7 +113,9 @@ def test_handcurated_targeted(analyzer):
             got = dir_by_ticker.get(t.upper())
             if got is None:
                 soft_misses.append(f"{aid}: {t} not detected, can't check direction")
-            elif got != want:
+            elif _sign(got) != _sign(want):
+                # Gold labels are 3-class (bullish/bearish/neutral); FinABSA emits
+                # the 7-class scale. Compare directional SIGN, not magnitude.
                 hard_failures.append(f"{aid}: {t} direction {got!r} != expected {want!r}")
         if expect.get("entity_no_duplicates"):
             dups = {n for n in ent_lower if ent_lower.count(n) > 1}

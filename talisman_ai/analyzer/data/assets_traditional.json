@@ -8,7 +8,6 @@
       "apple",
       "aapl",
       "iphone",
-      "tim cook",
       "apple inc",
       "ipad",
       "macbook",
@@ -48,7 +47,6 @@
     "unique_identifiers": [
       "microsoft",
       "msft",
-      "satya nadella",
       "windows",
       "azure",
       "microsoft cloud",
@@ -92,7 +90,6 @@
       "googl",
       "goog",
       "google",
-      "sundar pichai",
       "youtube",
       "google cloud",
       "waymo",
@@ -137,8 +134,6 @@
     "unique_identifiers": [
       "amazon",
       "amzn",
-      "andy jassy",
-      "jeff bezos",
       "aws",
       "amazon web services",
       "prime video",
@@ -180,7 +175,6 @@
     "unique_identifiers": [
       "nvidia",
       "nvda",
-      "jensen huang",
       "geforce",
       "cuda",
       "nvidia gpu",
@@ -223,7 +217,6 @@
       "meta",
       "meta platforms",
       "facebook",
-      "mark zuckerberg",
       "zuckerberg",
       "instagram",
       "whatsapp",
@@ -266,7 +259,6 @@
     "unique_identifiers": [
       "tesla",
       "tsla",
-      "elon musk",
       "model 3",
       "model y",
       "model s",
@@ -311,7 +303,6 @@
       "jpmorgan",
       "jpm",
       "jp morgan",
-      "jamie dimon",
       "jpmorgan chase",
       "chase bank",
       "j.p. morgan"
@@ -348,7 +339,6 @@
       "bank of america",
       "bac",
       "bofa",
-      "brian moynihan",
       "merrill lynch"
     ],
     "case_sensitive_identifiers": [
@@ -382,7 +372,6 @@
     "unique_identifiers": [
       "goldman sachs",
       "goldman",
-      "david solomon",
       "gs"
     ],
     "case_sensitive_identifiers": [
@@ -415,7 +404,6 @@
     "asset_class": "equity",
     "unique_identifiers": [
       "morgan stanley",
-      "ted pick",
       "ms"
     ],
     "case_sensitive_identifiers": [
@@ -446,10 +434,6 @@
     "unique_identifiers": [
       "berkshire hathaway",
       "berkshire",
-      "warren buffett",
-      "buffett",
-      "charlie munger",
-      "greg abel",
       "brk"
     ],
     "case_sensitive_identifiers": [
@@ -485,8 +469,7 @@
       "johnson & johnson",
       "johnson and johnson",
       "jnj",
-      "j&j",
-      "joaquin duato"
+      "j&j"
     ],
     "case_sensitive_identifiers": [
       "JNJ"
@@ -550,8 +533,7 @@
     "asset_class": "equity",
     "unique_identifiers": [
       "visa",
-      "visa inc",
-      "ryan mcinerney"
+      "visa inc"
     ],
     "case_sensitive_identifiers": [
       "V"
@@ -581,8 +563,7 @@
     "asset_class": "equity",
     "unique_identifiers": [
       "mastercard",
-      "master card",
-      "michael miebach"
+      "master card"
     ],
     "case_sensitive_identifiers": [
       "MA"
@@ -615,7 +596,6 @@
       "procter and gamble",
       "pg",
       "p&g",
-      "jon moeller",
       "tide",
       "gillette",
       "pampers"
@@ -682,8 +662,7 @@
       "coca-cola",
       "coca cola",
       "ko",
-      "coke",
-      "james quincey"
+      "coke"
     ],
     "case_sensitive_identifiers": [
       "KO"
@@ -717,7 +696,6 @@
       "pepsico",
       "pepsi",
       "pep",
-      "ramon laguarta",
       "frito-lay",
       "gatorade",
       "lay's"
@@ -752,7 +730,6 @@
       "mcdonald's",
       "mcdonalds",
       "mcd",
-      "chris kempczinski",
       "big mac",
       "golden arches"
     ],
@@ -787,7 +764,6 @@
       "disney",
       "dis",
       "walt disney",
-      "bob iger",
       "disney+",
       "disney plus",
       "hulu",
@@ -828,8 +804,6 @@
     "unique_identifiers": [
       "netflix",
       "nflx",
-      "ted sarandos",
-      "greg peters",
       "netflix streaming"
     ],
     "case_sensitive_identifiers": [
@@ -862,7 +836,6 @@
     "unique_identifiers": [
       "salesforce",
       "crm",
-      "marc benioff",
       "salesforce cloud",
       "slack"
     ],
@@ -896,8 +869,6 @@
     "unique_identifiers": [
       "oracle",
       "orcl",
-      "larry ellison",
-      "safra catz",
       "oracle cloud"
     ],
     "case_sensitive_identifiers": [
@@ -930,7 +901,6 @@
     "unique_identifiers": [
       "adobe",
       "adbe",
-      "shantanu narayen",
       "photoshop",
       "creative cloud",
       "adobe firefly"
@@ -964,7 +934,6 @@
     "unique_identifiers": [
       "amd",
       "advanced micro devices",
-      "lisa su",
       "radeon",
       "ryzen",
       "epyc",
@@ -1002,7 +971,6 @@
     "unique_identifiers": [
       "intel",
       "intc",
-      "pat gelsinger",
       "lip-bu tan",
       "intel foundry",
       "core ultra"
@@ -1037,7 +1005,6 @@
     "unique_identifiers": [
       "qualcomm",
       "qcom",
-      "cristiano amon",
       "snapdragon"
     ],
     "case_sensitive_identifiers": [
@@ -1069,7 +1036,6 @@
     "unique_identifiers": [
       "broadcom",
       "avgo",
-      "hock tan",
       "vmware broadcom"
     ],
     "case_sensitive_identifiers": [
@@ -1102,11 +1068,7 @@
     "unique_identifiers": [
       "micron",
       "mu",
-      "micron technology",
-      "sanjay mehrotra",
-      "hbm",
-      "dram",
-      "nand"
+      "micron technology"
     ],
     "case_sensitive_identifiers": [
       "MU"
@@ -1138,7 +1100,6 @@
     "unique_identifiers": [
       "coinbase",
       "coin",
-      "brian armstrong",
       "coinbase exchange",
       "coinbase pro"
     ],
@@ -1172,7 +1133,6 @@
     "unique_identifiers": [
       "microstrategy",
       "mstr",
-      "michael saylor",
       "saylor",
       "strategy inc"
     ],
@@ -1206,10 +1166,9 @@
     "unique_identifiers": [
       "palantir",
       "pltr",
-      "alex karp",
       "palantir technologies",
       "gotham",
-      "foundry",
+      "palantir foundry",
       "palantir aip"
     ],
     "case_sensitive_identifiers": [
@@ -1244,7 +1203,6 @@
       "block inc",
       "square",
       "sq",
-      "jack dorsey",
       "cash app",
       "afterpay",
       "block"
@@ -1280,7 +1238,6 @@
     "unique_identifiers": [
       "paypal",
       "pypl",
-      "alex chriss",
       "venmo",
       "paypal holdings"
     ],
@@ -1313,7 +1270,6 @@
     "unique_identifiers": [
       "uber",
       "uber technologies",
-      "dara khosrowshahi",
       "uber eats",
       "uber freight"
     ],
@@ -1345,8 +1301,7 @@
     "asset_class": "equity",
     "unique_identifiers": [
       "airbnb",
-      "abnb",
-      "brian chesky"
+      "abnb"
     ],
     "case_sensitive_identifiers": [
       "ABNB"
@@ -1377,7 +1332,6 @@
     "unique_identifiers": [
       "snowflake",
       "snow",
-      "sridhar ramaswamy",
       "snowflake data cloud"
     ],
     "case_sensitive_identifiers": [
@@ -1409,9 +1363,7 @@
     "asset_class": "equity",
     "unique_identifiers": [
       "shopify",
-      "shop",
-      "tobi lutke",
-      "tobias lutke"
+      "shop"
     ],
     "case_sensitive_identifiers": [
       "SHOP"
@@ -1443,7 +1395,6 @@
       "zoom",
       "zoom video",
       "zm",
-      "eric yuan",
       "zoom meetings"
     ],
     "case_sensitive_identifiers": [
@@ -1475,7 +1426,6 @@
     "unique_identifiers": [
       "rivian",
       "rivn",
-      "rj scaringe",
       "r1t",
       "r1s",
       "rivian automotive"
@@ -1511,7 +1461,6 @@
       "lucid motors",
       "lcid",
       "lucid air",
-      "peter rawlinson",
       "lucid group"
     ],
     "case_sensitive_identifiers": [
@@ -1543,7 +1492,6 @@
     "unique_identifiers": [
       "arm holdings",
       "arm",
-      "rene haas",
       "arm architecture",
       "arm chips"
     ],
@@ -1578,8 +1526,7 @@
       "super micro",
       "supermicro",
       "smci",
-      "super micro computer",
-      "charles liang"
+      "super micro computer"
     ],
     "case_sensitive_identifiers": [
       "SMCI"
@@ -1611,7 +1558,6 @@
     "unique_identifiers": [
       "nio",
       "nio inc",
-      "william li",
       "nio et7",
       "nio es8"
     ],
@@ -1645,7 +1591,6 @@
     "unique_identifiers": [
       "boeing",
       "ba",
-      "kelly ortberg",
       "737 max",
       "787 dreamliner",
       "boeing 737",
@@ -1682,7 +1627,6 @@
     "unique_identifiers": [
       "caterpillar",
       "cat",
-      "jim umpleby",
       "caterpillar inc"
     ],
     "case_sensitive_identifiers": [
@@ -1716,7 +1660,6 @@
       "ge aerospace",
       "ge",
       "general electric",
-      "larry culp",
       "ge vernova"
     ],
     "case_sensitive_identifiers": [
@@ -1750,8 +1693,7 @@
       "exxon",
       "exxon mobil",
       "exxonmobil",
-      "xom",
-      "darren woods"
+      "xom"
     ],
     "case_sensitive_identifiers": [
       "XOM"
@@ -1783,7 +1725,6 @@
     "unique_identifiers": [
       "chevron",
       "cvx",
-      "mike wirth",
       "chevron corporation"
     ],
     "case_sensitive_identifiers": [
@@ -1815,7 +1756,6 @@
     "unique_identifiers": [
       "walmart",
       "wmt",
-      "doug mcmillon",
       "walmart+",
       "sam's club",
       "walton family"
@@ -1851,7 +1791,6 @@
       "costco",
       "cost",
       "costco wholesale",
-      "ron vachris",
       "kirkland signature"
     ],
     "case_sensitive_identifiers": [
@@ -1883,8 +1822,7 @@
     "unique_identifiers": [
       "target",
       "tgt",
-      "target corporation",
-      "brian cornell"
+      "target corporation"
     ],
     "case_sensitive_identifiers": [
       "TGT"
@@ -3115,8 +3053,7 @@
       "ng",
       "henry hub",
       "natural gas futures",
-      "natgas",
-      "lng"
+      "natgas"
     ],
     "case_sensitive_identifiers": [
       "NG"
@@ -3742,7 +3679,6 @@
     "unique_identifiers": [
       "barrick gold",
       "barrick",
-      "mark bristow",
       "barrick mining",
       "barrick gold corporation"
     ],

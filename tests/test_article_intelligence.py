@@ -1049,28 +1049,50 @@ class TestGraphContagion:
         assert _bare_analyzer()._build_contagion_from_graph([]) == []
 
 
-class TestFinBERTAspect:
+class TestAspectSentiment:
+    """Per-asset direction now comes from target-aware FinABSA (score_assets).
+    Stub the scorer's votes so these stay fast and deterministic."""
+
+    @staticmethod
+    def _scorer(vote_by_kw):
+        from talisman_ai.analyzer.aspect_sentiment import AspectSentimentScorer
+
+        class _Stub(AspectSentimentScorer):
+            def _ensure(self):
+                self._model = object()
+            def label_many(self, pairs, batch_size=16):
+                def v(t):
+                    t = t.lower()
+                    if any(k in t for k in vote_by_kw["bear"]):
+                        return -1
+                    if any(k in t for k in vote_by_kw["bull"]):
+                        return 1
+                    return 0
+                return [v(txt) for txt, _ in pairs]
+        return _Stub(device="cpu")
+
     def test_majority_vote_direction(self):
-        az = _bare_analyzer()
+        from talisman_ai.analyzer.aspect_sentiment import score_assets
         ner = types.SimpleNamespace(sentence_sentiments=[
-            {"text": "NVDA earnings crushed estimates", "sentiment": "bullish", "score": 0.9},
-            {"text": "NVDA guidance raised sharply", "sentiment": "bullish", "score": 0.8},
-            {"text": "NVDA faces some export risk", "sentiment": "bearish", "score": 0.6},
+            {"text": "NVDA earnings crushed estimates"},
+            {"text": "NVDA guidance raised sharply"},
+            {"text": "NVDA faces some export risk"},
         ])
-        out = {d["ticker"]: d for d in az._finbert_asset_sentiments(["NVDA"], ner)}
-        assert out["NVDA"]["direction"] == "bullish"
-        # outlooks mirror direction; magnitude/confidence from mean score
-        assert out["NVDA"]["short_term"] == "bullish"
-        assert out["NVDA"]["long_term"] == "bullish"
+        asset = types.SimpleNamespace(ticker="NVDA", canonical_name="NVDA", surface_forms=[])
+        scorer = self._scorer({"bull": ["crushed", "raised"], "bear": ["risk"]})
+        out = {d["ticker"]: d for d in score_assets([asset], ner, scorer)}
+        assert out["NVDA"]["direction"].endswith("bullish")  # 2 bull vs 1 bear
         assert 0.0 <= out["NVDA"]["magnitude"] <= 1.0
 
-    def test_no_mention_defaults_neutral(self):
-        az = _bare_analyzer()
-        ner = types.SimpleNamespace(sentence_sentiments=[
-            {"text": "Bitcoin rallied", "sentiment": "bullish", "score": 0.9}])
-        out = {d["ticker"]: d for d in az._finbert_asset_sentiments(["NVDA"], ner)}
+    def test_no_mention_defaults_fallback(self):
+        from talisman_ai.analyzer.aspect_sentiment import score_assets
+        ner = types.SimpleNamespace(sentence_sentiments=[{"text": "Bitcoin rallied"}])
+        asset = types.SimpleNamespace(ticker="NVDA", canonical_name="Nvidia", surface_forms=[])
+        scorer = self._scorer({"bull": [], "bear": []})
+        out = {d["ticker"]: d for d in score_assets([asset], ner, scorer,
+                                                    fallback_direction="neutral")}
         assert out["NVDA"]["direction"] == "neutral"
-        assert out["NVDA"]["magnitude"] == 0.5
+        assert "fell back" in out["NVDA"]["causal_driver"]
 
 
 class TestScoringHelpers:
