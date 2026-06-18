@@ -1,6 +1,8 @@
 from enum import Enum
+import os
 import time
 import json
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, List
 
@@ -300,9 +302,25 @@ class ArticleStore:
         for article_id, item in self._articles.items():
             data["articles"][article_id] = item.model_dump(mode='json')
 
-        # Write to file
-        with open(file_path, 'w') as f:
-            json.dump(data, f, indent=2, default=str)
+        # Atomic write: serialize to a temp file in the same directory, fsync,
+        # then os.replace() (atomic on POSIX). An interrupted write (e.g. the
+        # process being restarted mid-save) can never truncate the live store,
+        # which would otherwise crash-loop the neuron on the next load.
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(file_path.parent), prefix=".article_store.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, 'w') as f:
+                json.dump(data, f, indent=2, default=str)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, file_path)
+        except BaseException:
+            # Leave the existing store untouched; drop the partial temp file.
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
         bt.logging.debug(f"Article store saved to {file_path} ({len(self._articles)} articles)")
 
@@ -324,9 +342,23 @@ class ArticleStore:
             bt.logging.debug(f"No article store file found at {file_path}, starting empty")
             return
 
-        # Read from file
-        with open(file_path, 'r') as f:
-            data = json.load(f)
+        # Read from file. A corrupt/truncated store must NOT crash-loop the
+        # neuron on startup: quarantine the bad file and start empty (it gets
+        # repopulated from the live feed).
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as e:
+            corrupt_path = file_path.with_suffix(file_path.suffix + '.corrupt')
+            try:
+                os.replace(file_path, corrupt_path)
+            except OSError:
+                corrupt_path = file_path
+            self._articles = {}
+            bt.logging.error(
+                f"Article store at {file_path} is corrupt ({e}); quarantined to "
+                f"{corrupt_path} and started with an empty store")
+            return
 
         # Clear existing articles
         self._articles = {}
