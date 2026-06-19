@@ -175,3 +175,5 @@ testing/
 .penalty_broadcast_state.json
 # Atomic-save temp files for the article store (transient; may leak on SIGKILL)
 .article_store.*.tmp
+# Article store runtime data (local snapshot, not code)
+article_store.json
