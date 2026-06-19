@@ -77,6 +77,10 @@ class NERFusionEngine:
     def __init__(self, enable_refined: bool = True, enable_flair: bool = True,
                  enable_gliner: bool = True, enable_finbert: bool = True,
                  enable_multilingual: bool = True):
+        # Pin cuDNN/cuBLAS/RNG before any model loads so miner and validator get
+        # reproducible neural output (shrinks cross-run GPU jitter; no quality cost).
+        from .determinism import configure_determinism
+        configure_determinism()
         self._overrides = _load_json("financial_overrides.json").get("entities", {})
         self._qid_map = _load_json("wikidata_ticker_map.json").get("entities", {})
 

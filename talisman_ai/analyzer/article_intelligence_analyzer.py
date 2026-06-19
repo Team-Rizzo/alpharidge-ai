@@ -359,6 +359,8 @@ class ArticleIntelligenceAnalyzer:
 
     def __init__(self, model: str = None, api_key: str = None, llm_base: str = None,
                  enable_refined: bool = True, enable_flair: bool = True):
+        from .determinism import configure_determinism
+        configure_determinism()  # reproducible neural output before any model loads
         if config:
             self.model = model or config.MODEL
             self.api_key = api_key or config.API_KEY
