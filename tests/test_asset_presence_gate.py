@@ -71,13 +71,15 @@ def test_keyword_validator_asset_with_miner_none_still_fails():
     assert asset_presence_ok({}, _src(AAPL="keyword")) is False
 
 
-def test_override_counts_as_deterministic():
-    # financial_overrides.json is a static dict lookup -> deterministic -> gated
-    assert asset_presence_ok({}, _src(BTC="override")) is False
+def test_override_only_does_not_trigger_gate():
+    # "override" is a deterministic DICT lookup, but it only fires on a span the
+    # neural NER surfaced (_resolve_entity runs on grounded candidates), so its
+    # trigger is neural and can diverge cross-host -> excluded from the floor.
+    assert asset_presence_ok({}, _src(BTC="override")) is True
 
 
-def test_mixed_sources_count_only_deterministic_toward_floor():
-    # 1 keyword (deterministic) + 1 neural; floor 1 -> keyword alone meets it -> fail
-    assert asset_presence_ok({}, _src(AAPL="keyword", MSFT="refined")) is False
-    # but a lone neural asset with floor 1 does NOT meet it -> pass
-    assert asset_presence_ok({}, _src(MSFT="refined")) is True
+def test_mixed_sources_count_only_keyword_toward_floor():
+    # only the pure-gazetteer "keyword" subset is bit-identical cross-host.
+    assert asset_presence_ok({}, _src(AAPL="keyword", MSFT="refined")) is False  # keyword meets floor
+    assert asset_presence_ok({}, _src(MSFT="refined")) is True                   # neural only -> pass
+    assert asset_presence_ok({}, _src(BTC="override", ETH="refined")) is True     # no keyword -> pass

@@ -1000,12 +1000,15 @@ def _sentiment_agreement(a: str, b: str) -> float:
 # testnet can raise it if cross-hardware NER ever erases a lone borderline asset.
 ASSET_PRESENCE_FLOOR = int(os.getenv("ASSET_PRESENCE_FLOOR", "1"))
 
-# Asset-resolution sources that are DETERMINISTIC across hardware: the gazetteer
-# keyword extractor and the static financial-overrides dict. Neural sources
-# (ReFinED/GLiNER, "refined"/model) can diverge cross-host, so they must NOT count
-# toward the presence floor — else a validator-only neural asset hard-fails an
-# honest miner whose neural path didn't resolve it.
-_DETERMINISTIC_ASSET_SOURCES = {"keyword", "override"}
+# Asset-resolution source that is bit-identical across hardware: ONLY the gazetteer
+# keyword extractor (asset_extractor.extract_assets — pure string matching, no
+# neural dependency). Everything else is excluded from the presence floor:
+# "refined"/model are neural, and "override" — though a deterministic dict lookup —
+# only fires on a candidate span the neural NER first surfaced (_resolve_entity runs
+# on grounded candidates), so its trigger inherits the same cross-host variance.
+# Counting any of them would let a validator-only neural/override asset hard-fail an
+# honest miner whose NER didn't surface that span.
+_DETERMINISTIC_ASSET_SOURCES = {"keyword"}
 
 
 def asset_presence_ok(m_assets: dict, v_assets: dict, floor: int = None) -> bool:
