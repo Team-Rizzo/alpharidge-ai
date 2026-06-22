@@ -409,6 +409,11 @@ class AssetSentiment(BaseModel):
 
     relevance_score: float = Field(..., ge=0.0, le=1.0)
     is_primary_subject: bool = False
+    # How the ticker was resolved: "keyword"/"override" are deterministic
+    # (gazetteer / static dict), "refined" and other model paths are neural and can
+    # diverge across hardware. The validator's asset-presence gate counts only the
+    # deterministic subset. Defaults to "keyword" for backward-compat deserialization.
+    resolved_via: str = "keyword"
 
     evidence_spans: List[str] = Field(default_factory=list)
 

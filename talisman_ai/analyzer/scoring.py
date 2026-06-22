@@ -1000,23 +1000,35 @@ def _sentiment_agreement(a: str, b: str) -> float:
 # testnet can raise it if cross-hardware NER ever erases a lone borderline asset.
 ASSET_PRESENCE_FLOOR = int(os.getenv("ASSET_PRESENCE_FLOOR", "1"))
 
+# Asset-resolution sources that are DETERMINISTIC across hardware: the gazetteer
+# keyword extractor and the static financial-overrides dict. Neural sources
+# (ReFinED/GLiNER, "refined"/model) can diverge cross-host, so they must NOT count
+# toward the presence floor — else a validator-only neural asset hard-fails an
+# honest miner whose neural path didn't resolve it.
+_DETERMINISTIC_ASSET_SOURCES = {"keyword", "override"}
+
 
 def asset_presence_ok(m_assets: dict, v_assets: dict, floor: int = None) -> bool:
-    """False (-> hard fail) iff the validator resolved >= `floor` assets but the
-    miner submitted none.
+    """False (-> hard fail) iff the validator resolved >= `floor` *deterministic*
+    assets but the miner submitted none.
 
     The Tier-2b agreement gate is skipped when there are no common assets, so a
     miner that sends zero assets bypasses it for only the Tier-3 partial-credit
     cost — the same omission free-pass §2.3 closed for embeddings. Asymmetric: a
-    validator that itself resolved nothing never penalizes the miner. Safe against
-    cross-hardware jitter because the primary asset path is deterministic gazetteer
-    extraction (identical on both sides); jitter can flip an asset's sentiment
-    class but cannot erase a keyword-matched ticker, so total miner-absence against
-    a non-empty validator set is a skip signal, not jitter.
+    validator that itself resolved nothing never penalizes the miner.
+
+    Only the deterministic (gazetteer/override) subset of the validator's assets
+    counts toward the floor: those are bit-identical on both sides, so a total
+    miner-absence against them is a genuine skip signal. Neural-NER-resolved assets
+    are excluded because they can legitimately differ across hardware, and failing
+    an honest miner over a lone divergent neural asset would be worse than the
+    bypass we're closing.
     """
     if floor is None:
         floor = ASSET_PRESENCE_FLOOR
-    return not (len(v_assets) >= floor and len(m_assets) == 0)
+    det_v = sum(1 for a in v_assets.values()
+                if getattr(a, "resolved_via", "keyword") in _DETERMINISTIC_ASSET_SOURCES)
+    return not (det_v >= floor and len(m_assets) == 0)
 
 
 def asset_sentiment_agreement(m_assets: dict, v_assets: dict) -> Tuple[float, int]:

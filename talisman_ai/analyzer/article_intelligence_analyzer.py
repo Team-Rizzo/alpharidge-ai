@@ -798,6 +798,7 @@ class ArticleIntelligenceAnalyzer:
                     causal_driver=(s.get("causal_driver") or "No specific driver identified")[:500],
                     relevance_score=min(1.0, e.confidence),
                     is_primary_subject=getattr(e, "is_primary_subject", False),
+                    resolved_via=getattr(e, "source", "keyword") or "keyword",
                     evidence_spans=[e.text],
                 ))
             except Exception as ex:
