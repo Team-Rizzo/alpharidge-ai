@@ -1180,15 +1180,35 @@ class TestHybridValidationContract:
         ok, comp, details = validate_article_intelligence(miner, validator)
         assert not ok and details["tier2"]["contagion_determinism"]["jaccard"] < 0.9
 
+    @staticmethod
+    def _nvda(direction):
+        return AssetSentiment(
+            ticker="NVDA", asset_name="NVIDIA", asset_class=AssetClass.EQUITY,
+            direction=direction, magnitude=0.5, confidence=0.5,
+            short_term_outlook=direction, medium_term_outlook=direction,
+            long_term_outlook=direction, causal_driver="x",
+            relevance_score=1.0, is_primary_subject=True, evidence_spans=["NVDA"])
+
     def test_asset_sentiment_determinism_gate(self):
-        def _asset(direction):
-            return AssetSentiment(
-                ticker="NVDA", asset_name="NVIDIA", asset_class=AssetClass.EQUITY,
-                direction=direction, magnitude=0.5, confidence=0.5,
-                short_term_outlook=direction, medium_term_outlook=direction,
-                long_term_outlook=direction, causal_driver="x",
-                relevance_score=1.0, is_primary_subject=True, evidence_spans=["NVDA"])
-        miner = _make_intel(assets=[_asset(Sentiment.BULLISH)])
-        validator = _make_intel(assets=[_asset(Sentiment.BEARISH)])
+        # A full sign reversal on the only common asset drags mean agreement below
+        # the threshold -> hard fail. (Schema: agreement/common_assets, not the old
+        # direction_rate/outlook_rate.)
+        miner = _make_intel(assets=[self._nvda(Sentiment.BULLISH)])
+        validator = _make_intel(assets=[self._nvda(Sentiment.BEARISH)])
         ok, comp, details = validate_article_intelligence(miner, validator)
-        assert not ok and details["tier2"]["asset_sentiment_determinism"]["direction_rate"] < 0.9
+        det = details["tier2"]["asset_sentiment_determinism"]
+        assert not ok and det["agreement"] < det["threshold"] and det["common_assets"] == 1
+
+    def test_zero_asset_miner_against_resolved_validator_hard_fails(self):
+        # Anti-cheat: validator resolved an asset, miner submitted none -> the miner
+        # is skipping the Tier-2b agreement gate (a no-op with no common assets).
+        miner = _make_intel(assets=[])
+        validator = _make_intel(assets=[self._nvda(Sentiment.BULLISH)])
+        ok, comp, details = validate_article_intelligence(miner, validator)
+        assert not ok and comp == 0.0
+        assert details["tier2"]["asset_presence"]["reason"] == "miner_missing_assets"
+
+    def test_both_zero_assets_still_passes(self):
+        # Symmetric absence (no assets either side) is normal -> not penalized.
+        ok, comp, _ = validate_article_intelligence(_make_intel(assets=[]), _make_intel(assets=[]))
+        assert ok and comp > 0.99

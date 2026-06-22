@@ -984,6 +984,30 @@ def _sentiment_agreement(a: str, b: str) -> float:
     return max(0.0, 1.0 - (dist - 1) / (len(_SENTIMENT_LADDER) - 2))
 
 
+# Minimum validator-resolved asset count above which a miner submitting ZERO
+# assets is treated as skipping the Tier-2b gate (anti-cheat). Env-overridable so
+# testnet can raise it if cross-hardware NER ever erases a lone borderline asset.
+ASSET_PRESENCE_FLOOR = int(os.getenv("ASSET_PRESENCE_FLOOR", "1"))
+
+
+def asset_presence_ok(m_assets: dict, v_assets: dict, floor: int = None) -> bool:
+    """False (-> hard fail) iff the validator resolved >= `floor` assets but the
+    miner submitted none.
+
+    The Tier-2b agreement gate is skipped when there are no common assets, so a
+    miner that sends zero assets bypasses it for only the Tier-3 partial-credit
+    cost — the same omission free-pass §2.3 closed for embeddings. Asymmetric: a
+    validator that itself resolved nothing never penalizes the miner. Safe against
+    cross-hardware jitter because the primary asset path is deterministic gazetteer
+    extraction (identical on both sides); jitter can flip an asset's sentiment
+    class but cannot erase a keyword-matched ticker, so total miner-absence against
+    a non-empty validator set is a skip signal, not jitter.
+    """
+    if floor is None:
+        floor = ASSET_PRESENCE_FLOOR
+    return not (len(v_assets) >= floor and len(m_assets) == 0)
+
+
 def asset_sentiment_agreement(m_assets: dict, v_assets: dict) -> Tuple[float, int]:
     """Mean per-asset sentiment agreement over tickers common to both sides.
 
@@ -1079,6 +1103,15 @@ def validate_article_intelligence(
     # or different model) scores low and drags the mean below threshold.
     m_assets = {a.ticker: a for a in m.assets}
     v_assets = {a.ticker: a for a in v.assets}
+    # Anti-cheat presence check (asymmetric, mirrors the Tier-2.5 embedding check):
+    # if the validator resolved assets but the miner submitted none, the miner is
+    # skipping the agreement gate below (which is a no-op with no common assets).
+    if not asset_presence_ok(m_assets, v_assets):
+        details["tier2"]["asset_presence"] = {"status": "fail", "reason": "miner_missing_assets",
+                                               "validator_assets": len(v_assets), "miner_assets": 0}
+        bt.logging.warning(f"[V2_VALIDATE] Tier 2 FAIL: miner submitted 0 assets but validator "
+                           f"resolved {len(v_assets)} (asset-gate bypass)")
+        return False, 0.0, details
     agreement, n_common = asset_sentiment_agreement(m_assets, v_assets)
     if n_common:
         details["tier2"]["asset_sentiment_determinism"] = {
