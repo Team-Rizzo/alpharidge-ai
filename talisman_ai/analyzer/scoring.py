@@ -941,6 +941,17 @@ def _ev(x) -> str:
     return (x.value if hasattr(x, "value") else str(x)).lower()
 
 
+# Tier-3 composite floor a miner's analysis must clear. This is a QUALITY floor,
+# NOT the anti-cheat line (the deterministic Tier-1/2/2.5 gates are). Calibrated on
+# an n~920 honest deepseek-vs-deepseek sweep (scripts/sweep_analyze.py): honest
+# composites have P1~0.61 / median ~0.865, and at the old 0.75 ~8% of honest
+# single-article samples were rejected on pure LLM free-text variance
+# (chart_summary/event_fingerprint differ between two independent temp-0 calls).
+# 0.70 cuts honest false-reject to ~4% while a skip-LLM miner still fails ~70% of
+# samples, so consistent failers are still sorted out. Env-overridable for tuning.
+TIER3_THRESHOLD = float(os.getenv("TIER3_THRESHOLD", "0.70"))
+
+
 def _ordinal_score(pred: str, gold: str, ladder: List[str]) -> float:
     """1.0 on exact match; otherwise 1 - normalized ladder distance. 0.0 if off-ladder."""
     if pred == gold:
@@ -1281,11 +1292,8 @@ def validate_article_intelligence(
     details["tier3"] = {k: {"score": round(tier3_scores[k], 4), "weight": weights[k]} for k in weights}
     details["tier3"]["composite"] = round(composite, 4)
 
-    # Threshold tuned empirically: deepseek-vs-deepseek (miner vs validator, same model)
-    # honest composites cluster 0.74-0.93 (median ~0.87). 0.75 passes ~honest-floor while
-    # anti-cheat is enforced by the deterministic Tier-1/2/2.5 gates, not this composite.
-    # NOTE: set on n=20; widen the sample before mainnet to finalize.
-    TIER3_THRESHOLD = 0.75
+    # Quality floor (module-level TIER3_THRESHOLD, env-overridable). Recalibrated
+    # 0.75 -> 0.70 on an n~920 honest sweep; see the constant's definition above.
     is_valid = composite >= TIER3_THRESHOLD
     if is_valid:
         bt.logging.success(f"[V2_VALIDATE] Article ACCEPTED: composite={composite:.4f}")

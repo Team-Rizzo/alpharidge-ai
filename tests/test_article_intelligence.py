@@ -1212,3 +1212,59 @@ class TestHybridValidationContract:
         # Symmetric absence (no assets either side) is normal -> not penalized.
         ok, comp, _ = validate_article_intelligence(_make_intel(assets=[]), _make_intel(assets=[]))
         assert ok and comp > 0.99
+
+    # ── TIER3_THRESHOLD recalibration 0.75 -> 0.70 ─────────────────────────────
+    @staticmethod
+    def _noisy_miner():
+        # An honest miner whose independent LLM call produced different free-text
+        # (chart_summary, event_fingerprint, narrative_keywords) + a couple of
+        # nominal-enum differences -- the realistic source of honest composite
+        # variance. Deterministic fields stay identical so only Tier-3 moves.
+        return _make_intel(
+            chart_summary=ChartSummary(headline="Totally different phrasing here",
+                                       one_liner="A wholly different one liner sentence about it",
+                                       context_paragraph="An unrelated paragraph with other wording entirely."),
+            event_fingerprint=EventFingerprint(event_type=EventType.MONETARY_POLICY,
+                                               event_title="Different event title text",
+                                               event_date="2026-01-01", content_hash="hash123",
+                                               semantic_fingerprint=["alpha", "beta", "gamma"]),
+            narrative_keywords=["xyz-unrelated-narrative"],
+            content_type=ArticleContentType.OPINION,
+            primary_geo=GeoImpactZone.EU,
+            target_audience=TargetAudience.RETAIL)
+
+    def test_tier3_threshold_value_is_recalibrated(self):
+        import talisman_ai.analyzer.scoring as S
+        assert S.TIER3_THRESHOLD == 0.70
+
+    def test_threshold_gates_exactly_at_composite(self):
+        # Robust mechanism proof: the accept/reject boundary tracks TIER3_THRESHOLD.
+        import talisman_ai.analyzer.scoring as S
+        miner, validator = self._noisy_miner(), _make_intel(narrative_keywords=["fed-policy"])
+        _, comp, _ = validate_article_intelligence(miner, validator)
+        assert comp < 1.0  # genuinely degraded
+        orig = S.TIER3_THRESHOLD
+        try:
+            S.TIER3_THRESHOLD = round(comp - 0.02, 4)
+            ok_lo, _, _ = validate_article_intelligence(miner, validator)
+            S.TIER3_THRESHOLD = round(comp + 0.02, 4)
+            ok_hi, _, _ = validate_article_intelligence(miner, validator)
+        finally:
+            S.TIER3_THRESHOLD = orig
+        assert ok_lo and not ok_hi
+
+    def test_recalibration_rescues_honest_noise_pair(self):
+        # A pair that the old 0.75 floor rejected but 0.70 accepts -> the whole point.
+        import talisman_ai.analyzer.scoring as S
+        miner, validator = self._noisy_miner(), _make_intel(narrative_keywords=["fed-policy"])
+        _, comp, _ = validate_article_intelligence(miner, validator)
+        assert 0.70 <= comp < 0.75, f"craft composite {comp} not in the recalibration band"
+        orig = S.TIER3_THRESHOLD
+        try:
+            S.TIER3_THRESHOLD = 0.70
+            ok_new, _, _ = validate_article_intelligence(miner, validator)
+            S.TIER3_THRESHOLD = 0.75
+            ok_old, _, _ = validate_article_intelligence(miner, validator)
+        finally:
+            S.TIER3_THRESHOLD = orig
+        assert ok_new and not ok_old
