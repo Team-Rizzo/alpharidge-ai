@@ -159,6 +159,6 @@ def _print_report(results: List[CaseResult]) -> None:
 
 
 if __name__ == "__main__":
-    from talisman_ai.analyzer.ner_fusion import NERFusionEngine
+    from alpharidge_ai.analyzer.ner_fusion import NERFusionEngine
     eng = NERFusionEngine()
     _print_report(run(eng))

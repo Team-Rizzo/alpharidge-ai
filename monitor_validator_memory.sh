@@ -1,6 +1,6 @@
 #!/bin/bash
 # Memory monitoring script for sn45_vali
-LOG_FILE="/home/rizzo/talisman-ai/validator_memory.log"
+LOG_FILE="/home/rizzo/alpharidge-ai/validator_memory.log"
 echo "=== Validator Memory Monitoring Started $(date) ===" >> "$LOG_FILE"
 echo "Timestamp,Uptime,Memory_MB,CPU" >> "$LOG_FILE"
 

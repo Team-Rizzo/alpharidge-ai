@@ -33,7 +33,7 @@ When the miner sends the response back (in `neurons/miner.py:114-159`):
 **Issue**: The miner's metagraph may not be syncing frequently enough, so it only has validator UID 21 in its metagraph.
 
 **Evidence**:
-- The miner syncs its metagraph based on `epoch_length` blocks (see `talisman_ai/base/miner.py:144-146`)
+- The miner syncs its metagraph based on `epoch_length` blocks (see `alpharidge_ai/base/miner.py:144-146`)
 - If the metagraph hasn't synced recently, it may only contain old validator information
 - When the miner looks up validator hotkeys, it might only find UID 21
 
@@ -123,8 +123,8 @@ When the miner sends the response back (in `neurons/miner.py:114-159`):
 - **Miner receives batches**: `neurons/miner.py:80-112`
 - **Miner looks up validator UID**: `neurons/miner.py:152-159`
 - **Validator selects miners**: `neurons/validator.py:174`
-- **Metagraph sync**: `talisman_ai/base/miner.py:216-221`
-- **Miner selection logic**: `talisman_ai/utils/uids.py:29-81`
+- **Metagraph sync**: `alpharidge_ai/base/miner.py:216-221`
+- **Miner selection logic**: `alpharidge_ai/utils/uids.py:29-81`
 
 ## Recommendations
 

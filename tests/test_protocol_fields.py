@@ -1,4 +1,4 @@
-from talisman_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch, ValidatorRewards
+from alpharidge_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch, ValidatorRewards
 
 
 def test_batches_carry_miner_signatures_and_nonces():

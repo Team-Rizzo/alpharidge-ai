@@ -2,10 +2,10 @@
 import types
 import pytest
 
-from talisman_ai.analyzer.horizon import (
+from alpharidge_ai.analyzer.horizon import (
     bucket_sentence, decay_one_step, project_horizons,
 )
-from talisman_ai.analyzer.aspect_sentiment import score_assets, AspectSentimentScorer
+from alpharidge_ai.analyzer.aspect_sentiment import score_assets, AspectSentimentScorer
 
 
 # ── decay ──────────────────────────────────────────────────────────────────────

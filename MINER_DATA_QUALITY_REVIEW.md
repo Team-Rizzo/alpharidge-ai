@@ -132,7 +132,7 @@ fetching — but the guard against summary‑only analysis should exist regardle
 
 ## 4. What needs changing (recommendations, roughly in priority order)
 
-1. **Tighten the asset extractor** (`talisman_ai/analyzer/asset_extractor.py`). Require word‑boundary
+1. **Tighten the asset extractor** (`alpharidge_ai/analyzer/asset_extractor.py`). Require word‑boundary
    matches, a minimum token length (kill 1‑letter `V`, 3‑letter dictionary‑word collisions like
    `ADA`/`USO`/`XAU`), and ignore matches inside known boilerplate ("follow us on Google/Facebook",
    photo credits). Consider gating ticker emission on `impact_potential != negligible`.
@@ -171,12 +171,12 @@ positives** (§3.1). Run the §6.4 corpus queries to quantify each.
 ## 6. How to reproduce this review yourself
 
 Everything below runs against the local stack (Postgres on `127.0.0.1:5433`, db `talisman`).
-Use the `talisman_ai` conda env so the JSONB decodes cleanly.
+Use the `alpharidge_ai` conda env so the JSONB decodes cleanly.
 
 ### 6.1 Pull samples (original article + full analysis) to disk
 
 ```bash
-/home/rizzo/miniconda3/envs/talisman_ai/bin/python - <<'PY'
+/home/rizzo/miniconda3/envs/alpharidge_ai/bin/python - <<'PY'
 import psycopg2, json
 conn = psycopg2.connect(host="127.0.0.1", port=5433, dbname="talisman",
                         user="talisman", password="talisman_dev")
@@ -203,7 +203,7 @@ PY
 ### 6.2 Strip the 384‑dim embeddings so the JSON is readable
 
 ```bash
-/home/rizzo/miniconda3/envs/talisman_ai/bin/python - <<'PY'
+/home/rizzo/miniconda3/envs/alpharidge_ai/bin/python - <<'PY'
 import json, glob
 def strip(o):
     if isinstance(o, dict):

@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from talisman_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
-from talisman_ai.models.article_intelligence import EntityRole, Sentiment
+from alpharidge_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
+from alpharidge_ai.models.article_intelligence import EntityRole, Sentiment
 
 
 def _ent(name, etype="organization", role="mentioned", conf=0.9, sentiment=None):

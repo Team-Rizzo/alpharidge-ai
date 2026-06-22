@@ -7,7 +7,7 @@ to the article topic for off-topic grammatical chrome. Deterministic.
 
 import math
 
-from talisman_ai.analyzer.content_extractor import (
+from alpharidge_ai.analyzer.content_extractor import (
     ContentExtractor, looks_like_html, _block_features,
 )
 

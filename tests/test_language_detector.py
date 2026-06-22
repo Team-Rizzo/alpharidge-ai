@@ -5,7 +5,7 @@ match) and must correctly distinguish the languages actually seen in the corpus
 (English, Italian, Russian).
 """
 
-from talisman_ai.analyzer.language_detector import detect_language
+from alpharidge_ai.analyzer.language_detector import detect_language
 
 
 def test_detects_english():

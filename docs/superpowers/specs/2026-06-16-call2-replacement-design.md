@@ -3,7 +3,7 @@
 **Date:** 2026-06-16
 **Status:** Approved (pending spec review)
 **Predecessor:** `2026-06-16-ml-replacement-benchmark-design.md` (Plan 1, single-value classification, done)
-**Repo:** `/home/rizzo/talisman/eval` (own git); imports `talisman-ai` analyzer + data.
+**Repo:** `/home/rizzo/talisman/eval` (own git); imports `alpharidge-ai` analyzer + data.
 
 ## Goal
 
@@ -55,7 +55,7 @@ per-item confidence, so they are **replace-or-characterize**, not gated.
 ### 1. Contagion: learned relation extraction
 `eval/predictors/contagion.py` — `GlirelContagion`:
 - Detect candidate nodes: spaCy entities + the asset gazetteer (reuse
-  `talisman_ai` asset extractor) → resolved tickers/entities with char spans.
+  `alpharidge_ai` asset extractor) → resolved tickers/entities with char spans.
 - **GLiREL** (zero-shot, `pip install glirel`, CPU) scores relations between node
   pairs against a fixed finance relation-label set
   (`supply_chain`, `competitor`, `regulatory_spillover`, `capital_flow`,

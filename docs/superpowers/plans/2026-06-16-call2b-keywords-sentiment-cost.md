@@ -157,7 +157,7 @@ def _sentences(art):
     return [s.strip() for s in text.split(".") if s.strip()]
 
 def _default_extract_tickers(title, body):
-    from talisman_ai.analyzer.asset_extractor import AssetExtractor
+    from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
     seen, out = set(), []
     for m in AssetExtractor().extract_assets(title or "", body or ""):
         if m.ticker not in seen:

@@ -1,6 +1,6 @@
 # Article-Intelligence Quality Overhaul — Benchmark Report
 
-**Date:** 2026-06-17 · **Branch:** `article-intelligence-v2` (talisman-ai) + `feat/call2b-keywords-sentiment`/`feat/...` (eval)
+**Date:** 2026-06-17 · **Branch:** `article-intelligence-v2` (alpharidge-ai) + `feat/call2b-keywords-sentiment`/`feat/...` (eval)
 **Status:** Implemented, tested, benchmarked. **Not committed to main / not pushed** — for your review.
 
 ## What was fixed (the four reported defects)
@@ -50,5 +50,5 @@ The gold labels were produced by the *same analyzer with the old, buggy code*. S
 - Per-asset direction on genuinely *mixed* articles leans to FinBERT's majority vote (can read bearish where a human says neutral) — acceptable; the bug (stuck-neutral) is fixed.
 
 ## Commits (local only, not pushed)
-talisman-ai `article-intelligence-v2`: wip-baseline `f4c766f` → … → `d99e33e` (curated set, P2 gate, P4 dedup+fragments, P3 direction, P1 deterministic narratives + crypto gate).
+alpharidge-ai `article-intelligence-v2`: wip-baseline `f4c766f` → … → `d99e33e` (curated set, P2 gate, P4 dedup+fragments, P3 direction, P1 deterministic narratives + crypto gate).
 eval: NarrativeEmbedKeywords + tau sweep + harness + crypto gate.

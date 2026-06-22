@@ -6,15 +6,15 @@ import asyncio
 import bittensor as bt
 
 # Bittensor Miner Template:
-import talisman_ai
+import alpharidge_ai
 
 # import base miner class which takes care of most of the boilerplate
-from talisman_ai.base.miner import BaseMinerNeuron
-from talisman_ai.analyzer import setup_analyzer
-from talisman_ai.analyzer import setup_telegram_analyzer
-from talisman_ai.analyzer import setup_news_analyzer
-from talisman_ai.analyzer import setup_article_intelligence_analyzer
-from talisman_ai.utils.api_models import TweetAnalysisBase, TelegramMessageAnalysis, NewsArticleAnalysisBase
+from alpharidge_ai.base.miner import BaseMinerNeuron
+from alpharidge_ai.analyzer import setup_analyzer
+from alpharidge_ai.analyzer import setup_telegram_analyzer
+from alpharidge_ai.analyzer import setup_news_analyzer
+from alpharidge_ai.analyzer import setup_article_intelligence_analyzer
+from alpharidge_ai.utils.api_models import TweetAnalysisBase, TelegramMessageAnalysis, NewsArticleAnalysisBase
 
 
 class Miner(BaseMinerNeuron):
@@ -72,34 +72,34 @@ class Miner(BaseMinerNeuron):
         bt.logging.info(f"[Miner] V3 miner started with hotkey: {hotkey}")
 
     async def blacklist_tweet_batch(
-        self, synapse: talisman_ai.protocol.TweetBatch
+        self, synapse: alpharidge_ai.protocol.TweetBatch
     ) -> typing.Tuple[bool, str]:
         """Typed wrapper so bittensor's axon signature checks pass for TweetBatch."""
         return await self.blacklist(synapse)
 
-    async def priority_tweet_batch(self, synapse: talisman_ai.protocol.TweetBatch) -> float:
+    async def priority_tweet_batch(self, synapse: alpharidge_ai.protocol.TweetBatch) -> float:
         """Typed wrapper so bittensor's axon signature checks pass for TweetBatch."""
         return await self.priority(synapse)
 
     async def blacklist_telegram_batch(
-        self, synapse: talisman_ai.protocol.TelegramBatch
+        self, synapse: alpharidge_ai.protocol.TelegramBatch
     ) -> typing.Tuple[bool, str]:
         """Typed wrapper so bittensor's axon signature checks pass for TelegramBatch."""
         return await self.blacklist(synapse)
 
-    async def priority_telegram_batch(self, synapse: talisman_ai.protocol.TelegramBatch) -> float:
+    async def priority_telegram_batch(self, synapse: alpharidge_ai.protocol.TelegramBatch) -> float:
         """Typed wrapper so bittensor's axon signature checks pass for TelegramBatch."""
         return await self.priority(synapse)
 
     async def blacklist_article_batch(
-        self, synapse: talisman_ai.protocol.ArticleBatch
+        self, synapse: alpharidge_ai.protocol.ArticleBatch
     ) -> typing.Tuple[bool, str]:
         return await self.blacklist(synapse)
 
-    async def priority_article_batch(self, synapse: talisman_ai.protocol.ArticleBatch) -> float:
+    async def priority_article_batch(self, synapse: alpharidge_ai.protocol.ArticleBatch) -> float:
         return await self.priority(synapse)
 
-    async def forward_is_alive(self, synapse: talisman_ai.protocol.IsAlive) -> talisman_ai.protocol.IsAlive:
+    async def forward_is_alive(self, synapse: alpharidge_ai.protocol.IsAlive) -> alpharidge_ai.protocol.IsAlive:
         """
         Processes incoming IsAlive synapses from validators.
         """
@@ -116,13 +116,13 @@ class Miner(BaseMinerNeuron):
         Returns:
             bt.Synapse: The processed synapse response.
         """
-        if isinstance(synapse, talisman_ai.protocol.TweetBatch):
+        if isinstance(synapse, alpharidge_ai.protocol.TweetBatch):
             return await self.forward_tweets(synapse)
         
         bt.logging.warning(f"Received synapse type: {type(synapse).__name__}, but no handler implemented")
         return synapse
 
-    async def forward_tweets(self, synapse: talisman_ai.protocol.TweetBatch) -> talisman_ai.protocol.TweetBatch:
+    async def forward_tweets(self, synapse: alpharidge_ai.protocol.TweetBatch) -> alpharidge_ai.protocol.TweetBatch:
         """
         Processes TweetBatch requests from validators.
         
@@ -156,7 +156,7 @@ class Miner(BaseMinerNeuron):
         bt.logging.info(f"[Miner] Started background processing for TweetBatch, returning immediately")
         return synapse
 
-    async def forward_telegram_messages(self, synapse: talisman_ai.protocol.TelegramBatch) -> talisman_ai.protocol.TelegramBatch:
+    async def forward_telegram_messages(self, synapse: alpharidge_ai.protocol.TelegramBatch) -> alpharidge_ai.protocol.TelegramBatch:
         """
         Processes TelegramBatch requests from validators.
         
@@ -190,7 +190,7 @@ class Miner(BaseMinerNeuron):
         bt.logging.info(f"[Miner] Started background processing for TelegramBatch, returning immediately")
         return synapse
 
-    async def forward_articles(self, synapse: talisman_ai.protocol.ArticleBatch) -> talisman_ai.protocol.ArticleBatch:
+    async def forward_articles(self, synapse: alpharidge_ai.protocol.ArticleBatch) -> alpharidge_ai.protocol.ArticleBatch:
         validator_hotkey = synapse.dendrite.hotkey if synapse.dendrite else None
         bt.logging.info(f"[Miner] Received ArticleBatch with {len(synapse.article_batch)} article(s) from validator {validator_hotkey}")
 
@@ -210,7 +210,7 @@ class Miner(BaseMinerNeuron):
         bt.logging.info(f"[Miner] Started background processing for ArticleBatch, returning immediately")
         return synapse
 
-    def _process_and_send_tweets(self, synapse: talisman_ai.protocol.TweetBatch, validator_hotkey: str):
+    def _process_and_send_tweets(self, synapse: alpharidge_ai.protocol.TweetBatch, validator_hotkey: str):
         """
         Background thread function to process tweets and send results back to validator.
         
@@ -246,7 +246,7 @@ class Miner(BaseMinerNeuron):
             
             bt.logging.info(f"[Miner] Background: Finished processing, sending back to validator {validator_hotkey}")
 
-            from talisman_ai.utils.miner_signing import sign_items
+            from alpharidge_ai.utils.miner_signing import sign_items
             miner_signatures, nonces = sign_items(self.wallet.hotkey, synapse.tweet_batch, id_attr="id")
             synapse.miner_signatures = miner_signatures
             synapse.nonces = nonces
@@ -302,7 +302,7 @@ class Miner(BaseMinerNeuron):
         except Exception as e:
             bt.logging.error(f"[Miner] Background: Error processing tweets: {e}")
 
-    def _process_and_send_telegram_messages(self, synapse: talisman_ai.protocol.TelegramBatch, validator_hotkey: str):
+    def _process_and_send_telegram_messages(self, synapse: alpharidge_ai.protocol.TelegramBatch, validator_hotkey: str):
         """
         Background thread function to process telegram messages and send results back to validator.
         
@@ -363,7 +363,7 @@ class Miner(BaseMinerNeuron):
             
             bt.logging.info(f"[Miner] Background: Finished processing telegram messages, sending back to validator {validator_hotkey}")
 
-            from talisman_ai.utils.miner_signing import sign_items
+            from alpharidge_ai.utils.miner_signing import sign_items
             miner_signatures, nonces = sign_items(self.wallet.hotkey, synapse.message_batch, id_attr="id")
             synapse.miner_signatures = miner_signatures
             synapse.nonces = nonces
@@ -419,7 +419,7 @@ class Miner(BaseMinerNeuron):
         except Exception as e:
             bt.logging.error(f"[Miner] Background: Error processing telegram messages: {e}")
 
-    def _process_and_send_articles(self, synapse: talisman_ai.protocol.ArticleBatch, validator_hotkey: str):
+    def _process_and_send_articles(self, synapse: alpharidge_ai.protocol.ArticleBatch, validator_hotkey: str):
         try:
             bt.logging.info(f"[Miner] Background: Processing {len(synapse.article_batch)} articles")
 
@@ -503,7 +503,7 @@ class Miner(BaseMinerNeuron):
 
             bt.logging.info(f"[Miner] Background: Finished processing articles, sending back to validator {validator_hotkey}")
 
-            from talisman_ai.utils.miner_signing import sign_items
+            from alpharidge_ai.utils.miner_signing import sign_items
             miner_signatures, nonces = sign_items(self.wallet.hotkey, synapse.article_batch, id_attr="id")
             synapse.miner_signatures = miner_signatures
             synapse.nonces = nonces
@@ -557,7 +557,7 @@ class Miner(BaseMinerNeuron):
         except Exception as e:
             bt.logging.error(f"[Miner] Background: Error processing articles: {e}")
 
-    async def forward_score(self, synapse: talisman_ai.protocol.Score) -> talisman_ai.protocol.Score:
+    async def forward_score(self, synapse: alpharidge_ai.protocol.Score) -> alpharidge_ai.protocol.Score:
         """
         Processes incoming Score synapses from validators.
         
@@ -575,7 +575,7 @@ class Miner(BaseMinerNeuron):
         )
         return synapse
 
-    async def forward_validation_result(self, synapse: talisman_ai.protocol.ValidationResult) -> talisman_ai.protocol.ValidationResult:
+    async def forward_validation_result(self, synapse: alpharidge_ai.protocol.ValidationResult) -> alpharidge_ai.protocol.ValidationResult:
         """
         Processes incoming ValidationResult synapses from validators.
         

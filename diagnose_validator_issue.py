@@ -12,7 +12,7 @@ This script checks:
 import bittensor as bt
 import sys
 from typing import List, Dict
-from talisman_ai import config
+from alpharidge_ai import config
 
 def get_validator_info(metagraph) -> Dict[int, Dict]:
     """Extract validator information from metagraph."""
@@ -125,7 +125,7 @@ def check_miner_selection(miner_config, miner_hotkey, validators):
     print(f"  - Validator permit: {bool(metagraph.validator_permit[miner_uid])}")
     
     # Check if miner would be available for selection
-    from talisman_ai.utils.uids import check_uid_availability
+    from alpharidge_ai.utils.uids import check_uid_availability
     is_available = check_uid_availability(
         metagraph, 
         miner_uid, 
@@ -151,7 +151,7 @@ def check_miner_selection(miner_config, miner_hotkey, validators):
             self.config = config
             self.uid = None  # Will be set per validator
     
-    from talisman_ai.utils.uids import get_random_uids
+    from alpharidge_ai.utils.uids import get_random_uids
     
     for validator_uid, validator_info in list(validators.items())[:5]:  # Test first 5 validators
         mock_validator = MockValidator(metagraph, miner_config)

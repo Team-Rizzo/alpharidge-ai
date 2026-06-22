@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "talisman_ai" / "analyzer" / "data"
+DATA_DIR = Path(__file__).resolve().parents[1] / "alpharidge_ai" / "analyzer" / "data"
 ASSET_FILES = ["assets_traditional.json", "assets_expanded.json", "assets_sp1500.json"]
 
 # Generic product / sector / theme terms that identify a CATEGORY, not a company.

@@ -1,10 +1,10 @@
 import pytest
-from talisman_ai.utils.api_client import TalismanAPIClient
+from alpharidge_ai.utils.api_client import AlpharidgeAPIClient
 
 
 @pytest.mark.asyncio
 async def test_get_attestation_calls_endpoint(monkeypatch):
-    client = TalismanAPIClient.__new__(TalismanAPIClient)
+    client = AlpharidgeAPIClient.__new__(AlpharidgeAPIClient)
     captured = {}
 
     async def fake_request(method, endpoint, json=None, params=None):
@@ -23,7 +23,7 @@ async def test_get_attestation_calls_endpoint(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_verdicts_and_post_report(monkeypatch):
-    client = TalismanAPIClient.__new__(TalismanAPIClient)
+    client = AlpharidgeAPIClient.__new__(AlpharidgeAPIClient)
     calls = []
 
     async def fake_request(method, endpoint, json=None, params=None):

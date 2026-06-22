@@ -7,8 +7,8 @@ extractor ever sees it.
 
 import pytest
 
-from talisman_ai.analyzer.text_cleaner import clean_text
-from talisman_ai.analyzer.asset_extractor import AssetExtractor
+from alpharidge_ai.analyzer.text_cleaner import clean_text
+from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
 
 
 def test_strips_html_tags():

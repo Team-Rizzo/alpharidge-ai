@@ -7,11 +7,11 @@ the SAME sentence) and is skipped if the model can't be loaded offline.
 import types
 import pytest
 
-from talisman_ai.analyzer.aspect_sentiment import (
+from alpharidge_ai.analyzer.aspect_sentiment import (
     AspectSentimentScorer, vote_to_sentiment, aggregate_votes, score_assets,
     _best_target_form, _mention_sentences, _target_in_sentence,
 )
-from talisman_ai.analyzer.horizon import _SCALE
+from alpharidge_ai.analyzer.horizon import _SCALE
 
 
 # ── confidence calibration: must reward EVIDENCE VOLUME, not just agreement ─────

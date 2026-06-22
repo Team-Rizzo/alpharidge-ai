@@ -16,7 +16,7 @@ RED/GREEN verification:
   alias/identifier for Barrick Gold (NYSE: GOLD); it is not a very common word
   and not blocklisted, so it sets strong_evidence=True and the asset is kept.
 """
-from talisman_ai.analyzer.asset_extractor import AssetExtractor
+from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
 
 ax = AssetExtractor()
 

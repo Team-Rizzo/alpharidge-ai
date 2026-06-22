@@ -1,4 +1,4 @@
-# Talisman AI 🪬 The Perception Subnet for On-Chain Trading Insights  
+# Alpharidge AI 🪬 The Perception Subnet for On-Chain Trading Insights  
 
 ## 🪬 Vision (Why this subnet exists)
 
@@ -8,7 +8,7 @@ We are building an AI financial reasoning agent that:
 - Spots meaningful signals as they are happening
 - Explains what’s happening in plain language
 - Converts insights into recommended trading or staking actions
-- Surfaces those decisions directly to your Talisman wallets
+- Surfaces those decisions directly to your Alpharidge wallets
 
 The subnet doesn’t “decide” what to trade, it feeds the agent with validated, high-quality signal data.
 
@@ -19,7 +19,7 @@ That awareness starts with SN45, which serves as the eyes and ears of the agent.
 | Layer      | What it does                                 | Delivered by       |
 |------------|----------------------------------------------|--------------------|
 | Perception | Collect signals (markets, chains, sentiment) | SN45               |
-| Reasoning  | Analyze signals, generate insights           | Talisman Agent     |
+| Reasoning  | Analyze signals, generate insights           | Alpharidge Agent     |
 | Action     | Recommend / execute trading or staking       | Wallet Integration |
 
 ![architecture phase 1](./architecture_p1.png)
@@ -38,7 +38,7 @@ That awareness starts with SN45, which serves as the eyes and ears of the agent.
 
 ## 🪬 Overview
 
-For Phase 1, Talisman AI (Subnet 45) continuously analyzes social media for Bittensor-relevant activity, starting with X.
+For Phase 1, Alpharidge AI (Subnet 45) continuously analyzes social media for Bittensor-relevant activity, starting with X.
 
 Miners collectively search for high value posts that are relevant to specific subnets; validators verify accuracy and enforce quality.
 
@@ -120,18 +120,18 @@ Then, for a delayed epoch window (typically **E-2**), validators compute weights
 ## 🪬 Project Structure
 
 ```
-talisman-ai/
+alpharidge-ai/
 ├── neurons/                    # Miner and validator nodes
 │   ├── miner.py               # Miner entry point
 │   ├── validator.py           # Validator entry point
-└── talisman_ai/               # Core library
+└── alpharidge_ai/               # Core library
     ├── protocol.py            # Bittensor protocol definitions
     ├── config.py              # Configuration
     ├── analyzer/              # Analysis utilities
     ├── validator/             # Validator logic
     └── utils/                 # Utility functions
 
-talisman-ai-api/
+alpharidge-ai-api/
 ├── main.py                     # FastAPI app + routes
 ├── prisma/schema.prisma        # Postgres schema (scoring lease queue + tweet_analysis)
 └── utils/                      # Auth + whitelist utilities

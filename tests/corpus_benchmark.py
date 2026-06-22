@@ -21,7 +21,7 @@ import time
 
 import psycopg2
 
-from talisman_ai.analyzer.asset_extractor import _is_ambiguous_word
+from alpharidge_ai.analyzer.asset_extractor import _is_ambiguous_word
 
 # Tickers the review flagged as boilerplate/dictionary-word artifacts.
 JUNK_TICKERS = {"GOOGL", "TGT", "META", "XAU", "V", "USO", "ADA", "CL", "KC", "PA",
@@ -74,7 +74,7 @@ def main():
     rows = fetch(n)
     print(f"[corpus] got {len(rows)} articles", flush=True)
 
-    from talisman_ai.analyzer.ner_fusion import NERFusionEngine
+    from alpharidge_ai.analyzer.ner_fusion import NERFusionEngine
     t0 = time.time()
     eng = NERFusionEngine(enable_refined=False)  # refined = canonical names only
     print(f"[corpus] engine ready in {time.time()-t0:.0f}s; running...", flush=True)

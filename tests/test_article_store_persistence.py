@@ -8,7 +8,7 @@ Saves must be atomic so an interrupted write can never corrupt the live file.
 import json
 import os
 
-from talisman_ai.utils.article_store import ArticleStore
+from alpharidge_ai.utils.article_store import ArticleStore
 
 
 def test_load_corrupt_file_does_not_crash_and_quarantines(tmp_path):

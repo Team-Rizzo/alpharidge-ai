@@ -1,7 +1,7 @@
 # Article-Intelligence Quality Overhaul — Design
 
 **Date:** 2026-06-17
-**Branch:** `article-intelligence-v2` (talisman-ai)
+**Branch:** `article-intelligence-v2` (alpharidge-ai)
 **Status:** Draft for approval
 
 ## Problem
@@ -131,7 +131,7 @@ Two layers, run before/after for every change:
    and AI-shopping articles (must yield zero crypto narrative_keywords; SpaceX direction bullish);
    the LEO/GOLD collision cases (must not emit LEO/GOLD as tickers); a real `$LEO`/"Barrick Gold" positive
    (must still emit); the Medtronic-×4 dedup case; "Anthropic principle"/"Elon Musk-backed" slips.
-   Stored as `eval/data/handcurated_overhaul.jsonl` + pytest fixtures under `talisman-ai/tests/`.
+   Stored as `eval/data/handcurated_overhaul.jsonl` + pytest fixtures under `alpharidge-ai/tests/`.
 
 **Reference ceilings:** compute inter-labeler agreement (GLM-5.1 vs Opus) on `narrative_keywords` and
 `assets` to contextualize "how good is achievable" rather than chasing 1.0.

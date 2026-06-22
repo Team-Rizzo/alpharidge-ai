@@ -1,6 +1,6 @@
 import pytest
-from talisman_ai.validator.reward_broadcast_store import RewardBroadcastStore
-from talisman_ai.utils import attestation_crypto as ac
+from alpharidge_ai.validator.reward_broadcast_store import RewardBroadcastStore
+from alpharidge_ai.utils import attestation_crypto as ac
 
 from bittensor_wallet import Keypair  # sr25519 (default)
 
@@ -66,7 +66,7 @@ def test_replay_old_seq_rejected(store):
 
 
 def test_per_uid_points_clamped(store):
-    from talisman_ai.validator.reward_broadcast_store import MAX_POINTS_PER_UID
+    from alpharidge_ai.validator.reward_broadcast_store import MAX_POINTS_PER_UID
     api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att, sig = _signed_attestation(api_kp, "valiA", 7, {"mhk1": float(MAX_POINTS_PER_UID + 5000)})
     accepted, reason = store.ingest_attestation(
@@ -85,7 +85,7 @@ def test_merkle_root_retained_for_deep_verify(store):
 
 
 def test_wire_seq_cannot_silence_future_epochs(store):
-    from talisman_ai.validator.reward_broadcast_store import MAX_SEQ_EPOCH_SKEW
+    from alpharidge_ai.validator.reward_broadcast_store import MAX_SEQ_EPOCH_SKEW
     api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att, sig = _signed_attestation(api_kp, "valiA", 10, {"mhk1": 1.0})
     # Replay a valid epoch-10 attestation but with an inflated wire seq.
@@ -112,7 +112,7 @@ def test_nonfinite_points_skipped_not_crash(store):
 
 
 def test_route_prefers_attestation_when_present(store):
-    from talisman_ai.validator import reward_broadcast_store as rbs
+    from alpharidge_ai.validator import reward_broadcast_store as rbs
     api_kp = Keypair.create_from_seed("0x" + "11" * 32)
     att, sig = _signed_attestation(api_kp, "valiA", 7, {"mhk1": 2.0})
     accepted, reason = rbs.route_reward_broadcast(
@@ -124,7 +124,7 @@ def test_route_prefers_attestation_when_present(store):
 
 
 def test_route_falls_back_to_legacy_uid_points(store):
-    from talisman_ai.validator import reward_broadcast_store as rbs
+    from alpharidge_ai.validator import reward_broadcast_store as rbs
     accepted, reason = rbs.route_reward_broadcast(
         store=store, sender_hotkey="valiB", epoch=7, seq=7,
         uid_points={3: 2}, attestation=None, attestation_sig=None,
@@ -134,7 +134,7 @@ def test_route_falls_back_to_legacy_uid_points(store):
 
 
 def test_route_skips_blacklisted_sender(store):
-    from talisman_ai.validator import reward_broadcast_store as rbs
+    from alpharidge_ai.validator import reward_broadcast_store as rbs
     accepted, reason = rbs.route_reward_broadcast(
         store=store, sender_hotkey="badVali", epoch=7, seq=7,
         uid_points={3: 2}, attestation=None, attestation_sig=None,
@@ -144,7 +144,7 @@ def test_route_skips_blacklisted_sender(store):
 
 
 def test_route_drops_legacy_when_enforced(store):
-    from talisman_ai.validator import reward_broadcast_store as rbs
+    from alpharidge_ai.validator import reward_broadcast_store as rbs
     accepted, reason = rbs.route_reward_broadcast(
         store=store, sender_hotkey="vali", epoch=7, seq=7,
         uid_points={3: 2}, attestation=None, attestation_sig=None,

@@ -1,5 +1,5 @@
-from talisman_ai.utils import attestation_crypto as ac
-from talisman_ai.utils.miner_signing import sign_items
+from alpharidge_ai.utils import attestation_crypto as ac
+from alpharidge_ai.utils.miner_signing import sign_items
 
 from bittensor_wallet import Keypair  # sr25519 (default)
 

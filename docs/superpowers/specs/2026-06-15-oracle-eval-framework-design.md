@@ -8,11 +8,11 @@
 
 SN45 miners analyze news articles into a ~50-field `ArticleIntelligence` object. ~26 of those
 fields are produced by **two LLM calls** (`extract_and_classify`, `reason_and_summarize`) in
-`talisman_ai/analyzer/article_intelligence_analyzer.py`. The rest are deterministic-local
+`alpharidge_ai/analyzer/article_intelligence_analyzer.py`. The rest are deterministic-local
 (text_stats, content_hash, embeddings, NER fusion, sector/source lookups).
 
 **The problem with today's notion of "accuracy":** the validator
-(`talisman_ai/analyzer/scoring.py:924-1066`) does **not** measure real-world correctness. It
+(`alpharidge_ai/analyzer/scoring.py:924-1066`) does **not** measure real-world correctness. It
 re-runs its *own* LLM on the same article and gates the miner on matching that output:
 - Tier 1 — 20 enums + primary-asset sentiment must match the validator's LLM **exactly** (any
   miss → 0 points).
@@ -83,7 +83,7 @@ the oracle's measured accuracy on Layer-1-covered fields.
 
 ## 5. Architecture — `eval/` (top-level, `/home/rizzo/talisman/eval`)
 
-Sibling to the repos; imports `talisman_ai` for the analyzer and `scoring.py` helpers. Five small,
+Sibling to the repos; imports `alpharidge_ai` for the analyzer and `scoring.py` helpers. Five small,
 independently-testable units:
 
 1. **`Analyzer` protocol** — `analyze(article) -> ArticleIntelligence`; metadata `model`,
@@ -160,7 +160,7 @@ One gated end-to-end smoke (`E2E=1`) that labels ~20 real articles via GLM and c
 
 ## 10. Branch alignment (prerequisite for implementation)
 
-All repos target `article-intelligence-v2`. `talisman-ai` is still on
+All repos target `article-intelligence-v2`. `alpharidge-ai` is still on
 `feat/verifiable-validator-points`; per decision, merge `feat/verifiable-validator-points` →
 `article-intelligence-v2` (mirroring the API) before building, so V2 has both the analyzer and the
 verifiable-points work. This spec lands on V2 via that merge.

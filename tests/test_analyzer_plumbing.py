@@ -6,7 +6,7 @@
 """
 from types import SimpleNamespace
 
-from talisman_ai.analyzer.article_intelligence_analyzer import (
+from alpharidge_ai.analyzer.article_intelligence_analyzer import (
     count_entity_mentions, sanitize_forward_event_date, map_gics_to_sector,
     strip_analyst_roster_assets, strip_disclosure_tail,
 )
@@ -33,7 +33,7 @@ def test_keeps_body_without_footer():
 def test_does_not_truncate_on_early_word_disclosure():
     body = "The disclosure of quarterly earnings was positive for investors. " + "More. " * 40
     assert len(strip_disclosure_tail(body)) >= len(body) * 0.8
-from talisman_ai.analyzer.horizon import reconcile_direction_with_horizons as _recon
+from alpharidge_ai.analyzer.horizon import reconcile_direction_with_horizons as _recon
 
 
 # ── reconcile_direction_with_horizons: kill direction/horizon sign contradictions ─
@@ -169,7 +169,7 @@ def test_future_textual_kept():
 # bit-identical even at temperature 0). This pass only reconciles `direction`
 # against those already-deterministic horizons.
 def _bare_analyzer():
-    from talisman_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
+    from alpharidge_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
     return ArticleIntelligenceAnalyzer.__new__(ArticleIntelligenceAnalyzer)
 
 def test_reconcile_leaves_deterministic_horizons_untouched():

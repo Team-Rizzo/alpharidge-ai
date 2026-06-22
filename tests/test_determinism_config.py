@@ -4,7 +4,7 @@ import os
 
 def test_configure_sets_cudnn_and_cublas():
     import torch
-    from talisman_ai.analyzer.determinism import configure_determinism
+    from alpharidge_ai.analyzer.determinism import configure_determinism
     configure_determinism()
     assert torch.backends.cudnn.deterministic is True
     assert torch.backends.cudnn.benchmark is False
@@ -12,6 +12,6 @@ def test_configure_sets_cudnn_and_cublas():
 
 
 def test_idempotent_and_does_not_raise():
-    from talisman_ai.analyzer.determinism import configure_determinism
+    from alpharidge_ai.analyzer.determinism import configure_determinism
     configure_determinism()
     configure_determinism()  # second call is a no-op, must not raise

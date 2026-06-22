@@ -1,14 +1,14 @@
 # ArticleIntelligence Pipeline: Complete Build Changelog
 
 **Date:** 2026-05-28
-**Scope:** talisman-ai (miner/validator) + talisman-ai-api (FastAPI backend)
+**Scope:** alpharidge-ai (miner/validator) + alpharidge-ai-api (FastAPI backend)
 **Tests:** 56 passing, 0 failures, 2 skipped
 
 ---
 
 ## What Was Built
 
-The SN45 Talisman AI Bittensor subnet's article analysis was expanded from 6 flat classification fields (sentiment, sector, content_type, technical_quality, market_analysis, relevance_confidence) to a comprehensive 28-feature-group intelligence system. The system processes 350K news articles/day, extracting multi-asset sentiment, cross-market contagion chains, chart summaries, entity extraction with Wikidata linking, economic data points, event fingerprints for clustering, narrative tagging with embedding-based semantic matching, and ML features.
+The SN45 Alpharidge AI Bittensor subnet's article analysis was expanded from 6 flat classification fields (sentiment, sector, content_type, technical_quality, market_analysis, relevance_confidence) to a comprehensive 28-feature-group intelligence system. The system processes 350K news articles/day, extracting multi-asset sentiment, cross-market contagion chains, chart summaries, entity extraction with Wikidata linking, economic data points, event fingerprints for clustering, narrative tagging with embedding-based semantic matching, and ML features.
 
 Everything runs inside the SN45 subnet: miners produce all per-article features, validators verify them, and the API handles cross-article aggregation (event clustering, narrative matching, sentiment momentum).
 
@@ -70,7 +70,7 @@ Total pipeline latency: ~15-22 seconds per article.
 
 ### Core Data Model
 
-**`talisman_ai/models/article_intelligence.py`** (NEW, ~800 lines)
+**`alpharidge_ai/models/article_intelligence.py`** (NEW, ~800 lines)
 
 The foundational data model for the entire system. Contains:
 
@@ -82,7 +82,7 @@ The foundational data model for the entire system. Contains:
 
 ### NER Fusion Engine
 
-**`talisman_ai/analyzer/ner_fusion.py`** (NEW, ~500 lines)
+**`alpharidge_ai/analyzer/ner_fusion.py`** (NEW, ~500 lines)
 
 Combines 4 NER models + entity resolution + sentiment into a single pipeline:
 
@@ -99,7 +99,7 @@ Entity resolution pipeline: Override dict (78 curated entries for CPI, Fed, SEC,
 
 ### Article Intelligence Analyzer
 
-**`talisman_ai/analyzer/article_intelligence_analyzer.py`** (NEW, ~600 lines)
+**`alpharidge_ai/analyzer/article_intelligence_analyzer.py`** (NEW, ~600 lines)
 
 The main three-stage pipeline orchestrator:
 
@@ -112,7 +112,7 @@ The main three-stage pipeline orchestrator:
 
 ### Text Statistics
 
-**`talisman_ai/analyzer/text_stats.py`** (NEW, ~200 lines)
+**`alpharidge_ai/analyzer/text_stats.py`** (NEW, ~200 lines)
 
 Purely deterministic text feature extraction (no ML, no LLM). Computes 24 features:
 - Readability: Flesch Reading Ease, Flesch-Kincaid Grade Level
@@ -125,7 +125,7 @@ Verified byte-identical between miner and validator runs (Tier 2 validation).
 
 ### Asset Extractor
 
-**`talisman_ai/analyzer/asset_extractor.py`** (NEW, ~200 lines)
+**`alpharidge_ai/analyzer/asset_extractor.py`** (NEW, ~200 lines)
 
 Keyword-based multi-asset extraction from article text:
 - Loads 206 assets from `assets_expanded.json` (100 crypto) and `assets_traditional.json` (106 equities, indices, forex, commodities, ETFs).
@@ -136,13 +136,13 @@ Keyword-based multi-asset extraction from article text:
 
 ### LLM Cache
 
-**`talisman_ai/analyzer/llm_cache.py`** (NEW, ~57 lines)
+**`alpharidge_ai/analyzer/llm_cache.py`** (NEW, ~57 lines)
 
 Thread-safe in-memory TTL cache for deterministic LLM calls. Since the pipeline uses temperature=0, identical inputs produce identical outputs. The cache prevents redundant API calls when the same article is analyzed by both miner and validator within 300 seconds. Max 1024 entries, FIFO eviction.
 
 ### Validation / Scoring
 
-**`talisman_ai/analyzer/scoring.py`** (MODIFIED, added ~250 lines)
+**`alpharidge_ai/analyzer/scoring.py`** (MODIFIED, added ~250 lines)
 
 Extended with ArticleIntelligence validation:
 
@@ -155,7 +155,7 @@ Extended with ArticleIntelligence validation:
 
 ### Data Files
 
-**`talisman_ai/analyzer/data/`** (8 NEW JSON files)
+**`alpharidge_ai/analyzer/data/`** (8 NEW JSON files)
 
 - **`assets_expanded.json`** (51KB, 100 entries): Crypto assets with coingecko_id, yahoo_ticker, cashtags, case_sensitive IDs, unique_identifiers, aliases, thematic_tags. Covers BTC, ETH, SOL, ADA, DOT, AVAX, LINK, UNI, AAVE, and 90+ more.
 - **`assets_traditional.json`** (60KB, 106 entries): 54 equities (NVDA, AAPL, MSFT, GOOGL, AMZN, META, TSLA, etc.), 15 indices (SPX, DJI, IXIC, VIX, etc.), 15 forex pairs (DXY, EUR/USD, GBP/USD, etc.), 12 commodities (gold, oil, silver, natural gas, etc.), 10 ETFs (SPY, QQQ, IWM, etc.).
@@ -211,7 +211,7 @@ Added: `sentence-transformers>=2.2.0` (embeddings), plus existing torch, numpy, 
 
 ---
 
-## API-Side Files (talisman-ai-api/)
+## API-Side Files (alpharidge-ai-api/)
 
 ### Database Schema
 
@@ -369,7 +369,7 @@ Uses bittensor mock stub for environments with package conflicts. `_get()` helpe
 
 1. Install miner/validator dependencies: `pip install sentence-transformers>=2.2.0`
 2. Install API dependency: `pip install numpy>=1`
-3. Run Prisma migration: `cd talisman-ai-api && npx prisma migrate dev`
+3. Run Prisma migration: `cd alpharidge-ai-api && npx prisma migrate dev`
 4. Pre-compute narrative embeddings: `python scripts/compute_narrative_embeddings.py`
 5. First startup downloads models: spaCy en_core_web_trf, GLiNER, Flair OntoNotes, ReFinED aida_model, FinBERT, all-MiniLM-L6-v2 (~2GB total, one-time)
 6. Set LLM config in `.miner_env` / `.vali_env` (MODEL, API_KEY, LLM_BASE for OpenRouter)

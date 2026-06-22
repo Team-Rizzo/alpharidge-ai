@@ -35,9 +35,9 @@ from bittensor_wallet import Keypair as WalletKeypair  # noqa: E402
 
 from bittensor_wallet import Keypair  # sr25519 (default)
 
-from talisman_ai.protocol import ValidatorRewards          # noqa: E402
-from talisman_ai.utils import attestation_crypto as ac       # noqa: E402
-from talisman_ai.validator.reward_broadcast_store import (   # noqa: E402
+from alpharidge_ai.protocol import ValidatorRewards          # noqa: E402
+from alpharidge_ai.utils import attestation_crypto as ac       # noqa: E402
+from alpharidge_ai.validator.reward_broadcast_store import (   # noqa: E402
     RewardBroadcastStore, route_reward_broadcast,
 )
 

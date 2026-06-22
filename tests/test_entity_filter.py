@@ -5,7 +5,7 @@ broken substring dedup with character-offset clustering that keeps the longest,
 highest-confidence span per region.
 """
 
-from talisman_ai.analyzer.entity_filter import (
+from alpharidge_ai.analyzer.entity_filter import (
     Candidate, EntityFilter, in_salient_range, apply_salience,
 )
 

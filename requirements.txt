@@ -19,7 +19,7 @@ sentence-transformers>=2.2.0
 substrateinterface>=1.0.0
 
 # --- NER / entity-recognition stack ---------------------------------------
-# These power the deterministic NER fusion engine (talisman_ai/analyzer).
+# These power the deterministic NER fusion engine (alpharidge_ai/analyzer).
 # They MUST be present and version-aligned on both miner and validator: the
 # validator re-runs this exact pipeline and hard-gates output determinism, so
 # a version skew between sides breaks consensus. Pinned (not >=) for that reason.

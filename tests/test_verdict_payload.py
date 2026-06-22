@@ -1,5 +1,5 @@
-from talisman_ai.utils import attestation_crypto as ac
-from talisman_ai.validator.verdict_payload import build_verdict_fields
+from alpharidge_ai.utils import attestation_crypto as ac
+from alpharidge_ai.validator.verdict_payload import build_verdict_fields
 
 
 class _A:
@@ -31,7 +31,7 @@ def test_invalid_verdict_zero_points():
     assert fields["points_awarded"] == 0.0
 
 
-from talisman_ai.validator.verdict_payload import collect_verdict_meta
+from alpharidge_ai.validator.verdict_payload import collect_verdict_meta
 
 
 class _It:

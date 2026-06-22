@@ -10,7 +10,7 @@ still score low.
 """
 from types import SimpleNamespace
 
-from talisman_ai.analyzer.scoring import (
+from alpharidge_ai.analyzer.scoring import (
     _sentiment_agreement, asset_sentiment_agreement, DET_AGREEMENT_THRESHOLD,
 )
 

@@ -14,30 +14,30 @@ import time
 from typing import List, Optional, Set
 
 import bittensor as bt
-from talisman_ai.base.validator import BaseValidatorNeuron
-from talisman_ai.validator.forward import forward
-from talisman_ai.validator.validation_client import ValidationClient
-from talisman_ai.analyzer import setup_analyzer
-from talisman_ai.analyzer import setup_news_analyzer
-from talisman_ai.analyzer import setup_article_intelligence_analyzer
-import talisman_ai.protocol
-from talisman_ai import config
-from talisman_ai.utils.api_models import TweetWithAuthor, CompletedTweetSubmission, TelegramMessageForScoring, CompletedTelegramMessageSubmission, TelegramMessageAnalysis, NewsArticleForScoring, CompletedNewsArticleSubmission
-from talisman_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch
-from talisman_ai.utils.uids import get_random_uids
-from talisman_ai.utils.tweet_store import TweetStore
-from talisman_ai.utils.telegram_store import TelegramStore
-from talisman_ai.utils.article_store import ArticleStore
-from talisman_ai.utils.reward import MinerReward
-from talisman_ai.utils.penalty import MinerPenalty
-from talisman_ai.validator.reward_broadcast_store import RewardBroadcastStore
-from talisman_ai.validator.penalty_broadcast_store import PenaltyBroadcastStore
-from talisman_ai.protocol import ValidatorRewards
-from talisman_ai.protocol import ValidatorPenalties
-from talisman_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch
-from talisman_ai.analyzer import setup_telegram_analyzer
-from talisman_ai.utils.cooldown import MinerCooldownTracker
-from talisman_ai.validator.verdict_payload import build_verdict_fields, collect_verdict_meta  # T5: verdict payload
+from alpharidge_ai.base.validator import BaseValidatorNeuron
+from alpharidge_ai.validator.forward import forward
+from alpharidge_ai.validator.validation_client import ValidationClient
+from alpharidge_ai.analyzer import setup_analyzer
+from alpharidge_ai.analyzer import setup_news_analyzer
+from alpharidge_ai.analyzer import setup_article_intelligence_analyzer
+import alpharidge_ai.protocol
+from alpharidge_ai import config
+from alpharidge_ai.utils.api_models import TweetWithAuthor, CompletedTweetSubmission, TelegramMessageForScoring, CompletedTelegramMessageSubmission, TelegramMessageAnalysis, NewsArticleForScoring, CompletedNewsArticleSubmission
+from alpharidge_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch
+from alpharidge_ai.utils.uids import get_random_uids
+from alpharidge_ai.utils.tweet_store import TweetStore
+from alpharidge_ai.utils.telegram_store import TelegramStore
+from alpharidge_ai.utils.article_store import ArticleStore
+from alpharidge_ai.utils.reward import MinerReward
+from alpharidge_ai.utils.penalty import MinerPenalty
+from alpharidge_ai.validator.reward_broadcast_store import RewardBroadcastStore
+from alpharidge_ai.validator.penalty_broadcast_store import PenaltyBroadcastStore
+from alpharidge_ai.protocol import ValidatorRewards
+from alpharidge_ai.protocol import ValidatorPenalties
+from alpharidge_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch
+from alpharidge_ai.analyzer import setup_telegram_analyzer
+from alpharidge_ai.utils.cooldown import MinerCooldownTracker
+from alpharidge_ai.validator.verdict_payload import build_verdict_fields, collect_verdict_meta  # T5: verdict payload
 class Validator(BaseValidatorNeuron):
     """
     Validator neuron for SN45.
@@ -50,7 +50,7 @@ class Validator(BaseValidatorNeuron):
     """
 
     def __init__(self, bt_config=None):
-        # NOTE: this arg name must not shadow the imported `talisman_ai.config` module.
+        # NOTE: this arg name must not shadow the imported `alpharidge_ai.config` module.
         super(Validator, self).__init__(config=bt_config)
 
         _vw = int(getattr(config, "VALIDATION_MAX_WORKERS", 2))
@@ -132,7 +132,7 @@ class Validator(BaseValidatorNeuron):
         for tracker in (self._tweet_cooldown, self._telegram_cooldown, self._article_cooldown):
             tracker.prune(active)
 
-    async def forward_tweets(self, synapse: talisman_ai.protocol.TweetBatch) -> talisman_ai.protocol.TweetBatch:
+    async def forward_tweets(self, synapse: alpharidge_ai.protocol.TweetBatch) -> alpharidge_ai.protocol.TweetBatch:
         """
         Axon handler for miner push-back of analyzed TweetBatch results.
 
@@ -206,7 +206,7 @@ class Validator(BaseValidatorNeuron):
         self._track_task(task)
         return synapse
 
-    async def forward_telegram_messages(self, synapse: talisman_ai.protocol.TelegramBatch) -> talisman_ai.protocol.TelegramBatch:
+    async def forward_telegram_messages(self, synapse: alpharidge_ai.protocol.TelegramBatch) -> alpharidge_ai.protocol.TelegramBatch:
         """
         Axon handler for miner push-back of analyzed TelegramBatch results.
 
@@ -278,7 +278,7 @@ class Validator(BaseValidatorNeuron):
         self._track_task(task)
         return synapse
 
-    async def forward_articles(self, synapse: talisman_ai.protocol.ArticleBatch) -> talisman_ai.protocol.ArticleBatch:
+    async def forward_articles(self, synapse: alpharidge_ai.protocol.ArticleBatch) -> alpharidge_ai.protocol.ArticleBatch:
         """
         Axon handler for miner push-back of analyzed ArticleBatch results.
         """
@@ -1244,7 +1244,7 @@ class Validator(BaseValidatorNeuron):
         try:
             authenticated_hotkey = synapse.dendrite.hotkey
             hotkey_to_uid = {hk: i for i, hk in enumerate(self.metagraph.hotkeys)}
-            from talisman_ai.validator.reward_broadcast_store import route_reward_broadcast
+            from alpharidge_ai.validator.reward_broadcast_store import route_reward_broadcast
             accepted, reason = route_reward_broadcast(
                 store=self._reward_broadcasts,
                 sender_hotkey=authenticated_hotkey,

@@ -8,7 +8,7 @@ a non-ambiguous name, or an in-context financial cue.
 
 import pytest
 
-from talisman_ai.analyzer.asset_extractor import AssetExtractor
+from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
 
 
 @pytest.fixture(scope="module")

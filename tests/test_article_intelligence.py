@@ -42,7 +42,7 @@ except (RuntimeError, ImportError):
     bt_mock.Dendrite = type("Dendrite", (), {})
     sys.modules["bittensor"] = bt_mock
 
-from talisman_ai.models.article_intelligence import (
+from alpharidge_ai.models.article_intelligence import (
     ArticleIntelligence,
     ArticleContentType,
     AssetClass,
@@ -73,8 +73,8 @@ from talisman_ai.models.article_intelligence import (
     Urgency,
     SCHEMA_VERSION,
 )
-from talisman_ai.analyzer.text_stats import compute_text_stats
-from talisman_ai.analyzer.asset_extractor import AssetExtractor
+from alpharidge_ai.analyzer.text_stats import compute_text_stats
+from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
 
 
 # ============================================================================
@@ -561,7 +561,7 @@ def analyzer():
     import types
     import bittensor as bt
 
-    from talisman_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
+    from alpharidge_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
     return ArticleIntelligenceAnalyzer()
 
 
@@ -749,7 +749,7 @@ class TestEventClustering:
     def test_copycats_similar_title(self, analyzed_articles):
         a1 = _get(analyzed_articles, "fed_rate_cut")
         a2 = _get(analyzed_articles, "fed_rate_cut_copycat")
-        from talisman_ai.analyzer.scoring import _normalize_text, _levenshtein_ratio
+        from alpharidge_ai.analyzer.scoring import _normalize_text, _levenshtein_ratio
         t1 = _normalize_text(a1.event_fingerprint.event_title)
         t2 = _normalize_text(a2.event_fingerprint.event_title)
         sim = _levenshtein_ratio(t1, t2)
@@ -795,7 +795,7 @@ class TestValidationAgreement:
         assert miner_intel is not None
         assert validator_intel is not None
 
-        from talisman_ai.analyzer.scoring import validate_article_intelligence
+        from alpharidge_ai.analyzer.scoring import validate_article_intelligence
         is_valid, composite, details = validate_article_intelligence(miner_intel, validator_intel)
 
         print(f"\n  Validation result: valid={is_valid}, composite={composite:.4f}")
@@ -915,7 +915,7 @@ class TestEmbeddings:
     def test_narrative_keywords_are_slugs(self, analyzed_articles):
         """With taxonomy awareness, LLM should output known narrative slugs."""
         import json, os
-        with open(os.path.join(os.path.dirname(__file__), "..", "talisman_ai", "analyzer", "data", "narratives.json")) as f:
+        with open(os.path.join(os.path.dirname(__file__), "..", "alpharidge_ai", "analyzer", "data", "narratives.json")) as f:
             slugs = {n["slug"] for n in json.load(f)}
         total_kws = 0
         slug_matches = 0
@@ -999,8 +999,8 @@ class TestBatchQualityReport:
 # Section 8: Off-LLM builders + hybrid validation contract (no LLM, no models)
 # ============================================================================
 
-from talisman_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
-from talisman_ai.analyzer.scoring import (
+from alpharidge_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
+from alpharidge_ai.analyzer.scoring import (
     validate_article_intelligence, _ordinal_score, _ev,
     _SENTIMENT_LADDER, _IMPACT_LADDER,
 )
@@ -1055,7 +1055,7 @@ class TestAspectSentiment:
 
     @staticmethod
     def _scorer(vote_by_kw):
-        from talisman_ai.analyzer.aspect_sentiment import AspectSentimentScorer
+        from alpharidge_ai.analyzer.aspect_sentiment import AspectSentimentScorer
 
         class _Stub(AspectSentimentScorer):
             def _ensure(self):
@@ -1072,7 +1072,7 @@ class TestAspectSentiment:
         return _Stub(device="cpu")
 
     def test_majority_vote_direction(self):
-        from talisman_ai.analyzer.aspect_sentiment import score_assets
+        from alpharidge_ai.analyzer.aspect_sentiment import score_assets
         ner = types.SimpleNamespace(sentence_sentiments=[
             {"text": "NVDA earnings crushed estimates"},
             {"text": "NVDA guidance raised sharply"},
@@ -1085,7 +1085,7 @@ class TestAspectSentiment:
         assert 0.0 <= out["NVDA"]["magnitude"] <= 1.0
 
     def test_no_mention_defaults_fallback(self):
-        from talisman_ai.analyzer.aspect_sentiment import score_assets
+        from alpharidge_ai.analyzer.aspect_sentiment import score_assets
         ner = types.SimpleNamespace(sentence_sentiments=[{"text": "Bitcoin rallied"}])
         asset = types.SimpleNamespace(ticker="NVDA", canonical_name="Nvidia", surface_forms=[])
         scorer = self._scorer({"bull": [], "bear": []})
@@ -1234,12 +1234,12 @@ class TestHybridValidationContract:
             target_audience=TargetAudience.RETAIL)
 
     def test_tier3_threshold_value_is_recalibrated(self):
-        import talisman_ai.analyzer.scoring as S
+        import alpharidge_ai.analyzer.scoring as S
         assert S.TIER3_THRESHOLD == 0.70
 
     def test_threshold_gates_exactly_at_composite(self):
         # Robust mechanism proof: the accept/reject boundary tracks TIER3_THRESHOLD.
-        import talisman_ai.analyzer.scoring as S
+        import alpharidge_ai.analyzer.scoring as S
         miner, validator = self._noisy_miner(), _make_intel(narrative_keywords=["fed-policy"])
         _, comp, _ = validate_article_intelligence(miner, validator)
         assert comp < 1.0  # genuinely degraded
@@ -1255,7 +1255,7 @@ class TestHybridValidationContract:
 
     def test_recalibration_rescues_honest_noise_pair(self):
         # A pair that the old 0.75 floor rejected but 0.70 accepts -> the whole point.
-        import talisman_ai.analyzer.scoring as S
+        import alpharidge_ai.analyzer.scoring as S
         miner, validator = self._noisy_miner(), _make_intel(narrative_keywords=["fed-policy"])
         _, comp, _ = validate_article_intelligence(miner, validator)
         assert 0.70 <= comp < 0.75, f"craft composite {comp} not in the recalibration band"

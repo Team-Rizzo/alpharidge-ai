@@ -6,13 +6,13 @@
 
 **Architecture:** New article-reading predictors plug into the existing `eval` framework via the `Predictor` protocol (`fit` is a no-op; `predict_one(row)` reads `row["article"]` and returns `Prediction(value=<list>, confidence=1.0)`), scored by the existing `FIELD_METRICS["contagion_links"]` ListStruct metric. Because GLM is unreliable for contagion (0.26 vs Opus), these fields are **characterized, not τ-gated**: a new `characterize_field` runner reports mean GLM fidelity per candidate, and a separate `re_eval` harness reports relation accuracy vs REFinD human gold. All heavy models/datasets are **dependency-injected**, so unit tests use fakes and never load a model; real backends live behind gated integration tests.
 
-**Tech Stack:** Python, reuses `eval` framework; new deps `glirel` (+ spaCy, present) for the real backend; `datasets` (present) for REFinD. FinBERT/`dependency_graph.json`/`AssetExtractor` already in `talisman-ai`.
+**Tech Stack:** Python, reuses `eval` framework; new deps `glirel` (+ spaCy, present) for the real backend; `datasets` (present) for REFinD. FinBERT/`dependency_graph.json`/`AssetExtractor` already in `alpharidge-ai`.
 
 **Predictor row shape:** `{"article": {"id","title","content",...}, "labels": {...}, "features": None}` (same as Plan 1; contagion predictors ignore `features` and read `article`).
 
 **Key external APIs (verified):**
-- `talisman_ai.analyzer.asset_extractor.AssetExtractor().extract_assets(title, body, max_assets=20) -> List[AssetMatch]`; `AssetMatch.ticker`, `.asset_class`.
-- `dependency_graph.json` at `talisman_ai/analyzer/data/dependency_graph.json`, shape `{"dependencies": {TICKER: {"dependents": [{"ticker","asset_class","relationship"}]}}}`.
+- `alpharidge_ai.analyzer.asset_extractor.AssetExtractor().extract_assets(title, body, max_assets=20) -> List[AssetMatch]`; `AssetMatch.ticker`, `.asset_class`.
+- `dependency_graph.json` at `alpharidge_ai/analyzer/data/dependency_graph.json`, shape `{"dependencies": {TICKER: {"dependents": [{"ticker","asset_class","relationship"}]}}}`.
 - FinBERT: `transformers.pipeline("sentiment-analysis", model="ProsusAI/finbert", device=-1)(sent)[0] -> {"label": "positive|negative|neutral", "score": float}`.
 - GLiREL: `glirel.GLiREL.from_pretrained(<id>).predict_relations(tokens, labels, threshold, ner)` → list of `{"head_text","tail_text","label","score"}` (exact shape verified in Task 5's gated test).
 
@@ -256,14 +256,14 @@ Expected: FAIL `ModuleNotFoundError`
 from eval.predictors.base import Prediction
 from eval.predictors.contagion_map import relation_to_mechanism, make_link
 
-_GRAPH_PATH = "/home/rizzo/talisman/talisman-ai/talisman_ai/analyzer/data/dependency_graph.json"
+_GRAPH_PATH = "/home/rizzo/talisman/alpharidge-ai/alpharidge_ai/analyzer/data/dependency_graph.json"
 
 def _default_graph():
     import json, pathlib
     return json.loads(pathlib.Path(_GRAPH_PATH).read_text())["dependencies"]
 
 def _default_extract_tickers(title, body):
-    from talisman_ai.analyzer.asset_extractor import AssetExtractor
+    from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
     matches = AssetExtractor().extract_assets(title or "", body or "")
     seen, out = set(), []
     for m in matches:

@@ -39,8 +39,8 @@ def test_overhaul_bench_runs_on_smoke(tmp_path):
 
 @pytest.fixture(scope="module")
 def analyzer():
-    from talisman_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
-    from talisman_ai.analyzer.ner_fusion import NERFusionEngine
+    from alpharidge_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
+    from alpharidge_ai.analyzer.ner_fusion import NERFusionEngine
     a = ArticleIntelligenceAnalyzer.__new__(ArticleIntelligenceAnalyzer)
     a.ner_engine = NERFusionEngine()
     a._init_narrative_index()
@@ -70,7 +70,7 @@ def _article_direction(ner):
 
 
 def _analyze(a, art):
-    from talisman_ai.analyzer.aspect_sentiment import score_assets, AspectSentimentScorer
+    from alpharidge_ai.analyzer.aspect_sentiment import score_assets, AspectSentimentScorer
     global _ASPECT_SCORER
     try:
         _ASPECT_SCORER

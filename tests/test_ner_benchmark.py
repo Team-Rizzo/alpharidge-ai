@@ -16,7 +16,7 @@ from tests.ner_benchmark import run, summarize, _print_report
 def engine(request):
     if not request.config.getoption("--live-ner"):
         pytest.skip("needs --live-ner (loads the full model stack)")
-    from talisman_ai.analyzer.ner_fusion import NERFusionEngine
+    from alpharidge_ai.analyzer.ner_fusion import NERFusionEngine
     return NERFusionEngine()
 
 

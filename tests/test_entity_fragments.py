@@ -1,4 +1,4 @@
-from talisman_ai.analyzer.entity_filter import (
+from alpharidge_ai.analyzer.entity_filter import (
     EntityFilter, Candidate, _normalize_entity_text,
 )
 

@@ -1,5 +1,5 @@
 """Production narrative-slug selector (deterministic embedding match)."""
-from talisman_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
+from alpharidge_ai.analyzer.article_intelligence_analyzer import ArticleIntelligenceAnalyzer
 
 
 class _StubEngine:

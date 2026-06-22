@@ -77,7 +77,7 @@ WHERE tweet_id IN (
 
 ### Step 2: Validator Throughput Settings
 
-**File:** `/home/rizzo/talisman-ai/.vali_env` (local only, not committed)
+**File:** `/home/rizzo/alpharidge-ai/.vali_env` (local only, not committed)
 
 Changes to apply before starting the test:
 
@@ -133,7 +133,7 @@ pm2 start /home/rizzo/miniconda3/envs/vllm311/bin/python \
 pm2 restart sn45_vali
 
 # 3. Start the monitor
-pm2 start /home/rizzo/miniconda3/envs/talisman_ai/bin/python3 \
+pm2 start /home/rizzo/miniconda3/envs/alpharidge_ai/bin/python3 \
     --name throughput-monitor -- /home/rizzo/sn45-api/throughput_monitor.py
 ```
 

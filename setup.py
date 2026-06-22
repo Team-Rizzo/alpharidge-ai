@@ -36,7 +36,7 @@ with open(path.join(here, "README.md"), encoding="utf-8") as f:
 
 # loading version from setup.py
 with codecs.open(
-    os.path.join(here, "talisman_ai/__init__.py"), encoding="utf-8"
+    os.path.join(here, "alpharidge_ai/__init__.py"), encoding="utf-8"
 ) as init_file:
     version_match = re.search(
         r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.M
@@ -44,9 +44,9 @@ with codecs.open(
     version_string = version_match.group(1)
 
 setup(
-    name="talisman",
+    name="alpharidge",
     version=version_string,
-    description="talisman",  
+    description="alpharidge",  
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/roguecanti/sn45_subnet",  

@@ -11,8 +11,8 @@ import ssl
 from unittest.mock import patch, MagicMock
 from urllib.parse import urlparse
 
-from talisman_ai.validator.sn13_api_client import SN13APIClient, create_client, _make_x_url_from_post_id
-from talisman_ai import config
+from alpharidge_ai.validator.sn13_api_client import SN13APIClient, create_client, _make_x_url_from_post_id
+from alpharidge_ai import config
 
 
 class TestSN13APIConnectivity:

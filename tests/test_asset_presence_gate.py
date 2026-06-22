@@ -10,7 +10,7 @@ safe against cross-hardware jitter — asset extraction is deterministic gazette
 matching, so a total miner-absence against a non-empty validator set is a skip
 signal, not jitter (jitter only flips an asset's sentiment class).
 """
-from talisman_ai.analyzer.scoring import asset_presence_ok, ASSET_PRESENCE_FLOOR
+from alpharidge_ai.analyzer.scoring import asset_presence_ok, ASSET_PRESENCE_FLOOR
 
 
 from types import SimpleNamespace
