@@ -1,8 +1,9 @@
-# LLM Analysis
-# Required for validating miner submissions (tokens/relevance and sentiment analysis)
-MODEL=Qwen/Qwen3-32B-TEE
+# LLM Analysis (Article Intelligence V2 — deepseek-v4-flash via OpenRouter)
+# Required for validating miner submissions (re-runs the analyzer for consensus scoring)
+MODEL=deepseek/deepseek-v4-flash
+# OpenRouter API key (sk-or-...). Get one at https://openrouter.ai/keys
 API_KEY=
-LLM_BASE=https://llm.chutes.ai/v1
+LLM_BASE=https://openrouter.ai/api/v1
 
 # Validator API Configuration (API v2)
 # Base URL for the miner API (API v2 endpoints: /v2/validation, /v2/validation_result, /v2/scores)

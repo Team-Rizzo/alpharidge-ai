@@ -1,7 +1,8 @@
-# LLM Analysis
-MODEL=Qwen/Qwen3-32B
+# LLM Analysis (Article Intelligence V2 — deepseek-v4-flash via OpenRouter)
+MODEL=deepseek/deepseek-v4-flash
+# OpenRouter API key (sk-or-...). Get one at https://openrouter.ai/keys
 API_KEY=
-LLM_BASE=https://llm.chutes.ai/v1
+LLM_BASE=https://openrouter.ai/api/v1
 
 # X/Twitter API Configuration
 X_BEARER_TOKEN=
