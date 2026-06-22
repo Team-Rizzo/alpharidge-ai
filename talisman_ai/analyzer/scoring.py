@@ -958,8 +958,7 @@ def _ordinal_score(pred: str, gold: str, ladder: List[str]) -> float:
 # We compare on the ordinal sentiment ladder with adjacent-class tolerance and
 # average across the batch's common assets: inherent jitter scores ~1.0 while a
 # true sign reversal (a miner running a different/forged model) scores low.
-_SENTIMENT_LADDER = ["very_bullish", "bullish", "slightly_bullish", "neutral",
-                     "slightly_bearish", "bearish", "very_bearish"]
+# (_SENTIMENT_LADDER is defined once above with the other tolerant-scoring ladders.)
 _SENTIMENT_IDX = {v: i for i, v in enumerate(_SENTIMENT_LADDER)}
 
 # Mean per-asset agreement a miner must clear. Honest miners agree ~1.0 (measured
@@ -1025,9 +1024,17 @@ def validate_article_intelligence(
     # and primary_geo vary. So only fields computed deterministically by both sides
     # (date-derived session, text-derived language, gazetteer-derived sector) are gated;
     # all LLM enums are scored with partial credit in Tier 3.
+    # detected_language is gated on the en/non-en BUCKET, not the exact ISO code.
+    # langdetect is probabilistic and short text (RSS titles) can disagree on the
+    # specific non-English code across hosts even at a pinned version; the only
+    # thing the code actually drives is the English vs multilingual NER route, so
+    # that bucket is the consensus-relevant decision.
+    def _lang_bucket(x) -> str:
+        return "en" if str(x).lower().strip() == "en" else "non-en"
+
     tier1_fields = [
         ("market_session", _ev(m.market_session), _ev(v.market_session)),
-        ("detected_language", str(m.detected_language).lower(), str(v.detected_language).lower()),
+        ("detected_language", _lang_bucket(m.detected_language), _lang_bucket(v.detected_language)),
         ("primary_sector_id", str(m.topic_signature.primary_sector_id), str(v.topic_signature.primary_sector_id)),
     ]
 
@@ -1100,6 +1107,23 @@ def validate_article_intelligence(
     details["tier2_5"] = {}
     EMBEDDING_DIM = 384
 
+    def _emb_ok(emb) -> bool:
+        return bool(emb) and len(emb) == EMBEDDING_DIM
+
+    # Required-embedding presence (anti-cheat). If the validator produced an
+    # embedding (the normal case) but the miner did not, the miner is trying to
+    # skip the title cosine gate and bank free narrative_embedding credit — HARD
+    # FAIL. Asymmetric on purpose: when the validator itself lacks an embedding
+    # (our embedder is down), we don't penalize the miner.
+    for _name, _m_emb, _v_emb in (
+        ("title_embedding", m.title_embedding, v.title_embedding),
+        ("narrative_embedding", m.narrative_embedding, v.narrative_embedding),
+    ):
+        if _emb_ok(_v_emb) and not _emb_ok(_m_emb):
+            details["tier2_5"][_name] = {"status": "fail", "reason": "miner_missing"}
+            bt.logging.warning(f"[V2_VALIDATE] Tier 2.5 FAIL: {_name} absent/malformed on miner")
+            return False, 0.0, details
+
     def _embedding_cosine(name, m_emb, v_emb):
         """Return cosine sim, or None if absent. Hard-fail (raise) on bad format."""
         if not (m_emb and v_emb and len(m_emb) == EMBEDDING_DIM and len(v_emb) == EMBEDDING_DIM):
@@ -1124,7 +1148,9 @@ def validate_article_intelligence(
         bt.logging.warning(f"[V2_VALIDATE] Tier 2.5 FAIL: embedding format {e}")
         return False, 0.0, details
 
-    # title_embedding cosine IS gated (deterministic input).
+    # title_embedding cosine IS gated (deterministic input). title_sim_emb is None
+    # only when the VALIDATOR lacks the embedding (miner-missing already hard-failed
+    # in the presence check above), so a None here is our outage -> skip, don't penalize.
     if title_sim_emb is not None and title_sim_emb < 0.90:
         details["tier2_5"]["title_embedding"]["threshold"] = 0.90
         bt.logging.warning(f"[V2_VALIDATE] Tier 2.5 FAIL: title_embedding cosine={title_sim_emb:.4f} < 0.90")
@@ -1206,7 +1232,9 @@ def validate_article_intelligence(
     tier3_scores["narrative_keywords"] = _jaccard(m_narr, v_narr)
 
     # narrative_embedding cosine: scored (not gated) since its LLM-text input varies.
-    # Map [0,1] cosine straight through; clamp negatives to 0.
+    # Map [0,1] cosine straight through; clamp negatives to 0. Miner-missing already
+    # hard-failed in the Tier-2.5 presence check, so a None here means the VALIDATOR
+    # lacked the embedding (our outage) -> neutral 1.0 rather than penalize the miner.
     tier3_scores["narrative_embedding"] = max(0.0, narr_sim_emb) if narr_sim_emb is not None else 1.0
 
     # Asset sentiment + contagion are NOT scored here — they are deterministic and

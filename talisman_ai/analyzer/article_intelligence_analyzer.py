@@ -270,6 +270,24 @@ def _relation_to_mechanism(label: str) -> str:
 _FINBERT_DIRECTION = {"positive": "bullish", "negative": "bearish", "neutral": "neutral"}
 
 
+def _article_level_direction(sentence_sentiments: list) -> str:
+    """Deterministic article-level sentiment direction from FinBERT sentence votes.
+
+    Majority of bullish vs bearish sentence labels; ties or no sentences -> neutral.
+    This is the consensus-safe fallback for per-asset `direction` when FinABSA has
+    no asset-specific evidence: it is computed off-LLM and identically by miner and
+    validator (unlike the LLM's article sentiment, whose two independent temp-0
+    calls are not bit-identical and would break the Tier-2b determinism gate).
+    """
+    pos = sum(1 for s in (sentence_sentiments or []) if s.get("sentiment") == "bullish")
+    neg = sum(1 for s in (sentence_sentiments or []) if s.get("sentiment") == "bearish")
+    if pos > neg:
+        return "bullish"
+    if neg > pos:
+        return "bearish"
+    return "neutral"
+
+
 # ============================================================================
 # LLM Tool Definitions — Two calls only
 # ============================================================================
@@ -531,7 +549,11 @@ class ArticleIntelligenceAnalyzer:
             # NER-resolved tickers (NOT all_tickers, which includes non-deterministic
             # LLM-suggested additional_tickers) so they match across the consensus boundary.
             ner_tickers = [e.ticker for e in ner_result.resolved_assets if e.ticker]
-            overall_dir = call1.get("sentiment") or "neutral"
+            # Per-asset direction fallback MUST be deterministic — it feeds the
+            # validator's Tier-2b asset-sentiment determinism gate. The LLM's
+            # article sentiment varies across the miner/validator calls, so use the
+            # off-LLM FinBERT sentence-majority instead.
+            overall_dir = _article_level_direction(ner_result.sentence_sentiments)
             asset_sentiments = score_assets(
                 [e for e in ner_result.resolved_assets if e.ticker],
                 ner_result, self._aspect_scorer, fallback_direction=overall_dir)
@@ -604,7 +626,7 @@ class ArticleIntelligenceAnalyzer:
                     event_title=(call1.get("event_title") or title[:200])[:200],
                     event_date=call1.get("event_date"),
                     content_hash=content_hash,
-                    semantic_fingerprint=sorted(call1.get("semantic_fingerprint") or [title.split()[0].lower()])[:10],
+                    semantic_fingerprint=sorted(call1.get("semantic_fingerprint") or [(title.split() or ["article"])[0].lower()])[:10],
                 ),
                 narrative_keywords=narr_kws,
                 title_embedding=title_emb,

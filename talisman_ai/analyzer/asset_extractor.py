@@ -182,6 +182,10 @@ class AssetExtractor:
         for asset in crypto + traditional + expanded_equity:
             self.assets[asset["id"]] = asset
 
+        # Sector gazetteer is static — load once here, not per extract_sectors() call
+        # (that ran on every article, ~350k disk reads/day).
+        self._sectors: list = _load_json("sectors.json")
+
         self._cashtag_index: Dict[str, int] = {}
         self._case_sensitive_index: Dict[str, Tuple[int, bool]] = {}
         # (pattern, asset_id, raw_keyword, ambiguous)
@@ -421,13 +425,9 @@ class AssetExtractor:
         Returns list of {id, symbol, confidence, evidence} dicts for all matching sectors,
         not just the top one.
         """
-        # Load sectors
-        sectors_path = os.path.join(DATA_DIR, "sectors.json")
-        if not os.path.exists(sectors_path):
+        sectors_list = self._sectors
+        if not sectors_list:
             return [{"id": 9, "symbol": "OTHER", "confidence": "low", "evidence": []}]
-
-        with open(sectors_path, "r") as f:
-            sectors_list = json.load(f)
 
         text_lower = f"{title}\n{body}".lower()
         results = []
