@@ -177,15 +177,44 @@ Copy `.vali_env_tmpl` to `.vali_env` and configure the following variables:
 
 ## 🪬 Running on Mainnet
 
-**Run Miner**
+**Hardware (miner & validator both run the analyzer):** GPU **≥ 8 GB VRAM**, **≥ 16 GB RAM**,
+**≥ 60 GB free disk** (~44 GB of models download on first run). **One analyzer process per box** —
+ReFinED's Wikidata store is an LMDB opened once per process, so you can't share it across processes
+on the same machine.
 
+### Install
 
+**Quick (recommended):**
 
 ```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+./install.sh                 # CUDA 12.8 default; TORCH_INDEX=https://download.pytorch.org/whl/cuXXX ./install.sh for another driver
+```
+
+**Manual (equivalent — if you'd rather not use the script):**
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+
+# 1. PyTorch — match the CUDA build to your driver (cu128 = CUDA 12.x; see https://pytorch.org):
+pip install "torch>=2" --index-url https://download.pytorch.org/whl/cu128
+
+# 2. The rest of the stack (the spaCy en_core_web_trf model is pinned in requirements.txt):
 pip install -r requirements.txt
 pip install -e .
+
+# 3. ReFinED (Amazon entity-linker) is NOT on PyPI — install from GitHub with --no-deps
+#    so it doesn't downgrade torch/transformers, then its small runtime deps:
+pip install --no-deps "git+https://github.com/amazon-science/ReFinED.git@V1"
+pip install ujson nltk Unidecode lmdb prettyprint
+```
+
+### Run Miner
+
+```bash
 cp .miner_env_tmpl .miner_env
-# edit .miner_env to include your LLM information (MODEL, API_KEY, LLM_BASE)
+# edit .miner_env → set API_KEY (OpenRouter sk-or-...). MODEL / LLM_BASE are pre-filled.
 .venv/bin/python -m neurons.miner \
   --netuid 45 \
   --wallet.name your_coldkey_here \
@@ -195,20 +224,21 @@ cp .miner_env_tmpl .miner_env
 
 *Optional: Add `--axon.external_port` and `--axon.external_ip`
 
-**Run Validator**
+### Run Validator
 
 ```bash
-pip install -r requirements.txt
-pip install -e .
 cp .vali_env_tmpl .vali_env
-# edit .vali_env to include your LLM information (MODEL, API_KEY, LLM_BASE)
+# edit .vali_env → set API_KEY (OpenRouter sk-or-...). MODEL / LLM_BASE / MINER_API_URL are pre-filled.
 .venv/bin/python -m neurons.validator \
   --netuid 45 \
-  --subtensor.network <finney/local/test> \
+  --subtensor.network finney \
   --wallet.name <your wallet> \
   --wallet.hotkey <your hotkey> \
   --logging.info
 ```
+
+> `BT_NO_PARSE_CLI_ARGS` and `CUBLAS_WORKSPACE_CONFIG` are set automatically by the entrypoints —
+> you don't need to export them.
 
 *Optional*: Run the validator under PM2 with the auto-updater:
 
