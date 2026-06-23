@@ -3,7 +3,7 @@
 **Date:** 2026-06-16
 **Status:** Approved (pending spec review)
 **Predecessor:** `2026-06-16-ml-replacement-benchmark-design.md` (Plan 1, single-value classification, done)
-**Repo:** `/home/rizzo/talisman/eval` (own git); imports `alpharidge-ai` analyzer + data.
+**Repo:** `/home/rizzo/alpharidge/eval` (own git); imports `alpharidge-ai` analyzer + data.
 
 ## Goal
 

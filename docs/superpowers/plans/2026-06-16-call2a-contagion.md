@@ -59,7 +59,7 @@ def test_render_characterization_has_rows():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /home/rizzo/talisman/eval && pytest tests/test_characterize.py -v`
+Run: `cd /home/rizzo/alpharidge/eval && pytest tests/test_characterize.py -v`
 Expected: FAIL `ModuleNotFoundError: No module named 'eval.bench.characterize'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -114,7 +114,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/bench/characterize.py tests/test_characterize.py
 git commit -m "feat: characterization runner for non-gated Call-2 field replacements"
 ```
@@ -205,7 +205,7 @@ Expected: PASS (3 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/predictors/contagion_map.py tests/test_contagion_map.py
 git commit -m "feat: relation->mechanism mapping + ContagionLink builder"
 ```
@@ -256,7 +256,7 @@ Expected: FAIL `ModuleNotFoundError`
 from eval.predictors.base import Prediction
 from eval.predictors.contagion_map import relation_to_mechanism, make_link
 
-_GRAPH_PATH = "/home/rizzo/talisman/alpharidge-ai/alpharidge_ai/analyzer/data/dependency_graph.json"
+_GRAPH_PATH = "/home/rizzo/alpharidge/alpharidge-ai/alpharidge_ai/analyzer/data/dependency_graph.json"
 
 def _default_graph():
     import json, pathlib
@@ -304,7 +304,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/predictors/contagion.py tests/test_contagion_graph.py
 git commit -m "feat: graph-only contagion baseline predictor"
 ```
@@ -423,7 +423,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/predictors/contagion.py tests/test_contagion_glirel.py
 git commit -m "feat: GLiREL contagion predictor (injected scorer + graph fusion)"
 ```
@@ -589,7 +589,7 @@ Expected: PASS, or actionable errors that tell you the real `predict_relations` 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/predictors/glirel_backend.py eval/hf/__init__.py eval/hf/refind.py \
         eval/bench/re_eval.py tests/test_re_eval.py tests/test_glirel_backend_gated.py
 git commit -m "feat: real GLiREL/FinBERT backend + REFinD RE-eval (gated)"
@@ -677,7 +677,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/cli.py tests/test_cli_characterize.py
 git commit -m "feat: CLI characterize subcommand"
 ```
@@ -685,7 +685,7 @@ git commit -m "feat: CLI characterize subcommand"
 - [ ] **Step 6: Full suite green, install deps, real run**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 pytest -q                       # all green, gated tests skip
 pip install glirel
 python -m spacy download en_core_web_sm
@@ -721,7 +721,7 @@ Report: the contagion characterization table (graph_only vs glirel GLM-fidelity)
 - [ ] **Step 7: Commit the report**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/reports/contagion_characterization.json
 git commit -m "report: contagion characterization (graph_only vs GLiREL) + REFinD accuracy"
 ```

@@ -43,7 +43,7 @@ def analysis_hash(analysis_dict: dict) -> str:
 
 
 def miner_sign_message(resource_id: str, analysis_hash_hex: str, nonce: str) -> str:
-    return f"talisman-miner-verdict:{resource_id}:{analysis_hash_hex}:{nonce}"
+    return f"alpharidge-miner-verdict:{resource_id}:{analysis_hash_hex}:{nonce}"
 
 
 def sign_miner_item(keypair: "Keypair", resource_id: str, analysis_hash_hex: str, nonce: str) -> str:

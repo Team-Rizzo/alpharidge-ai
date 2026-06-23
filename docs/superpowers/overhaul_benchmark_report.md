@@ -41,7 +41,7 @@ The gold labels were produced by the *same analyzer with the old, buggy code*. S
 - Narrative threshold `tau = 0.30` (config-overridable via `NARRATIVE_TAU`), chosen by sweep maximizing mean Jaccard. Predictor abstains more than gold (74% vs 32% empty) — the *safe* failure mode given the original bug was over-emitting.
 
 ## Tests
-- New unit tests: ticker gate 4/4, entity dedup 4/4, entity fragments 5/5, asset direction 4/4, narrative selection 4/4 (talisman); narrative predictor 3/3 (eval). Hand-curated regression 25/25. Bench smoke 1/1.
+- New unit tests: ticker gate 4/4, entity dedup 4/4, entity fragments 5/5, asset direction 4/4, narrative selection 4/4 (alpharidge); narrative predictor 3/3 (eval). Hand-curated regression 25/25. Bench smoke 1/1.
 
 ## Known limitations / follow-ups
 - Embedding narrative selection still can't reach the 30 gold-only slugs absent from the 38-slug taxonomy (≈1% of gold instances) and under-covers vs gold. A hybrid LLM-verify or richer centroids could lift recall if desired (deferred — would add LLM scope against the kill-Call-2 direction).

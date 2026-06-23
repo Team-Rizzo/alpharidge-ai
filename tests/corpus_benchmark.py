@@ -27,8 +27,8 @@ from alpharidge_ai.analyzer.asset_extractor import _is_ambiguous_word
 JUNK_TICKERS = {"GOOGL", "TGT", "META", "XAU", "V", "USO", "ADA", "CL", "KC", "PA",
                 "SQ", "IXIC", "ON", "IT", "GC"}
 
-DB = dict(host="127.0.0.1", port=5433, dbname="talisman",
-          user="talisman", password="talisman_dev")
+DB = dict(host="127.0.0.1", port=5433, dbname="alpharidge",
+          user="alpharidge", password="alpharidge_dev")
 
 
 def fetch(n: int):

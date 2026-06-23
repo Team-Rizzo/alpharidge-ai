@@ -170,7 +170,7 @@ positives** (§3.1). Run the §6.4 corpus queries to quantify each.
 
 ## 6. How to reproduce this review yourself
 
-Everything below runs against the local stack (Postgres on `127.0.0.1:5433`, db `talisman`).
+Everything below runs against the local stack (Postgres on `127.0.0.1:5433`, db `alpharidge`).
 Use the `alpharidge_ai` conda env so the JSONB decodes cleanly.
 
 ### 6.1 Pull samples (original article + full analysis) to disk
@@ -178,8 +178,8 @@ Use the `alpharidge_ai` conda env so the JSONB decodes cleanly.
 ```bash
 /home/rizzo/miniconda3/envs/alpharidge_ai/bin/python - <<'PY'
 import psycopg2, json
-conn = psycopg2.connect(host="127.0.0.1", port=5433, dbname="talisman",
-                        user="talisman", password="talisman_dev")
+conn = psycopg2.connect(host="127.0.0.1", port=5433, dbname="alpharidge",
+                        user="alpharidge", password="alpharidge_dev")
 cur = conn.cursor()
 # Richest outputs first (most assets); flip the ORDER BY to sample differently.
 cur.execute("""

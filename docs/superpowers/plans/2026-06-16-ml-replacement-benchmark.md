@@ -45,13 +45,13 @@ Each file contains exactly one line:
 
 - [ ] **Step 2: Verify imports work**
 
-Run: `cd /home/rizzo/talisman/eval && python -c "import eval.distill, eval.predictors, eval.bench; print('ok')"`
+Run: `cd /home/rizzo/alpharidge/eval && python -c "import eval.distill, eval.predictors, eval.bench; print('ok')"`
 Expected: `ok`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/distill/__init__.py eval/predictors/__init__.py eval/bench/__init__.py
 git commit -m "scaffold: distill/predictors/bench packages"
 ```
@@ -137,7 +137,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/distill/split.py tests/test_split.py
 git commit -m "feat: deterministic train/test splitter for GLM gold"
 ```
@@ -194,7 +194,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/predictors/base.py tests/test_predictor_base.py
 git commit -m "feat: Predictor protocol + Prediction dataclass"
 ```
@@ -278,7 +278,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/predictors/baseline.py tests/test_baseline.py
 git commit -m "feat: majority-class + mean-regressor baseline predictors"
 ```
@@ -420,7 +420,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/predictors/distilled.py tests/test_distilled_linear.py
 git commit -m "feat: distilled LinearHead/LGBMHead classifiers + RidgeHead regressor"
 ```
@@ -481,7 +481,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add tests/test_distilled_lgbm.py
 git commit -m "test: LGBMHead + RidgeHead behavior"
 ```
@@ -572,7 +572,7 @@ Expected: PASS (4 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/bench/decide.py tests/test_decide.py
 git commit -m "feat: fidelity-to-GLM decision policy (replace/hybrid/keep)"
 ```
@@ -651,7 +651,7 @@ Expected: PASS (3 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/bench/ladders.py tests/test_ladders.py
 git commit -m "feat: per-field candidate ladders (classifier + regressor)"
 ```
@@ -733,7 +733,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/bench/score.py tests/test_score_candidate.py
 git commit -m "feat: score a candidate against held-out GLM via field metrics"
 ```
@@ -833,7 +833,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/bench/runner.py tests/test_bench_runner.py
 git commit -m "feat: per-field benchmark runner over the candidate ladder"
 ```
@@ -943,7 +943,7 @@ Expected: PASS (3 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/bench/report.py tests/test_bench_report.py
 git commit -m "feat: benchmark report (markdown + json) with decision summary"
 ```
@@ -1034,7 +1034,7 @@ Expected: PASS (2 tests). Without the env var, both SKIP.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/distill/features.py tests/test_features_gated.py
 git commit -m "feat: MiniLM feature extractor + npz cache (gated test)"
 ```
@@ -1164,7 +1164,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/cli.py tests/test_cli_bench.py
 git commit -m "feat: CLI split/features/bench subcommands"
 ```
@@ -1177,14 +1177,14 @@ git commit -m "feat: CLI split/features/bench subcommands"
 
 - [ ] **Step 1: Run the whole unit suite**
 
-Run: `cd /home/rizzo/talisman/eval && pytest -q`
+Run: `cd /home/rizzo/alpharidge/eval && pytest -q`
 Expected: all tests pass (existing oracle tests + the new ones). Gated tests skip without `RUN_MODEL_TESTS=1`.
 
 - [ ] **Step 2: Produce the real split from the 5k GLM gold**
 
 Run:
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 python -m eval.cli split --gold eval/data/gold_z-ai_glm-5.1.jsonl \
   --out-dir eval/data/distill --test-frac 0.2 --seed 0
 ```
@@ -1194,7 +1194,7 @@ Expected: `split -> 4000 train / 1000 test in eval/data/distill`
 
 Run:
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 python -m eval.cli features --rows eval/data/distill/train.jsonl --out eval/data/distill/train.npz
 python -m eval.cli features --rows eval/data/distill/test.jsonl  --out eval/data/distill/test.npz
 ```
@@ -1203,7 +1203,7 @@ Expected: `features -> 4000 vectors ...` and `features -> 1000 vectors ...`
 Note: `bench` takes a single `--features` map, so merge or pass per-split. Update the `bench` invocation to attach train features to train rows and test features to test rows by running the command twice is unnecessary — instead extend the merge: combine both npz into one map (ids are globally unique across the split).
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 python - <<'PY'
 import numpy as np
 a = dict(np.load("eval/data/distill/train.npz"))
@@ -1218,7 +1218,7 @@ PY
 
 Run:
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 python -m eval.cli bench --train eval/data/distill/train.jsonl \
   --test eval/data/distill/test.jsonl --features eval/data/distill/all.npz \
   --out eval/reports/replacement_decisions.json
@@ -1228,7 +1228,7 @@ Expected: a markdown table printed with one row per field, plus the decision sum
 - [ ] **Step 5: Commit the report (data/models gitignored)**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 # ensure the big artifacts are ignored
 grep -q "^eval/data/distill/" .gitignore || echo "eval/data/distill/" >> .gitignore
 grep -q "^eval/models/" .gitignore || echo "eval/models/" >> .gitignore

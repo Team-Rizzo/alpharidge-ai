@@ -13,7 +13,7 @@
 - **DO NOT COMMIT.** Per project policy the user reviews and commits. Each task ends by leaving changes unstaged/staged and reporting a diff summary + benchmark numbers. Replace any "commit" step with "report results".
 - **Determinism across the validator consensus boundary is mandatory** for `assets`, `entities`, `contagion_links`, and per-asset sentiment. No LLM, no `random`, no wall-clock, no dict-iteration-order dependence in those paths. (`article_intelligence_analyzer.py:296-301` documents this.)
 - **2-CPU miner box.** No new heavy model may be added to the production path unless a benchmark shows a clear win AND latency is acceptable (`ccnews-bench/bench_local.py`). New models for P1/P3 alternatives live in `eval/predictors/` only until proven.
-- **Branch:** `article-intelligence-v2` in `/home/rizzo/talisman/alpharidge-ai`. The eval package is at `/home/rizzo/talisman/eval` (separate import root).
+- **Branch:** `article-intelligence-v2` in `/home/rizzo/alpharidge/alpharidge-ai`. The eval package is at `/home/rizzo/alpharidge/eval` (separate import root).
 - **Existing public behavior must not regress:** a task that improves its target field must not lower any other field's metric on the gold set.
 
 ---
@@ -21,9 +21,9 @@
 ### Task 1: Benchmark harness + hand-curated targeted set
 
 **Files:**
-- Create: `/home/rizzo/talisman/eval/scripts/overhaul_bench.py`
-- Create: `/home/rizzo/talisman/alpharidge-ai/tests/fixtures/handcurated_overhaul.jsonl`
-- Create: `/home/rizzo/talisman/alpharidge-ai/tests/test_overhaul_regressions.py`
+- Create: `/home/rizzo/alpharidge/eval/scripts/overhaul_bench.py`
+- Create: `/home/rizzo/alpharidge/alpharidge-ai/tests/fixtures/handcurated_overhaul.jsonl`
+- Create: `/home/rizzo/alpharidge/alpharidge-ai/tests/test_overhaul_regressions.py`
 
 **Interfaces:**
 - Produces: `overhaul_bench.py` CLI: `python scripts/overhaul_bench.py --gold <path> --limit N --fields assets entities` — runs ONLY the deterministic path (`NERFusionEngine.extract_and_resolve` + `_build_assets` + `_finbert_asset_sentiments` + `_build_entities_from_ner`) over each gold row's `article`, scores the named fields against `row["labels"]` using `eval.metrics.fields.FIELD_METRICS`, and prints mean F1 / field_agreement. No LLM calls.
@@ -34,10 +34,10 @@
 ```python
 # alpharidge-ai/tests/test_overhaul_regressions.py
 import json, os, subprocess, sys, pytest
-EVAL = "/home/rizzo/talisman/eval"
+EVAL = "/home/rizzo/alpharidge/eval"
 def test_overhaul_bench_runs_on_smoke(tmp_path):
     # 3-row smoke gold built from the existing sample
-    src = "/home/rizzo/talisman/eval/eval/data/gold_z-ai_glm-5.1.jsonl"
+    src = "/home/rizzo/alpharidge/eval/eval/data/gold_z-ai_glm-5.1.jsonl"
     smoke = tmp_path / "smoke.jsonl"
     with open(src) as f, open(smoke, "w") as o:
         for i, line in zip(range(3), f):
@@ -51,13 +51,13 @@ def test_overhaul_bench_runs_on_smoke(tmp_path):
 
 - [ ] **Step 2: Run it, verify it fails**
 
-Run: `cd /home/rizzo/talisman/alpharidge-ai && python -m pytest tests/test_overhaul_regressions.py::test_overhaul_bench_runs_on_smoke -q`
+Run: `cd /home/rizzo/alpharidge/alpharidge-ai && python -m pytest tests/test_overhaul_regressions.py::test_overhaul_bench_runs_on_smoke -q`
 Expected: FAIL (script does not exist).
 
 - [ ] **Step 3: Implement the harness**
 
 `overhaul_bench.py` must:
-1. Add `/home/rizzo/talisman/alpharidge-ai` to `sys.path`, import `ArticleIntelligenceAnalyzer` and `NERFusionEngine`.
+1. Add `/home/rizzo/alpharidge/alpharidge-ai` to `sys.path`, import `ArticleIntelligenceAnalyzer` and `NERFusionEngine`.
 2. Construct the analyzer once (it loads NER models). For each gold row: call `ner = analyzer.ner_engine.extract_and_resolve(title, content)`, then `ner_tickers = [e.ticker for e in ner.resolved_assets if e.ticker]`, `sents = analyzer._finbert_asset_sentiments(ner_tickers, ner)`, `assets = analyzer._build_assets(ner, sents)`, `entities = analyzer._build_entities_from_ner(ner)`.
 3. Serialize each to plain dicts matching gold shape: assets → `[{"ticker":a.ticker, "direction":a.direction.value, ...}]`; entities → `[{"name":e.name, ...}]` (use the pydantic `.model_dump()` / `.dict()` then ensure enum values are `.value` strings, matching how gold labels are stored — inspect one gold row to confirm serialization).
 4. Score with `from eval.metrics.fields import FIELD_METRICS`; for each requested field compute `metric.score(pred_value, row["labels"].get(field)).value` and also pull `.details` for f1/field_agreement; print mean per field.
@@ -77,17 +77,17 @@ Populate `handcurated_overhaul.jsonl` with real article texts covering every fai
 
 - [ ] **Step 5: Make the smoke test pass; report (do not commit)**
 
-Run: `cd /home/rizzo/talisman/alpharidge-ai && python -m pytest tests/test_overhaul_regressions.py::test_overhaul_bench_runs_on_smoke -q`
+Run: `cd /home/rizzo/alpharidge/alpharidge-ai && python -m pytest tests/test_overhaul_regressions.py::test_overhaul_bench_runs_on_smoke -q`
 Expected: PASS.
-Then capture a **baseline**: `cd /home/rizzo/talisman/eval && python scripts/overhaul_bench.py --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 500 --fields assets entities` and record the assets/entities numbers in the task report. Do NOT commit.
+Then capture a **baseline**: `cd /home/rizzo/alpharidge/eval && python scripts/overhaul_bench.py --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 500 --fields assets entities` and record the assets/entities numbers in the task report. Do NOT commit.
 
 ---
 
 ### Task 2: P2 — fix ticker uppercase-acronym false positives
 
 **Files:**
-- Modify: `/home/rizzo/talisman/alpharidge-ai/alpharidge_ai/analyzer/asset_extractor.py:49,93-103,160-162,298-312`
-- Test: `/home/rizzo/talisman/alpharidge-ai/tests/test_asset_extractor_gate.py` (create)
+- Modify: `/home/rizzo/alpharidge/alpharidge-ai/alpharidge_ai/analyzer/asset_extractor.py:49,93-103,160-162,298-312`
+- Test: `/home/rizzo/alpharidge/alpharidge-ai/tests/test_asset_extractor_gate.py` (create)
 
 **Interfaces:**
 - Consumes: `AssetExtractor.extract_assets(title, body, language)` (unchanged signature).
@@ -157,7 +157,7 @@ Run the existing NER gold guardrails: `python -m tests.ner_benchmark` — confir
 
 - [ ] **Step 5: Benchmark + report (do not commit)**
 
-Run: `cd /home/rizzo/talisman/eval && python scripts/overhaul_bench.py --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 500 --fields assets`
+Run: `cd /home/rizzo/alpharidge/eval && python scripts/overhaul_bench.py --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 500 --fields assets`
 Expected: `assets` F1 ≥ baseline (precision up from fewer FPs), field_agreement unchanged. Record delta. Do NOT commit.
 
 ---
@@ -165,8 +165,8 @@ Expected: `assets` F1 ≥ baseline (precision up from fewer FPs), field_agreemen
 ### Task 3: P4a — deduplicate entities by canonical name
 
 **Files:**
-- Modify: `/home/rizzo/talisman/alpharidge-ai/alpharidge_ai/analyzer/article_intelligence_analyzer.py:505-521` (`_build_entities_from_ner`)
-- Test: `/home/rizzo/talisman/alpharidge-ai/tests/test_entity_dedup.py` (create)
+- Modify: `/home/rizzo/alpharidge/alpharidge-ai/alpharidge_ai/analyzer/article_intelligence_analyzer.py:505-521` (`_build_entities_from_ner`)
+- Test: `/home/rizzo/alpharidge/alpharidge-ai/tests/test_entity_dedup.py` (create)
 
 **Interfaces:**
 - Consumes: `ner_result.resolved_entities` (each has `.canonical_name`, `.entity_type`, `.role`, `.ticker`, `.sentiment_toward`, `.confidence`).
@@ -236,7 +236,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Benchmark + report (do not commit)**
 
-Run: `cd /home/rizzo/talisman/eval && python scripts/overhaul_bench.py --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 500 --fields entities`
+Run: `cd /home/rizzo/alpharidge/eval && python scripts/overhaul_bench.py --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 500 --fields entities`
 Expected: `entities` F1 ≥ baseline (duplicate keys collapse → fewer fp), no fn increase. Record delta. Do NOT commit.
 
 ---
@@ -244,8 +244,8 @@ Expected: `entities` F1 ≥ baseline (duplicate keys collapse → fewer fp), no 
 ### Task 4: P4b — drop adjectival / appositive NER fragments
 
 **Files:**
-- Modify: `/home/rizzo/talisman/alpharidge-ai/alpharidge_ai/analyzer/entity_filter.py:90-107` (`_blocked` + a normalize step in `filter`)
-- Test: `/home/rizzo/talisman/alpharidge-ai/tests/test_entity_fragments.py` (create)
+- Modify: `/home/rizzo/alpharidge/alpharidge-ai/alpharidge_ai/analyzer/entity_filter.py:90-107` (`_blocked` + a normalize step in `filter`)
+- Test: `/home/rizzo/alpharidge/alpharidge-ai/tests/test_entity_fragments.py` (create)
 
 **Interfaces:**
 - Consumes/Produces: `EntityFilter.filter(candidates, language)` — same signature. Candidate text is normalized (hyphenated modifier tails trimmed) before clustering; pure-fragment candidates are dropped.
@@ -317,9 +317,9 @@ Run the entities bench again (`--fields entities`), confirm F1 ≥ Task-3 result
 ### Task 5: P3 — real per-asset direction via surface-form matching
 
 **Files:**
-- Modify: `/home/rizzo/talisman/alpharidge-ai/alpharidge_ai/analyzer/ner_fusion.py:246-256` (carry surface forms on `ResolvedEntity`)
-- Modify: `/home/rizzo/talisman/alpharidge-ai/alpharidge_ai/analyzer/article_intelligence_analyzer.py:301,611-644` (`_finbert_asset_sentiments` + call site)
-- Test: `/home/rizzo/talisman/alpharidge-ai/tests/test_asset_direction.py` (create)
+- Modify: `/home/rizzo/alpharidge/alpharidge-ai/alpharidge_ai/analyzer/ner_fusion.py:246-256` (carry surface forms on `ResolvedEntity`)
+- Modify: `/home/rizzo/alpharidge/alpharidge-ai/alpharidge_ai/analyzer/article_intelligence_analyzer.py:301,611-644` (`_finbert_asset_sentiments` + call site)
+- Test: `/home/rizzo/alpharidge/alpharidge-ai/tests/test_asset_direction.py` (create)
 
 **Interfaces:**
 - Consumes: `ner_result.resolved_assets` (each with `.ticker`, `.canonical_name`); `ner_result.sentence_sentiments` (list of `{"text","sentiment","score"}`); article overall sentiment string.
@@ -415,7 +415,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Benchmark + report (do not commit)**
 
-Run: `cd /home/rizzo/talisman/eval && python scripts/overhaul_bench.py --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 500 --fields assets`
+Run: `cd /home/rizzo/alpharidge/eval && python scripts/overhaul_bench.py --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 500 --fields assets`
 Expected: `assets` field_agreement rises from the near-base-rate baseline toward `FinBERTAspect`'s ~0.815; F1 unchanged or better. Record delta. Do NOT commit.
 
 ---
@@ -423,9 +423,9 @@ Expected: `assets` field_agreement rises from the near-base-rate baseline toward
 ### Task 6: P1 (benchmark) — embedding-based narrative slug predictor
 
 **Files:**
-- Modify: `/home/rizzo/talisman/eval/eval/predictors/keywords.py` (add `NarrativeEmbedKeywords`)
-- Modify: `/home/rizzo/talisman/eval/eval/cli.py:122-126` (register it)
-- Create: `/home/rizzo/talisman/eval/scripts/sweep_narrative_tau.py`
+- Modify: `/home/rizzo/alpharidge/eval/eval/predictors/keywords.py` (add `NarrativeEmbedKeywords`)
+- Modify: `/home/rizzo/alpharidge/eval/eval/cli.py:122-126` (register it)
+- Create: `/home/rizzo/alpharidge/eval/scripts/sweep_narrative_tau.py`
 
 **Interfaces:**
 - Produces: predictor `NarrativeEmbedKeywords(tau=…, top_k=3)` with `name="narrative_embed"`, `fit(rows)` (precomputes 38 narrative centroids from `narratives.json` keywords using `all-MiniLM-L6-v2`), `predict_one(row)` → `Prediction([slugs over tau][:top_k], conf)`; returns `[]` when none clear tau.
@@ -449,7 +449,7 @@ def test_picks_crypto_slug_on_crypto():
 
 - [ ] **Step 2: Run, verify failure**
 
-Run: `cd /home/rizzo/talisman/eval && python -m pytest tests/test_narrative_embed.py -q`
+Run: `cd /home/rizzo/alpharidge/eval && python -m pytest tests/test_narrative_embed.py -q`
 Expected: FAIL (class missing).
 
 - [ ] **Step 3: Implement the predictor**
@@ -457,7 +457,7 @@ Expected: FAIL (class missing).
 ```python
 # append to eval/eval/predictors/keywords.py
 import json, os, functools
-_NARR_PATH = "/home/rizzo/talisman/alpharidge-ai/alpharidge_ai/analyzer/data/narratives.json"
+_NARR_PATH = "/home/rizzo/alpharidge/alpharidge-ai/alpharidge_ai/analyzer/data/narratives.json"
 
 class NarrativeEmbedKeywords:
     name = "narrative_embed"
@@ -491,13 +491,13 @@ Register in `cli.py`: add `from eval.predictors.keywords import ... , NarrativeE
 
 - [ ] **Step 4: Run test, verify pass**
 
-Run: `cd /home/rizzo/talisman/eval && python -m pytest tests/test_narrative_embed.py -q`
+Run: `cd /home/rizzo/alpharidge/eval && python -m pytest tests/test_narrative_embed.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Sweep tau + characterize; report (do not commit)**
 
 Write `sweep_narrative_tau.py` to loop tau in `[0.25,0.30,…,0.55]`, score `NarrativeEmbedKeywords(tau)` on the calibration split via `eval.bench.score.score_candidate("narrative_keywords", pred, rows)`, and print mean Jaccard + empty-rate per tau; pick the tau whose empty-rate ≈ 37% and Jaccard is maximal.
-Then: `cd /home/rizzo/talisman/eval && python -m eval characterize --field narrative_keywords --candidates narrative_embed yake keybert --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 1000 --out eval/reports/keywords_overhaul.json`
+Then: `cd /home/rizzo/alpharidge/eval && python -m eval characterize --field narrative_keywords --candidates narrative_embed yake keybert --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 1000 --out eval/reports/keywords_overhaul.json`
 Expected: `narrative_embed` glm_fidelity ≫ yake/keybert (which are ~0.0). Also compute the GLM-vs-Opus ceiling for context. Record chosen tau + numbers. Do NOT commit.
 
 ---
@@ -505,9 +505,9 @@ Expected: `narrative_embed` glm_fidelity ≫ yake/keybert (which are ~0.0). Also
 ### Task 7: P1 (production) — wire narrative slug selection into the analyzer
 
 **Files:**
-- Modify: `/home/rizzo/talisman/alpharidge-ai/alpharidge_ai/analyzer/article_intelligence_analyzer.py:184-204,286-294,311` (shortlist + Call-2 schema + assembly)
-- Modify: `/home/rizzo/talisman/alpharidge-ai/alpharidge_ai/analyzer/__init__.py` if a setup hook is needed
-- Test: `/home/rizzo/talisman/alpharidge-ai/tests/test_narrative_selection.py` (create)
+- Modify: `/home/rizzo/alpharidge/alpharidge-ai/alpharidge_ai/analyzer/article_intelligence_analyzer.py:184-204,286-294,311` (shortlist + Call-2 schema + assembly)
+- Modify: `/home/rizzo/alpharidge/alpharidge-ai/alpharidge_ai/analyzer/__init__.py` if a setup hook is needed
+- Test: `/home/rizzo/alpharidge/alpharidge-ai/tests/test_narrative_selection.py` (create)
 
 **Interfaces:**
 - Consumes: chosen approach + tau from Task 6.
@@ -577,8 +577,8 @@ Expected: PASS.
 ### Task 8: Full benchmark + hand-curated regression + report
 
 **Files:**
-- Modify: `/home/rizzo/talisman/alpharidge-ai/tests/test_overhaul_regressions.py` (add the targeted assertions over `handcurated_overhaul.jsonl`)
-- Create: `/home/rizzo/talisman/alpharidge-ai/docs/superpowers/overhaul_benchmark_report.md`
+- Modify: `/home/rizzo/alpharidge/alpharidge-ai/tests/test_overhaul_regressions.py` (add the targeted assertions over `handcurated_overhaul.jsonl`)
+- Create: `/home/rizzo/alpharidge/alpharidge-ai/docs/superpowers/overhaul_benchmark_report.md`
 
 - [ ] **Step 1: Write the hand-curated regression tests**
 
@@ -592,7 +592,7 @@ Expected: All targeted cases PASS (LEO excluded, $LEO kept, Medtronic deduped, n
 - [ ] **Step 3: Run the full gold benchmark, before vs after**
 
 Run on a 1000-row slice for all deterministic fields:
-`cd /home/rizzo/talisman/eval && python scripts/overhaul_bench.py --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 1000 --fields assets entities`
+`cd /home/rizzo/alpharidge/eval && python scripts/overhaul_bench.py --gold eval/data/gold_z-ai_glm-5.1.jsonl --limit 1000 --fields assets entities`
 and the narrative characterize from Task 6. Re-run the same against `gold_anthropic_claude-opus-4-6.jsonl` (overfit check).
 
 - [ ] **Step 4: Confirm no regression on other fields**

@@ -3,7 +3,7 @@
 **Date:** 2026-06-16
 **Status:** Approved (pending spec review)
 **Predecessor:** `2026-06-15-oracle-eval-framework-design.md` (oracle + eval framework, complete)
-**Repo:** `/home/rizzo/talisman/eval` (own git repo); imports `alpharidge-ai` analyzer.
+**Repo:** `/home/rizzo/alpharidge/eval` (own git repo); imports `alpharidge-ai` analyzer.
 
 ## Goal
 

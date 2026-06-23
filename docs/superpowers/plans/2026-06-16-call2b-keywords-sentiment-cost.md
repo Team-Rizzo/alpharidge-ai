@@ -46,7 +46,7 @@ def test_empty_content_yields_empty():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /home/rizzo/talisman/eval && pytest tests/test_keywords.py -v`
+Run: `cd /home/rizzo/alpharidge/eval && pytest tests/test_keywords.py -v`
 Expected: FAIL `ModuleNotFoundError`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -100,7 +100,7 @@ Expected: PASS (3 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/predictors/keywords.py tests/test_keywords.py
 git commit -m "feat: YAKE + KeyBERT keyword predictors (injected extractor)"
 ```
@@ -207,7 +207,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/predictors/aspect_sentiment.py tests/test_aspect_sentiment.py
 git commit -m "feat: FinBERT aspect per-asset sentiment predictor"
 ```
@@ -226,7 +226,7 @@ Each module has a PURE `parse_*` function (unit-tested on synthetic records) + a
 
 Run:
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 python - <<'PY'
 from datasets import load_dataset
 for ds_id, cfg in [("financial_phrasebank","sentences_50agree"),
@@ -384,7 +384,7 @@ Expected: PASS (3 tests). If a real schema differs from the synthetic assumption
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/hf/finentity.py eval/hf/phrasebank.py eval/hf/fiqa.py tests/test_hf_sentiment_adapters.py
 git commit -m "feat: HF sentiment-gold adapters (PhraseBank, FiQA, FinEntity)"
 ```
@@ -450,7 +450,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/bench/human_eval.py tests/test_human_eval.py
 git commit -m "feat: human-gold validation harness (predictor vs HF labels)"
 ```
@@ -536,7 +536,7 @@ Expected: PASS (2 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/bench/cost.py eval/oracle/measure_tokens.py tests/test_cost.py
 git commit -m "feat: Call-2 cost projector + token-measurement harness"
 ```
@@ -600,7 +600,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 git add eval/cli.py tests/test_cli_keywords_sentiment.py
 git commit -m "feat: register keyword/sentiment candidates in characterize CLI"
 ```
@@ -608,7 +608,7 @@ git commit -m "feat: register keyword/sentiment candidates in characterize CLI"
 - [ ] **Step 6: Full suite + install + real runs**
 
 ```bash
-cd /home/rizzo/talisman/eval
+cd /home/rizzo/alpharidge/eval
 pytest -q                       # all green, gated skip
 pip install keybert yake
 ```

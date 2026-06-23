@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Alpharidge validator — local subtensor netuid 2, deepseek-v4-flash via OpenRouter
 set -euo pipefail
-cd /home/rizzo/talisman/alpharidge-ai
+cd /home/rizzo/alpharidge/alpharidge-ai
 # bittensor 10.4 defaults to NOT parsing CLI args; this re-enables it
 export BT_NO_PARSE_CLI_ARGS=0
 # Deterministic cuBLAS workspace (must be set before CUDA init) — shrinks GPU

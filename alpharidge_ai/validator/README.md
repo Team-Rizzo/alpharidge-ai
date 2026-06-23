@@ -183,7 +183,7 @@ The validator respects the following environment variables from `.vali_env`:
 |----------|-------------|---------|
 | `VALIDATION_POLL_SECONDS` | Interval between validation polls | `10` |
 | `BATCH_HTTP_TIMEOUT` | HTTP timeout for API requests | `30.0` |
-| `MINER_API_URL` | Coordination API server URL | `https://talisman.rizzo.network/api` |
+| `MINER_API_URL` | Coordination API server URL | `https://alpharidge.rizzo.network/api` |
 | `SCORES_BLOCK_INTERVAL` | Blocks between score fetches | `100` |
 | `MODEL` | LLM model identifier | `Qwen/Qwen3-32B` |
 | `API_KEY` | LLM API key | Required |

@@ -18,12 +18,12 @@ import sys
 
 import pytest
 
-EVAL = "/home/rizzo/talisman/eval"
+EVAL = "/home/rizzo/alpharidge/eval"
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "handcurated_overhaul.jsonl")
 
 
 def test_overhaul_bench_runs_on_smoke(tmp_path):
-    src = "/home/rizzo/talisman/eval/eval/data/gold_z-ai_glm-5.1.jsonl"
+    src = "/home/rizzo/alpharidge/eval/eval/data/gold_z-ai_glm-5.1.jsonl"
     smoke = tmp_path / "smoke.jsonl"
     with open(src) as f, open(smoke, "w") as o:
         for i, line in zip(range(3), f):

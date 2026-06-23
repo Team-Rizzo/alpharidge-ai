@@ -68,7 +68,7 @@ the oracle's measured accuracy on Layer-1-covered fields.
 
 ## 4. Oracle pipeline & data
 
-- **Source:** the 5 downloaded CC-NEWS WARCs (`/home/rizzo/talisman/ccnews-bench`).
+- **Source:** the 5 downloaded CC-NEWS WARCs (`/home/rizzo/alpharidge/ccnews-bench`).
 - **Sample:** ~5,000 articles, **English-filtered** (langdetect — CC-NEWS is ~67% non-English).
   **Finance-dense sampling:** keep articles hitting the `assets.json`/sector gazetteer, plus a
   ~20% uniform-random slice for realism (so models also learn to reject non-financial noise).
@@ -81,7 +81,7 @@ the oracle's measured accuracy on Layer-1-covered fields.
 - **Calibration runs:** GLM-vs-Opus agreement on the 500 anchor (per field), and
   GLM/Opus-vs-external agreement on Layer-1 overlaps → a per-field **oracle-trust** score.
 
-## 5. Architecture — `eval/` (top-level, `/home/rizzo/talisman/eval`)
+## 5. Architecture — `eval/` (top-level, `/home/rizzo/alpharidge/eval`)
 
 Sibling to the repos; imports `alpharidge_ai` for the analyzer and `scoring.py` helpers. Five small,
 independently-testable units:
