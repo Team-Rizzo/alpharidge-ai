@@ -5,6 +5,7 @@ starlette>=0.30.0
 pydantic>=2
 rich>=13
 pytest>=8
+pytest-asyncio>=0.23   # required to run the async tests (e.g. tests/test_api_client_attestation.py)
 torch>=2
 numpy>=1
 requests>=2.31.0
@@ -27,7 +28,12 @@ spacy==3.8.14            # also requires: python -m spacy download en_core_web_t
 gliner==0.2.27           # urchade/gliner_base + urchade/gliner_multi-v2.1
 wordfreq==3.1.1            # deterministic word-frequency table -> common-word ticker ambiguity gate
 flair==0.15.1            # flair/ner-english-ontonotes-large (English path)
-refined==1.0             # Amazon ReFinED aida_model + wikidata (English entity linking)
+# refined (Amazon ReFinED, aida_model + wikidata English entity linking) is NOT on PyPI.
+# Install it separately, AFTER this file, from GitHub with --no-deps (so it does not
+# downgrade torch/transformers — the analyzer monkeypatches AutoTokenizer for the new API):
+#   pip install --no-deps git+https://github.com/amazon-science/ReFinED.git@V1
+# It is part of the consensus-critical NER stack above: install the SAME ref on miner
+# and validator. Full steps in docs/2026-06-23-alpharidge-venv-setup.md.
 transformers==4.53.2     # FinBERT + WikiNEuRal multilingual NER backbone
 langdetect==1.0.9        # deterministic language detection (seeded)
 trafilatura==2.1.0       # HTML main-content extraction (boilerplate removal)
