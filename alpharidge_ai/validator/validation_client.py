@@ -68,6 +68,46 @@ class ValidationClient:
         self._consecutive_errors = 0
         self._max_backoff_seconds = 300  # Max 5 minutes between retries
 
+    # ---- Display-only penalty attribution (decoupled from consensus) ----
+
+    def _timeout_penalty_row(self, miner_hotkey, resource_type, resource_id):
+        """Build a display-only timeout attribution row. No diff — there's no miner
+        analysis to compare on a timeout. Never raises (it runs inside the poll loop)."""
+        try:
+            epoch = int(self._validator._miner_reward._get_current_epoch())
+        except Exception:
+            epoch = -1
+        return {
+            "miner_hotkey": miner_hotkey,
+            "epoch": epoch,
+            "resource_type": resource_type,
+            "resource_id": str(resource_id),
+            "cause": "timeout",
+            "failed_fields": None,
+            "miner_values": None,
+            "validator_values": None,
+            "post_preview": None,
+        }
+
+    async def _flush_penalty_detail(self):
+        """Best-effort flush of buffered display-only attribution to the diagnostics
+        endpoint. DECOUPLED from consensus: failures are swallowed and the snapshot is
+        dropped (the buffer is bounded), so this can never stall or break the loop or
+        affect scoring/weights. Snapshot-and-clear is atomic (no await between them)."""
+        try:
+            buf = self._validator._penalty_detail_buffer
+            if not buf:
+                return
+            snapshot = buf[:]
+            buf.clear()
+            try:
+                await self.api_client.submit_penalty_detail(snapshot)
+                bt.logging.debug(f"[PENALTY_DETAIL] flushed {len(snapshot)} row(s)")
+            except Exception as e:
+                bt.logging.debug(f"[PENALTY_DETAIL] flush failed, dropped {len(snapshot)} row(s): {e}")
+        except Exception as e:
+            bt.logging.debug(f"[PENALTY_DETAIL] flush block error (ignored): {e}")
+
     async def run(
         self,
         on_tweets: Callable[[List[TweetWithAuthor]], Any],
@@ -104,6 +144,9 @@ class ValidationClient:
                         if tweet.hotkey:
                             bt.logging.info(f"[ValidationClient.run] Adding penalty to hotkey {tweet.hotkey} for tweet id {tweet.tweet.id}")
                             self._validator._miner_penalty.add_penalty(tweet.hotkey, 1)
+                            # V3: display-only timeout attribution (decoupled from consensus).
+                            self._validator._buffer_penalty_detail([self._timeout_penalty_row(
+                                tweet.hotkey, "tweet", tweet.tweet.id)])
                     bt.logging.debug("[ValidationClient.run] Fetching unscored tweets from api and local store")
                     unscored_tweets = (await self.api_client.get_unscored_tweets(limit=config.VALIDATION_FETCH_LIMIT)) + [tweet.tweet for tweet in self._validator._tweet_store.get_unprocessed_tweets()]
                     # Reset error counter on success
@@ -137,6 +180,9 @@ class ValidationClient:
                             if msg_item.hotkey:
                                 bt.logging.info(f"[ValidationClient.run] Adding penalty to hotkey {msg_item.hotkey} for telegram message id {msg_item.message.id}")
                                 self._validator._miner_penalty.add_penalty(msg_item.hotkey, 1)
+                                # V3: display-only timeout attribution (decoupled from consensus).
+                                self._validator._buffer_penalty_detail([self._timeout_penalty_row(
+                                    msg_item.hotkey, "telegram", msg_item.message.id)])
                         bt.logging.debug("[ValidationClient.run] Fetching unscored telegram messages from api and local store")
                         unscored_telegram_messages = (await self.api_client.get_unscored_telegram_messages(limit=config.VALIDATION_FETCH_LIMIT)) + [item.message for item in self._validator._telegram_store.get_unprocessed_messages()]
                         
@@ -160,6 +206,9 @@ class ValidationClient:
                             if article_item.hotkey:
                                 bt.logging.info(f"[ValidationClient.run] Adding penalty to hotkey {article_item.hotkey} for article id {article_item.article.id}")
                                 self._validator._miner_penalty.add_penalty(article_item.hotkey, 1)
+                                # V3: display-only timeout attribution (decoupled from consensus).
+                                self._validator._buffer_penalty_detail([self._timeout_penalty_row(
+                                    article_item.hotkey, "article", article_item.article.id)])
                         bt.logging.debug("[ValidationClient.run] Fetching unscored articles from api and local store")
                         unscored_articles = (await self.api_client.get_unscored_articles(limit=config.VALIDATION_FETCH_LIMIT)) + [item.article for item in self._validator._article_store.get_unprocessed_articles()]
 
@@ -216,6 +265,10 @@ class ValidationClient:
                         except Exception as e:
                             bt.logging.warning(f"[ValidationClient.run] Failed to submit completed article {item.article.id}: {e}")
                             continue
+
+                # Flush display-only penalty attribution (best-effort, decoupled from
+                # consensus — never blocks scoring/weights; failures drop the snapshot).
+                await self._flush_penalty_detail()
 
                 # Persist local state.
                 try:

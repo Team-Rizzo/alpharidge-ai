@@ -482,9 +482,27 @@ class AlpharidgeAPIClient:
             "/penalties",
             json={"penalties": penalty_dicts},
         )
-        
+
         return SubmissionResponse(**data)
-    
+
+    async def submit_penalty_detail(
+        self,
+        items: List[Dict[str, Any]],
+    ) -> SubmissionResponse:
+        """Submit display-only penalty attribution rows for the miner dashboard.
+
+        DECOUPLED from consensus: this hits /diagnostics/penalty-detail, which writes
+        only to the standalone penalty_detail table and never touches verdicts,
+        attestations, or Merkle. Best-effort — callers should treat failures as
+        non-fatal (the data is explanatory only).
+        """
+        data = await self._request(
+            "POST",
+            "/diagnostics/penalty-detail",
+            json={"items": items},
+        )
+        return SubmissionResponse(**data)
+
     async def get_penalties(
         self,
         hotkey: Optional[str] = None,
