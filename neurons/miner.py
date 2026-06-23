@@ -1,3 +1,10 @@
+# Baked-in launch env (set BEFORE bittensor/torch import so operators don't have to set them):
+#   BT_NO_PARSE_CLI_ARGS   — bittensor 10.4 ignores CLI args (--netuid/--wallet) without this
+#   CUBLAS_WORKSPACE_CONFIG — deterministic cuBLAS for cross-host consensus parity (must precede CUDA init)
+import os
+os.environ.setdefault("BT_NO_PARSE_CLI_ARGS", "0")
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 import time
 import typing
 import threading

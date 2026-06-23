@@ -24,7 +24,9 @@ substrateinterface>=1.0.0
 # They MUST be present and version-aligned on both miner and validator: the
 # validator re-runs this exact pipeline and hard-gates output determinism, so
 # a version skew between sides breaks consensus. Pinned (not >=) for that reason.
-spacy==3.8.14            # also requires: python -m spacy download en_core_web_trf (==3.8.0)
+spacy==3.8.14
+# spaCy transformer model, pinned as a wheel URL so `pip install -r` pulls it (no separate `spacy download`):
+en_core_web_trf @ https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl
 gliner==0.2.27           # urchade/gliner_base + urchade/gliner_multi-v2.1
 wordfreq==3.1.1            # deterministic word-frequency table -> common-word ticker ambiguity gate
 flair==0.15.1            # flair/ner-english-ontonotes-large (English path)
