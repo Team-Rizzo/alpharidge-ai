@@ -136,19 +136,25 @@ class ValidationClient:
             try:
                 bt.logging.debug("[ValidationClient.run] Top of poll loop")
                 try:
-                    bt.logging.debug("[ValidationClient.run] Checking for timed-out tweets")
-                    timed_out_tweets = self._validator._tweet_store.get_timeouts()
-                    for tweet in timed_out_tweets:
-                        bt.logging.debug(f"[ValidationClient.run] Resetting timed out tweet {tweet.tweet.id} to unprocessed")
-                        self._validator._tweet_store.reset_to_unprocessed(tweet.tweet.id)
-                        if tweet.hotkey:
-                            bt.logging.info(f"[ValidationClient.run] Adding penalty to hotkey {tweet.hotkey} for tweet id {tweet.tweet.id}")
-                            self._validator._miner_penalty.add_penalty(tweet.hotkey, 1)
-                            # V3: display-only timeout attribution (decoupled from consensus).
-                            self._validator._buffer_penalty_detail([self._timeout_penalty_row(
-                                tweet.hotkey, "tweet", tweet.tweet.id)])
-                    bt.logging.debug("[ValidationClient.run] Fetching unscored tweets from api and local store")
-                    unscored_tweets = (await self.api_client.get_unscored_tweets(limit=config.VALIDATION_FETCH_LIMIT)) + [tweet.tweet for tweet in self._validator._tweet_store.get_unprocessed_tweets()]
+                    if not config.ENABLE_TWEET_SCORING:
+                        # Tweet scoring disabled (article-first mode): skip the tweet fetch AND the
+                        # tweet timeout penalties entirely, so article-only miners aren't zeroed for
+                        # tweet timeouts. Toggle back on via remote config ENABLE_TWEET_SCORING.
+                        unscored_tweets = []
+                    else:
+                        bt.logging.debug("[ValidationClient.run] Checking for timed-out tweets")
+                        timed_out_tweets = self._validator._tweet_store.get_timeouts()
+                        for tweet in timed_out_tweets:
+                            bt.logging.debug(f"[ValidationClient.run] Resetting timed out tweet {tweet.tweet.id} to unprocessed")
+                            self._validator._tweet_store.reset_to_unprocessed(tweet.tweet.id)
+                            if tweet.hotkey:
+                                bt.logging.info(f"[ValidationClient.run] Adding penalty to hotkey {tweet.hotkey} for tweet id {tweet.tweet.id}")
+                                self._validator._miner_penalty.add_penalty(tweet.hotkey, 1)
+                                # V3: display-only timeout attribution (decoupled from consensus).
+                                self._validator._buffer_penalty_detail([self._timeout_penalty_row(
+                                    tweet.hotkey, "tweet", tweet.tweet.id)])
+                        bt.logging.debug("[ValidationClient.run] Fetching unscored tweets from api and local store")
+                        unscored_tweets = (await self.api_client.get_unscored_tweets(limit=config.VALIDATION_FETCH_LIMIT)) + [tweet.tweet for tweet in self._validator._tweet_store.get_unprocessed_tweets()]
                     # Reset error counter on success
                     self._consecutive_errors = 0
                 except Exception as e:

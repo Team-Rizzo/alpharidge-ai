@@ -111,6 +111,11 @@ LLM_CACHE_MAX_SIZE = int(os.getenv("LLM_CACHE_MAX_SIZE", "1024"))
 TWEET_STORE_LOCATION = os.getenv("TWEET_STORE_LOCATION", str(_SUBNET_ROOT / ".tweet_store.json"))
 TWEET_MAX_PROCESS_TIME = float(os.getenv("TWEET_MAX_PROCESS_TIME", "300.0"))  # 5 minutes default
 
+# Tweet scoring master switch. Default OFF (article-first): when false the validator does NOT
+# fetch tweets or apply tweet timeout penalties, so article-only miners aren't zeroed for tweet
+# timeouts. Remote-config toggleable via /config/subnet (key ENABLE_TWEET_SCORING).
+ENABLE_TWEET_SCORING = os.getenv("ENABLE_TWEET_SCORING", "false").lower() == "true"
+
 # Telegram store configuration
 TELEGRAM_STORE_LOCATION = os.getenv("TELEGRAM_STORE_LOCATION", str(_SUBNET_ROOT / ".telegram_store.json"))
 
@@ -177,11 +182,19 @@ MIN_PERCENT_PER_POINT = float(os.getenv("MIN_PERCENT_PER_POINT", "0.003"))
 
 BLACKLISTED_MINER_HOTKEYS: set = set()
 
+def _as_bool(v) -> bool:
+    """Parse a remote-config / env value as bool (bool("false") is truthy, so we can't use bool())."""
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() in ("true", "1", "yes", "on")
+
+
 _REMOTE_CONFIG_KEYS = {
     "USD_PRICE_PER_POINT":    (float, "USD_PRICE_PER_POINT"),
     "MINER_BATCH_SIZE":       (int,   "MINER_BATCH_SIZE"),
     "VALIDATION_FETCH_LIMIT": (int,   "VALIDATION_FETCH_LIMIT"),
     "MIN_PERCENT_PER_POINT":  (float, "MIN_PERCENT_PER_POINT"),
+    "ENABLE_TWEET_SCORING":   (_as_bool, "ENABLE_TWEET_SCORING"),
 }
 
 REMOTE_CONFIG_REFRESH_SECONDS = int(os.getenv("REMOTE_CONFIG_REFRESH_SECONDS", "3600"))
