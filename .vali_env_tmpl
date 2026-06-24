@@ -7,7 +7,7 @@ LLM_BASE=https://openrouter.ai/api/v1
 
 # Validator API Configuration (API v2)
 # Base URL for the miner API (API v2 endpoints: /v2/validation, /v2/validation_result, /v2/scores)
-MINER_API_URL=https://alpharidge.rizzo.network/api
+MINER_API_URL=https://api.alpharidge.ai
 # HTTP timeout in seconds for API requests
 BATCH_HTTP_TIMEOUT=30.0
 # Interval in seconds between polling for new validations
