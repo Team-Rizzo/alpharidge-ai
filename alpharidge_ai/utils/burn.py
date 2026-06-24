@@ -167,7 +167,9 @@ def get_subnet_alpha_out_emission(netuid: int) -> int:
     return get_storage_value('SubtensorModule', 'SubnetAlphaOutEmission', [netuid])
 
 def get_miner_alpha_per_block() -> float:
-    return (get_subnet_alpha_out_emission(45) * (1 - .18) * 0.5) * 7200 / 2 / 10**9
+    # SubnetAlphaOutEmission is RAO/block (1e9 RAO = 1 alpha). Miner share = (1 - 18% owner) * 50%.
+    # Returns alpha/block; caller multiplies by EPOCH_LENGTH (blocks) for the per-epoch total.
+    return (get_subnet_alpha_out_emission(45) * (1 - .18) * 0.5) / 10**9
 
 def get_percent_needed_to_equal_points(points: int) -> float:
     """
