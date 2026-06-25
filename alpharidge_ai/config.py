@@ -90,6 +90,10 @@ MINER_BATCH_SIZE = int(os.getenv("MINER_BATCH_SIZE", "3"))
 # How many tweets/messages to fetch from the API per poll cycle.
 # Fetched items are split into MINER_BATCH_SIZE chunks and dispatched to different miners.
 VALIDATION_FETCH_LIMIT = int(os.getenv("VALIDATION_FETCH_LIMIT", "24"))
+# Rolling buffer cap for the local article store. Prune keeps this many most-recent
+# articles (older ones age out) so validators always dispatch fresh news without a
+# stale backlog accumulating. Remote-config tunable so it can be adjusted subnet-wide.
+ARTICLE_STORE_MAX_ARTICLES = int(os.getenv("ARTICLE_STORE_MAX_ARTICLES", "2000"))
 BLOCK_LENGTH = int(os.getenv("BLOCK_LENGTH", "100"))
 START_BLOCK = int(os.getenv("START_BLOCK", "0"))
 
@@ -195,6 +199,7 @@ _REMOTE_CONFIG_KEYS = {
     "VALIDATION_FETCH_LIMIT": (int,   "VALIDATION_FETCH_LIMIT"),
     "MIN_PERCENT_PER_POINT":  (float, "MIN_PERCENT_PER_POINT"),
     "ENABLE_TWEET_SCORING":   (_as_bool, "ENABLE_TWEET_SCORING"),
+    "ARTICLE_STORE_MAX_ARTICLES": (int, "ARTICLE_STORE_MAX_ARTICLES"),
 }
 
 REMOTE_CONFIG_REFRESH_SECONDS = int(os.getenv("REMOTE_CONFIG_REFRESH_SECONDS", "3600"))

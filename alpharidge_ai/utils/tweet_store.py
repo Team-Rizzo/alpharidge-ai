@@ -17,6 +17,9 @@ class TweetStoreItem(BaseModel):
     status: TweetStatus
     start_time: Optional[float] = None
     hotkey: Optional[str] = None
+    # Wall-clock time the tweet entered the store; see ArticleStore.added_at.
+    # Lets prune age out unprocessed tweets even when never dispatched.
+    added_at: Optional[float] = None
     # Idempotency helpers
     submitted_to_api: bool = False
     rewarded: bool = False
@@ -63,7 +66,8 @@ class TweetStore:
         self._tweets[tweet_id] = TweetStoreItem(
             tweet=tweet,
             status=TweetStatus.PROCESSING if set_as_processing else TweetStatus.UNPROCESSED,
-            start_time=None,
+            start_time=time.time() if set_as_processing else None,
+            added_at=time.time(),
             hotkey=hotkey,
             submitted_to_api=False,
             rewarded=False,
@@ -268,29 +272,37 @@ class TweetStore:
         """
         import time as _time
         now = _time.time()
-        
+
+        # Effective age timestamp (see ArticleStore.prune_old_articles): added_at,
+        # falling back to start_time; None -> treat as old so a stale backlog drains.
+        def _age_ts(item):
+            if item.added_at is not None:
+                return item.added_at
+            return item.start_time
+
         # First, delete all submitted tweets
         self.delete_submitted_tweets()
-        
+
         # Delete old unprocessed tweets (likely stale/abandoned)
         tweet_ids_to_delete = []
         for tweet_id, item in self._tweets.items():
             # Skip tweets that are actively processing
             if item.status == TweetStatus.PROCESSING:
                 continue
-            # Delete unprocessed tweets older than max_age
-            if item.start_time is not None and (now - item.start_time) > max_age_seconds:
+            # Delete unprocessed tweets older than max_age (no timestamp -> treat as old)
+            ts = _age_ts(item)
+            if ts is None or (now - ts) > max_age_seconds:
                 tweet_ids_to_delete.append(tweet_id)
-        
+
         for tweet_id in tweet_ids_to_delete:
             del self._tweets[tweet_id]
-        
-        # If still too many tweets, delete oldest ones (by start_time or insertion order)
+
+        # If still too many tweets, delete oldest ones
         if len(self._tweets) > max_tweets:
-            # Sort by start_time (None = very old), keep newest
+            # Sort oldest first; missing timestamp -> 0.0 so it is removed first.
             sorted_items = sorted(
                 self._tweets.items(),
-                key=lambda x: x[1].start_time or 0
+                key=lambda x: _age_ts(x[1]) if _age_ts(x[1]) is not None else 0.0
             )
             excess = len(self._tweets) - max_tweets
             for tweet_id, _ in sorted_items[:excess]:

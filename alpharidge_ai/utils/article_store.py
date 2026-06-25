@@ -24,6 +24,10 @@ class ArticleStoreItem(BaseModel):
     status: ArticleStatus
     start_time: Optional[float] = None
     hotkey: Optional[str] = None
+    # Wall-clock time the article entered the store. Used by prune so unprocessed
+    # articles age out even when never dispatched (start_time stays None). Legacy
+    # items deserialized without this default to None and prune treats them as old.
+    added_at: Optional[float] = None
     # Idempotency helpers
     submitted_to_api: bool = False
     rewarded: bool = False
@@ -73,6 +77,7 @@ class ArticleStore:
             article=article,
             status=ArticleStatus.PROCESSING if set_as_processing else ArticleStatus.UNPROCESSED,
             start_time=time.time() if set_as_processing else None,
+            added_at=time.time(),
             hotkey=hotkey,
             submitted_to_api=False,
             rewarded=False,
@@ -253,6 +258,15 @@ class ArticleStore:
         """
         now = time.time()
 
+        # Effective age timestamp: when the article entered the store. Falls back to
+        # start_time for in-flight items; legacy items with neither return None and
+        # are treated as old (so a stale backlog drains instead of accumulating
+        # forever — start_time stays None for unprocessed-but-never-dispatched).
+        def _age_ts(item):
+            if item.added_at is not None:
+                return item.added_at
+            return item.start_time
+
         # First pass: remove submitted and old unprocessed articles
         article_ids_to_delete = []
         for article_id, item in self._articles.items():
@@ -260,9 +274,10 @@ class ArticleStore:
             if item.submitted_to_api:
                 article_ids_to_delete.append(article_id)
                 continue
-            # Remove old unprocessed articles
+            # Remove old unprocessed articles (no timestamp -> treat as old)
             if item.status == ArticleStatus.UNPROCESSED:
-                if item.start_time is not None and (now - item.start_time) > max_age_seconds:
+                ts = _age_ts(item)
+                if ts is None or (now - ts) > max_age_seconds:
                     article_ids_to_delete.append(article_id)
 
         for article_id in article_ids_to_delete:
@@ -270,10 +285,10 @@ class ArticleStore:
 
         # Second pass: if still over limit, remove oldest articles
         if len(self._articles) > max_articles:
-            # Sort by start_time (oldest first), keeping None at the end
+            # Sort oldest first; missing timestamp -> 0.0 so it is removed first.
             sorted_items = sorted(
                 self._articles.items(),
-                key=lambda x: x[1].start_time if x[1].start_time is not None else float('inf')
+                key=lambda x: _age_ts(x[1]) if _age_ts(x[1]) is not None else 0.0
             )
             # Keep only the newest max_articles
             to_remove = len(self._articles) - max_articles

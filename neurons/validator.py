@@ -1301,8 +1301,10 @@ class Validator(BaseValidatorNeuron):
             self._telegram_store.prune_old_messages(max_age_seconds=3600, max_messages=1000)
             self._telegram_store.save_to_file()
 
-            # Prune article store: remove submitted articles and old unprocessed ones
-            self._article_store.prune_old_articles(max_age_seconds=3600, max_articles=1000)
+            # Prune article store: remove submitted articles and old unprocessed ones.
+            # max_articles is remote-config tunable so the buffer can be sized subnet-wide.
+            self._article_store.prune_old_articles(
+                max_age_seconds=3600, max_articles=config.ARTICLE_STORE_MAX_ARTICLES)
             self._article_store.save_to_file()
 
             # Save reward/penalty stores (pruning happens in update_current_epoch)

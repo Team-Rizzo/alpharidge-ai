@@ -19,6 +19,9 @@ class TelegramStoreItem(BaseModel):
     status: TelegramMessageStatus
     start_time: Optional[float] = None
     hotkey: Optional[str] = None
+    # Wall-clock time the message entered the store; see ArticleStore.added_at.
+    # Lets prune age out unprocessed messages even when never dispatched.
+    added_at: Optional[float] = None
     # Idempotency helpers
     submitted_to_api: bool = False
     rewarded: bool = False
@@ -66,7 +69,8 @@ class TelegramStore:
         self._messages[message_id] = TelegramStoreItem(
             message=message,
             status=TelegramMessageStatus.PROCESSING if set_as_processing else TelegramMessageStatus.UNPROCESSED,
-            start_time=None,
+            start_time=time.time() if set_as_processing else None,
+            added_at=time.time(),
             hotkey=hotkey,
             submitted_to_api=False,
             rewarded=False,
@@ -283,6 +287,13 @@ class TelegramStore:
         """
         now = time.time()
         
+        # Effective age timestamp (see ArticleStore.prune_old_articles): added_at,
+        # falling back to start_time; None -> treat as old so a stale backlog drains.
+        def _age_ts(item):
+            if item.added_at is not None:
+                return item.added_at
+            return item.start_time
+
         # First pass: remove submitted and old unprocessed messages
         message_ids_to_delete = []
         for message_id, item in self._messages.items():
@@ -290,21 +301,21 @@ class TelegramStore:
             if item.submitted_to_api:
                 message_ids_to_delete.append(message_id)
                 continue
-            # Remove old unprocessed messages
+            # Remove old unprocessed messages (no timestamp -> treat as old)
             if item.status == TelegramMessageStatus.UNPROCESSED:
-                # Use start_time if available, otherwise check if message is older than max_age
-                if item.start_time is not None and (now - item.start_time) > max_age_seconds:
+                ts = _age_ts(item)
+                if ts is None or (now - ts) > max_age_seconds:
                     message_ids_to_delete.append(message_id)
-        
+
         for message_id in message_ids_to_delete:
             del self._messages[message_id]
-        
+
         # Second pass: if still over limit, remove oldest messages
         if len(self._messages) > max_messages:
-            # Sort by start_time (oldest first), keeping None at the end
+            # Sort oldest first; missing timestamp -> 0.0 so it is removed first.
             sorted_items = sorted(
                 self._messages.items(),
-                key=lambda x: x[1].start_time if x[1].start_time is not None else float('inf')
+                key=lambda x: _age_ts(x[1]) if _age_ts(x[1]) is not None else 0.0
             )
             # Keep only the newest max_messages
             to_remove = len(self._messages) - max_messages
