@@ -475,59 +475,51 @@ class ValidationClient:
 
                 bt.logging.info(f"[REWARDS] Broadcasted rewards: {broadcast_uid_rewards}")
 
-                # Penalized UIDs: only if 2+ validators (including local) penalized
-                penalized_uids: set = set()
+                # Pooled penalty MAGNITUDE per UID: sum of penalty counts from this validator
+                # (local) + every broadcasting validator. This mirrors how combined_uid_rewards
+                # pools points, so points and penalties are compared on the same pooled basis.
+                # Replaces the prior binary gate ("2+ validators recorded ANY penalty -> zero"),
+                # which zeroed every miner that took even one routine penalty -> 100% burn.
+                uid_penalty_totals: Dict[int, int] = {}
                 local_penalties: Dict[str, int] = {}
-                # Track validator counts per UID (local + broadcast)
-                uid_validator_counts: Dict[int, int] = {}
-                
+
                 try:
                     local_penalties = self._validator._miner_penalty.get_penalties(epoch=target_epoch)
                     bt.logging.debug(f"[ValidationClient.run] Retrieved local_penalties: {local_penalties}")
-                    # Count local validator penalties (counts as 1 validator per UID)
                     for hk, cnt in local_penalties.items():
                         if cnt > 0 and hk in self._validator.metagraph.hotkeys:
                             uid = self._validator.metagraph.hotkeys.index(hk)
-                            uid_validator_counts[uid] = uid_validator_counts.get(uid, 0) + 1
+                            uid_penalty_totals[uid] = uid_penalty_totals.get(uid, 0) + int(cnt)
                 except Exception as e:
                     bt.logging.debug(f"[ValidationClient.run] [PENALTIES] Failed to get local penalties: {e}")
 
-                # bt.logging.info(f"[PENALTIES] Local penalties: {local_penalties}")
-
                 try:
-                    # Get count of unique validators that penalized each UID from broadcasts
-                    broadcast_validator_counts = self._validator._penalty_broadcasts.get_validator_penalty_counts(target_epoch)
-                    bt.logging.debug(f"[ValidationClient.run] Broadcast validator penalty counts: {broadcast_validator_counts}")
-                    # Add broadcast counts to total
-                    for uid, count in broadcast_validator_counts.items():
-                        uid_validator_counts[uid] = uid_validator_counts.get(uid, 0) + count
+                    # Sum broadcast penalty COUNTS (magnitude) across senders — not the number
+                    # of validators. aggregate_epoch() returns uid -> summed penalty count.
+                    broadcast_penalty_totals = self._validator._penalty_broadcasts.aggregate_epoch(target_epoch)
+                    bt.logging.debug(f"[ValidationClient.run] Broadcast penalty totals: {broadcast_penalty_totals}")
+                    for uid, cnt in broadcast_penalty_totals.items():
+                        uid_penalty_totals[int(uid)] = uid_penalty_totals.get(int(uid), 0) + int(cnt)
                 except Exception as e:
                     bt.logging.debug(f"[ValidationClient.run] [PENALTY_BROADCAST] Failed to aggregate penalties: {e}")
 
-                # Only penalize if 2+ validators (local + broadcast) penalized
-                for uid, count in uid_validator_counts.items():
-                    if count >= 2:
-                        penalized_uids.add(uid)
-                        bt.logging.info(f"[PENALTIES] UID={uid} penalized by {count} validators (local + broadcast), will zero rewards")
-
-                # bt.logging.info(f"[PENALTY_BROADCAST] Broadcasted penalties: {broadcast_penalized}")
-
-                # Build rewards list, zero only if penalties >= rewards
+                # Build rewards list: keep the reward (weight is later scaled ∝ points) only when
+                # pooled points exceed pooled penalties; otherwise zero (net-negative miner ->
+                # its share goes to burn). This is the documented "zero only if penalties >= rewards".
                 rewards = []
-                bt.logging.debug(f"[ValidationClient.run] Building rewards list, penalized_uids: {penalized_uids}")
+                bt.logging.debug(f"[ValidationClient.run] Building rewards list, penalty_totals: {uid_penalty_totals}")
                 for uid, pts in combined_uid_rewards.items():
                     try:
                         hk = self._validator.metagraph.hotkeys[int(uid)]
                     except Exception:
                         bt.logging.debug(f"[ValidationClient.run] Could not resolve hotkey for UID={uid}, skipping.")
                         continue
-                    penalty_count = uid_validator_counts.get(uid, 0)
-                    # Apply reward unless 2+ validators (local + broadcast) penalized this UID.
-                    if pts > 0 and uid not in penalized_uids:
-                        bt.logging.info(f"[REWARDS] Applying reward for UID={uid} hotkey={hk[:12]}... (rewards={pts}, penalizing_validators={penalty_count})")
+                    pen = uid_penalty_totals.get(uid, 0)
+                    if pts > pen:
+                        bt.logging.info(f"[REWARDS] Applying reward for UID={uid} hotkey={hk[:12]}... (points={pts} > penalties={pen})")
                         rewards.append(Reward(hotkey=hk, reward=int(pts), epoch=target_epoch))
                     else:
-                        bt.logging.info(f"[PENALTIES] Zeroing reward for UID={uid} hotkey={hk[:12]}... (rewards={pts}, penalizing_validators={penalty_count})")
+                        bt.logging.info(f"[PENALTIES] Zeroing reward for UID={uid} hotkey={hk[:12]}... (points={pts} <= penalties={pen})")
                         rewards.append(Reward(hotkey=hk, reward=0, epoch=target_epoch))
                 # Recompute weights/scores once per target epoch so the snapshot the
                 # base neuron loop commits on-chain is deterministic (not whatever
