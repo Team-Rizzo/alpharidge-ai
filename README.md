@@ -1,26 +1,17 @@
-# Alpharidge AI 🪬 The Perception Subnet for On-Chain Trading Insights  
+# Alpharidge AI: The Perception Subnet powering AlphaRidge
 
-## 🪬 Vision (Why this subnet exists)
+## What this powers
 
-We are building an AI financial reasoning agent that:
+Subnet 45 is the news analysis engine behind **[AlphaRidge](https://alpharidge.ai)**, a real-time market intelligence platform that reads the conversation across **every market** (equities, FX, crypto, commodities and indices) and turns it into structured, screenable signals.
 
-- Watches what’s happening across the crypto world - markets, chain activity, and social sentiment
-- Spots meaningful signals as they are happening
-- Explains what’s happening in plain language
-- Converts insights into recommended trading or staking actions
-- Surfaces those decisions directly to your Alpharidge wallets
+AlphaRidge reads **1,000+ news sources** plus X and Telegram, and scores every article, post and message into a structured read: sentiment, impact, market outlook, content type, signal quality, and the asset it maps to. Those scores power the product surfaces.
 
-The subnet doesn’t “decide” what to trade, it feeds the agent with validated, high-quality signal data.
+**SN45 is where that scoring happens.** Every item the product shows was read, analyzed, and independently cross-checked by the subnet first. That cross-checking is the network itself: each item is scored by multiple independent models, consensus becomes the read, and where they disagree it surfaces as lower confidence.
 
-Think of it as your AI assistant for crypto decisions. To achieve this, the system needs situational awareness across multiple data streams.
-
-That awareness starts with SN45, which serves as the eyes and ears of the agent.
-
-| Layer      | What it does                                 | Delivered by       |
-|------------|----------------------------------------------|--------------------|
-| Perception | Collect signals (markets, chains, sentiment) | SN45               |
-| Reasoning  | Analyze signals, generate insights           | Alpharidge Agent     |
-| Action     | Recommend / execute trading or staking       | Wallet Integration |
+| Layer      | What it does                                          | Delivered by         |
+|------------|------------------------------------------------------|----------------------|
+| Perception | Read & analyze every news article, post and message    | **SN45** (this repo) |
+| Product    | Chart, Screener, Sentinel, Alerts & API              | AlphaRidge           |
 
 ![architecture phase 1](./architecture_p1.png)
 
@@ -28,122 +19,127 @@ That awareness starts with SN45, which serves as the eyes and ears of the agent.
 
 ## Phase Roadmap
 
-| Phase              | Data Source             | Goal |
+| Phase              | Focus                    | Goal |
 |--------------------|--------------------------|------|
-| ✅ Phase 1 (current) | Social media sentiment  | Identify conversations affecting Bittensor ecosystem, starting with X |
-| 🔜 Phase 2          | Chain activity + market data | Detect real on-chain money flow + market shifts, subnet tokenomics, and subnet identity changes |
-| 🔜 Phase 3          | Agent insights to wallets | Actionable personalized staking/trading suggestions |
+| ✅ Phase 1 (current) | News & social analysis   | Read and score 1,000+ news sources plus X and Telegram into structured signals across every market |
+| 🔜 Phase 2          | Chain & market data      | Fuse on-chain money flow and market data with the sentiment read |
+| 🔜 Phase 3          | Predictive signals       | Forward-looking indicators and custom signals, surfaced to users through AlphaRidge |
 
 ---
 
-## 🪬 Overview
+## Overview
 
-For Phase 1, Alpharidge AI (Subnet 45) continuously analyzes social media for Bittensor-relevant activity, starting with X.
+Alpharidge AI (Subnet 45) continuously analyzes the news and social streams that move **every market** (equities, FX, crypto, commodities and indices) across news articles, X posts, and Telegram messages.
 
-Miners collectively search for high value posts that are relevant to specific subnets; validators verify accuracy and enforce quality.
+Miners don't just classify an item. They run a full **intelligence pipeline** over each one, extracting multi-asset sentiment, named entities (Wikidata-linked), economic data points, cross-market contagion chains, chart summaries, narrative tags, and semantic embeddings. Validators independently re-run the same pipeline and verify the result before it earns rewards.
 
-A coordination API leases tweet work items to validators and stores completed analysis back into Postgres for downstream consumption.
-
----
-
-## 🪬 How It Works
-
-### 🪬 Miner (V3)
-
-- Receives TweetBatch requests from validators over the Bittensor network
-- Analyzes each tweet using LLM to determine:
-  - Subnet relevance (which subnet the tweet is about)
-  - Sentiment (very_bullish, bullish, neutral, bearish, very_bearish)
-  - Content type (technical_insight, announcement, etc.)
-- Returns enriched tweets with analysis data for validator verification
+A coordination API leases work items to validators, stores completed analysis in Postgres, and runs the **cross-article intelligence** layer on top, clustering articles into real-world events and matching them to long-running market narratives. The result is the structured, verified signal feed that powers [AlphaRidge](https://alpharidge.ai).
 
 ---
 
-### 🪬 Validation
+## How It Works
 
-The validator re-analyzes posts independently.  
-If any post fails validation, that miner batch is labeled INVALID and discarded.  
-Only if all posts pass does the miner receive VALID and the batch proceeds to the next step in the pipeline.
+### Miner
 
-In V3, validation is performed by re-running the same analyzer on a sampled subset of the miner batch and requiring an **exact match** on the key categorical fields:
+Miners receive work batches from validators over the Bittensor network (`ArticleBatch` for news, `TweetBatch` for X, `TelegramBatch` for Telegram) and run a staged analysis pipeline over each item. For news articles, the **Article Intelligence** pipeline runs four stages:
 
-- `subnet_id`
-- `sentiment`
-- `content_type`
-- `technical_quality`
-- `market_analysis`
-- `impact_potential`
+1. **Deterministic + NER (~1s):** text statistics, keyword asset extraction (200+ tracked assets), and a 4-engine NER fusion (spaCy + GLiNER + Flair + ReFinED) that resolves entities to Wikidata IDs and tradeable tickers, plus FinBERT sentence-level sentiment.
+2. **LLM "Extract & Classify":** classification enums, economic data points, quotes, and an event fingerprint, with the NER results passed in as hints.
+3. **LLM "Reason & Summarize":** per-asset sentiment with causal drivers, cross-market contagion chains, chart summaries, and narrative keywords, built from a compact fact sheet rather than the raw article.
+4. **Embeddings:** title, body, and narrative vectors (`all-MiniLM-L6-v2`, 384-d, L2-normalized) for downstream clustering and matching.
 
-
+The result is a rich, structured analysis (dozens of fields across many feature groups) returned to the validator for verification. Posts from X and Telegram run a lighter classification path.
 
 ---
 
-## 🪬 Rewards
+### Validation
 
-V3 rewards are tracked as **epoch-bucketed points** inside validators:
+The validator independently re-runs the same analyzer on a sampled subset of each miner batch and compares results through a **multi-tier validation** ladder. If a batch fails any tier it is labeled INVALID and discarded; only a fully passing batch earns rewards.
 
-- ✅ **Valid batch**: miner earns points (currently +1 per accepted tweet)
-- ❌ **Invalid batch**: miner is penalized for that epoch
+- **Tier 1 (exact enum match):** categorical fields (content type, sentiment, impact, urgency, primary-asset sentiment direction, …) must match exactly.
+- **Tier 2 (deterministic match):** content hash and text statistics (word/sentence/char counts, ticker mentions) must be byte-identical.
+- **Tier 2.5 (embedding verification):** title-embedding cosine ≥ 0.90 and narrative-embedding cosine ≥ 0.80, with dimension/L2-norm sanity checks.
+- **Tier 3 (weighted composite):** near-deterministic fields (asset extraction, asset sentiment, entities, economic data, event fingerprint, contagion, narrative keywords) are scored with Jaccard / text similarity and must clear a weighted threshold.
 
-Validators combine:
-
-- their **local** rewards/penalties, plus
-- **validator↔validator broadcasts** (compact epoch snapshots)
-
-Then, for a delayed epoch window (typically **E-2**), validators compute weights and set them on-chain. Penalized miners have their reward zeroed for that epoch.
+Batch validation also includes cross-article adversarial checks, such as flagging miners that send near-identical embeddings across different articles.
 
 ---
 
-## 🪬 Architecture (V3)
+## Rewards
+
+Rewards are tracked as **epoch-bucketed points** inside validators:
+
+- ✅ **Accepted item**: miner earns points
+- ❌ **Rejected / timed-out item**: miner accrues a penalty for that epoch
+
+Each validator pools both signals across itself and its peers:
+
+- its **local** points/penalties, plus
+- **validator↔validator broadcasts** (compact, signed epoch snapshots that peers verify before pooling)
+
+For a delayed epoch window (typically **E-2**), a miner keeps its reward only when its **pooled points exceed its pooled penalties**; otherwise it is zeroed for that epoch. This means the occasional routine penalty (a timeout or a single mismatch) no longer wipes out an otherwise net-positive miner, and only net-negative (low-quality or cheating) miners are zeroed. Weights are then set on-chain proportional to each surviving miner's points.
+
+> **Emission economics:** miners are paid for **completed, verified work**. Every accepted item earns emission, and the reward is sized to cover the real cost of running the analysis **plus a healthy multiplier on top**. Do good work and you're guaranteed to come out ahead.
+
+---
+
+## Architecture
 
 ```
 
 ┌──────────────┐        ┌───────────┐        ┌──────────────┐
 │ API Server   │  --->  │ Validator │  --->  │   Miner      │
 │ (lease queue)│        │           │        │ (analysis)   │
-└──────────────┘        └─────┬─────┘        └──────┬───────┘
-                              │                     │
-                              │  TweetBatch         │
-                              │  (with analysis)    │
-                              │<────────────────────┘
-                              │
-                              v
-                        ┌──────────────┐
-                        │ Set Weights  │
-                        │  (on-chain)  │
-                        └──────────────┘
+└──────┬───────┘        └─────┬─────┘        └──────┬───────┘
+       │                      │                     │
+       │                      │  Batch + analysis   │
+       │  completed analysis  │<────────────────────┘
+       │<─────────────────────┤
+       │                      │
+       v                      v
+┌──────────────────┐   ┌──────────────┐
+│ Cross-article    │   │ Set Weights  │
+│ intelligence     │   │  (on-chain)  │
+│ (events +        │   └──────────────┘
+│  narratives)     │
+└──────────────────┘
 
 ```
 
+After a batch passes validation, the validator returns the verified analysis to the API. The API stores it and runs the cross-article layer: **event clustering** (grouping items about the same real-world occurrence via fingerprint → content hash → embedding cosine → title overlap) and **narrative matching** (slug → embedding → keyword signals against long-running market themes), with background jobs maintaining narrative lifecycle, centroid drift, and auto-discovery.
+
 ---
 
-## 🪬 Project Structure
+## Project Structure
 
 ```
 alpharidge-ai/
-├── neurons/                    # Miner and validator nodes
-│   ├── miner.py               # Miner entry point
-│   ├── validator.py           # Validator entry point
-└── alpharidge_ai/               # Core library
-    ├── protocol.py            # Bittensor protocol definitions
-    ├── config.py              # Configuration
-    ├── analyzer/              # Analysis utilities
-    ├── validator/             # Validator logic
-    └── utils/                 # Utility functions
-
-alpharidge-ai-api/
-├── main.py                     # FastAPI app + routes
-├── prisma/schema.prisma        # Postgres schema (scoring lease queue + tweet_analysis)
-└── utils/                      # Auth + whitelist utilities
-
-
+├── neurons/                          # Miner and validator nodes
+│   ├── miner.py                      # Miner entry point
+│   └── validator.py                  # Validator entry point
+└── alpharidge_ai/                    # Core library
+    ├── protocol.py                   # Bittensor synapses (ArticleBatch, TweetBatch, TelegramBatch, ...)
+    ├── config.py                     # Configuration
+    ├── models/                       # Data models (article_intelligence.py, reward.py)
+    ├── analyzer/                     # Analysis pipeline
+    │   ├── article_intelligence_analyzer.py   # Staged article pipeline orchestrator
+    │   ├── ner_fusion.py             # spaCy + GLiNER + Flair + ReFinED + FinBERT fusion
+    │   ├── asset_extractor.py        # Keyword multi-asset extraction
+    │   ├── text_stats.py             # Deterministic text features
+    │   ├── scoring.py                # Multi-tier validation / scoring
+    │   ├── llm_cache.py              # TTL cache for deterministic LLM calls
+    │   └── data/                     # Asset/narrative/contagion/entity reference data
+    ├── validator/                    # Validation, grading, reward + penalty broadcasts
+    └── utils/                        # Utility functions
 ```
 
 ---
 
-## 🪬 Configuration
+## Configuration
 
 Before running miners or validators, you need to set up your environment configuration files. Template files are provided that you must rename and fill in with your credentials.
+
+Most variables ship with sensible defaults in the template, so for a standard setup you only need to set `API_KEY`.
 
 ### Miner Configuration (`.miner_env`)
 
@@ -151,11 +147,11 @@ Copy `.miner_env_tmpl` to `.miner_env` and configure the following variables:
 
 | Variable | Description |
 |----------|-------------|
-| `MODEL` | LLM model identifier for analysis (e.g., `deepseek-ai/DeepSeek-V3-0324`) |
-| `API_KEY` | API key for the LLM service |
-| `LLM_BASE` | Base URL for the LLM API endpoint |
-
-**Note**: V3 miners do not need X/Twitter API credentials. They receive tweets from validators over the network.
+| `MODEL` | LLM model identifier for analysis (pre-filled, e.g. `deepseek/deepseek-v4-flash`) |
+| `API_KEY` | **OpenRouter API key (`sk-or-...`)**, get one at https://openrouter.ai/keys |
+| `LLM_BASE` | Base URL for the LLM API (pre-filled: `https://openrouter.ai/api/v1`) |
+| `MINER_API_URL` | Coordination API base URL (pre-filled: `https://api.alpharidge.ai`) |
+| `BATCH_HTTP_TIMEOUT` | HTTP timeout in seconds for API requests (default: `30.0`) |
 
 ### Validator Configuration (`.vali_env`)
 
@@ -163,48 +159,64 @@ Copy `.vali_env_tmpl` to `.vali_env` and configure the following variables:
 
 | Variable | Description |
 |----------|-------------|
-| `MODEL` | LLM model identifier for re-analysis (e.g., `deepseek-ai/DeepSeek-V3-0324`) |
-| `API_KEY` | API key for the LLM service |
-| `LLM_BASE` | Base URL for the LLM API endpoint |
-| `MINER_API_URL` | Base URL of the coordination API server (e.g., `http://localhost:8000`) |
+| `MODEL` | LLM model identifier for re-analysis (pre-filled, e.g. `deepseek/deepseek-v4-flash`) |
+| `API_KEY` | **OpenRouter API key (`sk-or-...`)**, get one at https://openrouter.ai/keys |
+| `LLM_BASE` | Base URL for the LLM API (pre-filled: `https://openrouter.ai/api/v1`) |
+| `MINER_API_URL` | Coordination API base URL (pre-filled: `https://api.alpharidge.ai`) |
 | `BATCH_HTTP_TIMEOUT` | HTTP timeout in seconds for API requests (default: `30.0`) |
-| `VALIDATION_POLL_SECONDS` | Seconds between poll attempts (default: `10`) |
-| `MINER_BATCH_SIZE` | Tweets per miner batch (default: `3`) |
-| `TWEET_MAX_PROCESS_TIME` | Local processing timeout in seconds before requeue (default: `300.0`) |
-| `VALIDATOR_BROADCAST_MAX_TARGETS` | Max validators to broadcast epoch snapshots to (default: `32`) |
+| `VALIDATION_POLL_SECONDS` | Seconds between polling for new validations (default: `10`) |
+| `VALIDATION_FETCH_LIMIT` | Items fetched per poll cycle, split into miner batches (default: `24`) |
+| `VALIDATION_MAX_WORKERS` | Max concurrent validation threads making LLM calls (default: `8`) |
+| `MINER_SEND_TIMEOUT` | Dispatch (validator → miner) dendrite timeout in seconds (default: `6`) |
+| `SCORES_BLOCK_INTERVAL` | Blocks between fetching scores from the API (default: `100`) |
+| `LLM_CACHE_TTL` / `LLM_CACHE_MAX_SIZE` | TTL (s) and max size for the in-memory LLM result cache (defaults: `300` / `1024`) |
+
+> The verifiable-points settings (`API_ATTESTATION_PUBKEY`, `ENFORCE_SIGNED_ATTESTATIONS`, `DEEP_VERIFY_SAMPLE_RATE`) have safe defaults baked into `config.py`, so you normally don't need to set them.
 
 ---
 
-## 🪬 Running on Mainnet
+## Running on Mainnet
 
-**Hardware (miner & validator both run the analyzer):** GPU **≥ 8 GB VRAM**, **≥ 16 GB RAM**,
-**≥ 60 GB free disk** (~44 GB of models download on first run). **One analyzer process per box** —
-ReFinED's Wikidata store is an LMDB opened once per process, so you can't share it across processes
-on the same machine.
+### Hardware
+
+Miners and validators both run the analyzer, so they share the same requirements:
+
+| Component | Requirement |
+|-----------|-------------|
+| GPU       | ≥ 8 GB VRAM |
+| RAM       | ≥ 16 GB |
+| Disk      | ≥ 60 GB free (~44 GB of models download on first run) |
+| CPU       | 16 cores recommended (8 minimum) |
 
 ### Install
+
+**Get the code** (in a Python 3.12 venv):
+
+```bash
+git clone https://github.com/Team-Rizzo/alpharidge-ai.git    # note: the repo name has changed
+cd alpharidge-ai
+python3.12 -m venv .venv && source .venv/bin/activate
+```
 
 **Quick (recommended):**
 
 ```bash
-python3.12 -m venv .venv && source .venv/bin/activate
 ./install.sh                 # CUDA 12.8 default; TORCH_INDEX=https://download.pytorch.org/whl/cuXXX ./install.sh for another driver
 ```
 
-**Manual (equivalent — if you'd rather not use the script):**
+**Manual (equivalent, if you'd rather not use the script):**
 
 ```bash
-python3.12 -m venv .venv && source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 
-# 1. PyTorch — match the CUDA build to your driver (cu128 = CUDA 12.x; see https://pytorch.org):
+# 1. PyTorch: match the CUDA build to your driver (cu128 = CUDA 12.x; see https://pytorch.org):
 pip install "torch>=2" --index-url https://download.pytorch.org/whl/cu128
 
 # 2. The rest of the stack (the spaCy en_core_web_trf model is pinned in requirements.txt):
 pip install -r requirements.txt
 pip install -e .
 
-# 3. ReFinED (Amazon entity-linker) is NOT on PyPI — install from GitHub with --no-deps
+# 3. ReFinED (Amazon entity-linker) is NOT on PyPI, install from GitHub with --no-deps
 #    so it doesn't downgrade torch/transformers, then its small runtime deps:
 pip install --no-deps "git+https://github.com/amazon-science/ReFinED.git@V1"
 pip install ujson nltk Unidecode lmdb prettyprint
@@ -214,7 +226,8 @@ pip install ujson nltk Unidecode lmdb prettyprint
 
 ```bash
 cp .miner_env_tmpl .miner_env
-# edit .miner_env → set API_KEY (OpenRouter sk-or-...). MODEL / LLM_BASE are pre-filled.
+# Switch from Chutes to OpenRouter: edit .miner_env → set API_KEY (OpenRouter sk-or-...).
+# Get a key at https://openrouter.ai/keys. MODEL / LLM_BASE are pre-filled.
 .venv/bin/python -m neurons.miner \
   --netuid 45 \
   --wallet.name your_coldkey_here \
@@ -228,7 +241,8 @@ cp .miner_env_tmpl .miner_env
 
 ```bash
 cp .vali_env_tmpl .vali_env
-# edit .vali_env → set API_KEY (OpenRouter sk-or-...). MODEL / LLM_BASE / MINER_API_URL are pre-filled.
+# Switch from Chutes to OpenRouter: edit .vali_env → set API_KEY (OpenRouter sk-or-...).
+# Get a key at https://openrouter.ai/keys. MODEL / LLM_BASE / MINER_API_URL are pre-filled.
 .venv/bin/python -m neurons.validator \
   --netuid 45 \
   --subtensor.network finney \
@@ -236,9 +250,6 @@ cp .vali_env_tmpl .vali_env
   --wallet.hotkey <your hotkey> \
   --logging.info
 ```
-
-> `BT_NO_PARSE_CLI_ARGS` and `CUBLAS_WORKSPACE_CONFIG` are set automatically by the entrypoints —
-> you don't need to export them.
 
 *Optional*: Run the validator under PM2 with the auto-updater:
 
@@ -255,6 +266,6 @@ Try:
 
 ---
 
-## 🪬 License
+## License
 
 MIT
