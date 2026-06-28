@@ -203,7 +203,11 @@ DISPATCH_WINDOW_CAP_PCT = float(os.getenv("DISPATCH_WINDOW_CAP_PCT", "0.15"))
 DISPATCH_WINDOW_GROW = float(os.getenv("DISPATCH_WINDOW_GROW", "1.0"))
 DISPATCH_WINDOW_SHRINK = float(os.getenv("DISPATCH_WINDOW_SHRINK", "0.5"))
 DISPATCH_LATE_FRACTION = float(os.getenv("DISPATCH_LATE_FRACTION", "0.6"))
-DISPATCH_ACK_TIMEOUT_S = float(os.getenv("DISPATCH_ACK_TIMEOUT_S", "3.0"))
+# Must match the IsAlive liveness ping timeout (12s in get_alive_uids): the roster
+# is built from that ping, so a shorter ack window systematically fails alive-but-slow
+# miners. Stage A pilot (2026-06-28): 3s -> ack-fail ~50-89%/completion ~3.5%;
+# 12s -> ack-fail ~3%/completion ~23%. (TODO: share one constant with get_alive_uids.)
+DISPATCH_ACK_TIMEOUT_S = float(os.getenv("DISPATCH_ACK_TIMEOUT_S", "12.0"))
 DISPATCH_CHRONIC_TIMEOUT_N = int(os.getenv("DISPATCH_CHRONIC_TIMEOUT_N", "5"))
 LIVENESS_TTL_S = int(os.getenv("LIVENESS_TTL_S", "120"))
 LIVENESS_SWEEP_INTERVAL_S = int(os.getenv("LIVENESS_SWEEP_INTERVAL_S", "60"))
