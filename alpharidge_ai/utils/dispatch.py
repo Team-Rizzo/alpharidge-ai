@@ -12,11 +12,12 @@ isolation. Given the live miner UIDs and a window-aware tracker, it returns
      window first, round-robin so a single miner can't drain the queue before
      others get a turn.
 
-It is intentionally read-only on the tracker except for ``mark_covered`` — the
-real per-miner reservation (``try_acquire``/``release``) stays in the validator's
-dispatch coroutine, so a pending-task-cap truncation can never leak a reserved
-slot. ``provisional`` mirrors what those acquisitions will be so we don't assign a
-miner more than ``floor(window)`` within one tick.
+It is intentionally **fully read-only** on the tracker — coverage is marked by the
+caller on *actual dispatch* (not here), and the real per-miner reservation
+(``try_acquire``/``release``) stays in the validator's dispatch coroutine, so a
+pending-task-cap truncation can neither leak a reserved slot nor mark a miner
+covered without sending it work. ``provisional`` mirrors what those acquisitions
+will be so we don't assign a miner more than ``floor(window)`` within one tick.
 """
 
 from typing import Dict, List, Sequence, Tuple
@@ -54,7 +55,6 @@ def coverage_depth_select(
         if tracker.covered_epoch(hk) < epoch and has_slot(uid):
             assignments.append((uid, bi))
             take(uid)
-            tracker.mark_covered(hk, epoch)
             bi += 1
 
     # Depth pass.

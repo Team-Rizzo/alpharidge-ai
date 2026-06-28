@@ -42,9 +42,10 @@ def test_coverage_gives_every_live_miner_one_batch():
     assignments = coverage_depth_select(live, HOTKEYS, t, epoch=1, n_batches=5)
     covered = [uid for uid, _ in assignments]
     assert sorted(covered) == [0, 1, 2, 3, 4]
-    # each marked covered for this epoch
+    # Allocator is read-only: marking covered happens on actual dispatch (in the
+    # validator), not here — so nothing is marked by the selection call itself.
     for hk in HOTKEYS:
-        assert t.covered_epoch(hk) == 1
+        assert t.covered_epoch(hk) == -1
 
 
 def test_coverage_floor_before_depth():

@@ -916,6 +916,8 @@ class Validator(BaseValidatorNeuron):
         exclude = [int(self.uid)] + cooled_uids
         targets = self._select_article_targets(miner_batches, exclude)
 
+        adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
+        epoch = self._current_epoch() if adaptive else 0
         for uid, miner_batch in targets:
             if len(self._pending_miner_tasks) >= self._max_pending_miner_tasks:
                 bt.logging.warning(
@@ -925,6 +927,14 @@ class Validator(BaseValidatorNeuron):
                 break
             task = asyncio.create_task(self._dispatch_article_miner_batch(miner_batch, int(uid)))
             self._track_task(task)
+            # Mark covered on actual dispatch (not at allocation time): if the pending-cap
+            # break above drops a coverage assignment, the miner must NOT be recorded as
+            # covered for this epoch without having been sent work.
+            if adaptive:
+                try:
+                    self._article_cooldown.mark_covered(self.metagraph.hotkeys[int(uid)], epoch)
+                except Exception:
+                    pass
 
     def _reconcile_article_inflight(self):
         """Rebuild per-miner in-flight from the article store's PROCESSING set, so a
