@@ -82,21 +82,29 @@ def get_random_uids(self, k: int, exclude: List[int] = None, include: List[int] 
 
 async def get_alive_uids(metagraph, dendrite) -> List[int]:
     """
-    Get the list of alive miners from the metagraph.
+    Get the list of alive miners from the metagraph by pinging serving axons.
     """
-    alive_uids = []
-    axons = []
-    for uid in range(metagraph.n.item()):
-        if metagraph.axons[uid].is_serving:
-            axons.append(metagraph.axons[uid])
+    # Keep the uid alongside each axon: with deserialize=True the response IS the
+    # IsAlive synapse (so `response.is_alive`, not `response.synapse.is_alive`), and
+    # its `axon` TerminalInfo carries no `uid` — so we pair by index instead of
+    # reading a uid off the response.
+    serving = [
+        (uid, metagraph.axons[uid])
+        for uid in range(metagraph.n.item())
+        if metagraph.axons[uid].is_serving
+    ]
+    if not serving:
+        return []
+
     responses = await dendrite.forward(
-        axons=axons,
+        axons=[axon for _, axon in serving],
         synapse=IsAlive(is_alive=False),
         timeout=12.0,
-        deserialize=True
+        deserialize=True,
     )
-    for response in responses:
-        if response.dendrite.status_code == 200:
-            if response.synapse.is_alive:
-                alive_uids.append(response.axon.uid)
+
+    alive_uids = []
+    for (uid, _), response in zip(serving, responses):
+        if getattr(response.dendrite, "status_code", None) == 200 and getattr(response, "is_alive", False):
+            alive_uids.append(uid)
     return alive_uids
