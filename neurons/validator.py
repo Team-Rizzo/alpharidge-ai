@@ -957,6 +957,31 @@ class Validator(BaseValidatorNeuron):
         except Exception:
             return 0
 
+    def _build_dispatch_status(self) -> list:
+        """Per-miner adaptive-dispatch status snapshot for the dashboard diagnostics
+        flush (display-only, consensus-decoupled). Covers every currently-live miner
+        plus any miner we hold cooldown/window state for."""
+        hotkeys = list(self.metagraph.hotkeys)
+        hk_to_uid = {hk: u for u, hk in enumerate(hotkeys)}
+        ct = self._article_cooldown.snapshot()
+        live_hks = {hotkeys[u] for u in self._liveness.live_uids(self.metagraph)}
+        w_min = float(getattr(config, "DISPATCH_WINDOW_MIN", 1))
+        rows = []
+        for hk in (set(ct) | live_hks):
+            st = ct.get(hk, {})
+            rows.append({
+                "hotkey": hk,
+                "uid": int(hk_to_uid.get(hk, -1)),
+                "alive": bool(self._liveness.is_alive(hk)),
+                "window": float(st.get("window", w_min)),
+                "inflight": int(st.get("inflight", 0)),
+                "consec_to": int(st.get("consec_to", 0)),
+                "covered_epoch": int(st.get("covered_epoch", -1)),
+                "on_cooldown": bool(st.get("on_cooldown", False)),
+                "cooldown_remaining_s": int(st.get("cooldown_remaining_s", 0)),
+            })
+        return rows
+
     def _select_article_targets(self, miner_batches, exclude):
         """
         Choose (uid, batch) dispatch targets.

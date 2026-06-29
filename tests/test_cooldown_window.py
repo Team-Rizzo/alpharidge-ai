@@ -159,6 +159,24 @@ def test_reconcile_inflight_rebuilds_counts(adaptive_on):
     assert t.inflight("c") == 3
 
 
+def test_snapshot_reports_per_hotkey_state(adaptive_on):
+    t = MinerCooldownTracker(adaptive=True)
+    t.set_cap(100)
+    t.try_acquire("hk")
+    t.record_timely_valid("hk", latency_s=10)   # window 1 -> 2.0, inflight stays 1
+    t.mark_covered("hk", 5)
+    for _ in range(5):
+        t.record_timeout("dead")                 # 5th escalates -> cooldown
+    snap = t.snapshot()
+    assert "hk" in snap and "dead" in snap
+    assert snap["hk"]["window"] == pytest.approx(2.0)
+    assert snap["hk"]["inflight"] == 1
+    assert snap["hk"]["covered_epoch"] == 5
+    assert snap["hk"]["on_cooldown"] is False
+    assert snap["dead"]["on_cooldown"] is True
+    assert snap["dead"]["cooldown_remaining_s"] > 0
+
+
 def test_coverage_tracking():
     t = MinerCooldownTracker(adaptive=True)
     assert t.covered_epoch("hk") == -1

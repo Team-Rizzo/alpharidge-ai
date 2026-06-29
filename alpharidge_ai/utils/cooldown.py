@@ -113,6 +113,25 @@ class MinerCooldownTracker:
         """Current per-miner window sizes (for pilot metrics)."""
         return list(self._window.values())
 
+    def snapshot(self) -> Dict[str, dict]:
+        """Per-hotkey adaptive state for every miner we hold any state for (display-only,
+        for the dashboard diagnostics flush)."""
+        now = time.time()
+        hotkeys = (set(self._window) | set(self._inflight) | set(self._consec_to)
+                   | set(self._covered_ep) | set(self._state))
+        out = {}
+        for hk in hotkeys:
+            until = self._state.get(hk, (0, 0, 0.0))[2]
+            out[hk] = {
+                "window": round(self._get_window(hk), 3),
+                "inflight": self._inflight.get(hk, 0),
+                "consec_to": self._consec_to.get(hk, 0),
+                "covered_epoch": self._covered_ep.get(hk, -1),
+                "on_cooldown": bool(until > 0 and now < until),
+                "cooldown_remaining_s": int(until - now) if until > now else 0,
+            }
+        return out
+
     # ---- Adaptive window updates (RFC 2026-06-28) ----
     #
     # These update ONLY the window + the chronic-timeout counter. They do NOT touch

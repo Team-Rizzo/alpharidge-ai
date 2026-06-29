@@ -108,6 +108,30 @@ class ValidationClient:
         except Exception as e:
             bt.logging.debug(f"[PENALTY_DETAIL] flush block error (ignored): {e}")
 
+    async def _flush_dispatch_status(self):
+        """Best-effort push of the per-miner adaptive-dispatch status snapshot to the
+        diagnostics endpoint (display-only, decoupled from consensus). Only while
+        adaptive dispatch is on, and throttled — status changes slowly, no need to send
+        every poll. Failures are swallowed; this can never stall the loop or touch
+        scoring/weights."""
+        try:
+            if not getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False):
+                return
+            now = time.time()
+            if now - getattr(self, "_last_dispatch_status_flush", 0.0) < 30:
+                return
+            self._last_dispatch_status_flush = now
+            rows = self._validator._build_dispatch_status()
+            if not rows:
+                return
+            try:
+                await self.api_client.submit_dispatch_status(rows)
+                bt.logging.debug(f"[DISPATCH_STATUS] flushed {len(rows)} miner row(s)")
+            except Exception as e:
+                bt.logging.debug(f"[DISPATCH_STATUS] flush failed, dropped {len(rows)} row(s): {e}")
+        except Exception as e:
+            bt.logging.debug(f"[DISPATCH_STATUS] flush block error (ignored): {e}")
+
     async def run(
         self,
         on_tweets: Callable[[List[TweetWithAuthor]], Any],
@@ -302,6 +326,8 @@ class ValidationClient:
                 # Flush display-only penalty attribution (best-effort, decoupled from
                 # consensus — never blocks scoring/weights; failures drop the snapshot).
                 await self._flush_penalty_detail()
+                # Same channel, for the adaptive-dispatch status snapshot (throttled).
+                await self._flush_dispatch_status()
 
                 # Persist local state.
                 try:
