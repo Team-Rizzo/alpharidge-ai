@@ -503,6 +503,24 @@ class AlpharidgeAPIClient:
         )
         return SubmissionResponse(**data)
 
+    async def submit_dispatch_status(
+        self,
+        miners: List[Dict[str, Any]],
+    ) -> SubmissionResponse:
+        """Push the per-miner adaptive-dispatch status snapshot (RFC 2026-06-28).
+
+        DECOUPLED from consensus: hits /diagnostics/dispatch-status, which stores
+        display-only status (window/in-flight/liveness/cooldown) for the dashboard and
+        never touches verdicts, attestations, or weights. Best-effort — callers treat
+        failures as non-fatal.
+        """
+        data = await self._request(
+            "POST",
+            "/diagnostics/dispatch-status",
+            json={"miners": miners},
+        )
+        return SubmissionResponse(**data)
+
     async def get_penalties(
         self,
         hotkey: Optional[str] = None,

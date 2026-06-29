@@ -108,6 +108,30 @@ class ValidationClient:
         except Exception as e:
             bt.logging.debug(f"[PENALTY_DETAIL] flush block error (ignored): {e}")
 
+    async def _flush_dispatch_status(self):
+        """Best-effort push of the per-miner adaptive-dispatch status snapshot to the
+        diagnostics endpoint (display-only, decoupled from consensus). Only while
+        adaptive dispatch is on, and throttled — status changes slowly, no need to send
+        every poll. Failures are swallowed; this can never stall the loop or touch
+        scoring/weights."""
+        try:
+            if not getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False):
+                return
+            now = time.time()
+            if now - getattr(self, "_last_dispatch_status_flush", 0.0) < 30:
+                return
+            self._last_dispatch_status_flush = now
+            rows = self._validator._build_dispatch_status()
+            if not rows:
+                return
+            try:
+                await self.api_client.submit_dispatch_status(rows)
+                bt.logging.debug(f"[DISPATCH_STATUS] flushed {len(rows)} miner row(s)")
+            except Exception as e:
+                bt.logging.debug(f"[DISPATCH_STATUS] flush failed, dropped {len(rows)} row(s): {e}")
+        except Exception as e:
+            bt.logging.debug(f"[DISPATCH_STATUS] flush block error (ignored): {e}")
+
     async def run(
         self,
         on_tweets: Callable[[List[TweetWithAuthor]], Any],
@@ -206,15 +230,42 @@ class ValidationClient:
                     try:
                         bt.logging.debug("[ValidationClient.run] Checking for timed-out articles")
                         timed_out_articles = self._validator._article_store.get_timeouts()
+                        adaptive_dispatch = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
+                        # Penalty split (the consensus-affecting broadcast change) is gated
+                        # SEPARATELY so it can be enabled / rolled back on its own.
+                        penalty_split = adaptive_dispatch and getattr(config, "ADAPTIVE_PENALTY_SPLIT_ENABLED", True)
+                        timed_out_hotkeys = set()
                         for article_item in timed_out_articles:
                             bt.logging.debug(f"[ValidationClient.run] Resetting timed out article {article_item.article.id} to unprocessed")
                             self._validator._article_store.reset_to_unprocessed(article_item.article.id)
-                            if article_item.hotkey:
+                            if not article_item.hotkey:
+                                continue
+                            if adaptive_dispatch:
+                                # Collect for the once-per-hotkey window update below.
+                                timed_out_hotkeys.add(article_item.hotkey)
+                            # Legacy broadcast behaviour: per-article penalty. Active when adaptive
+                            # dispatch is off OR the penalty split is explicitly disabled.
+                            if not penalty_split:
                                 bt.logging.info(f"[ValidationClient.run] Adding penalty to hotkey {article_item.hotkey} for article id {article_item.article.id}")
                                 self._validator._miner_penalty.add_penalty(article_item.hotkey, 1)
                                 # V3: display-only timeout attribution (decoupled from consensus).
                                 self._validator._buffer_penalty_detail([self._timeout_penalty_row(
                                     article_item.hotkey, "article", article_item.article.id)])
+                        # Adaptive window dynamics: one capacity signal per miner per reclaim cycle.
+                        # With the split ON (default), this is the ONLY path by which a timeout becomes
+                        # an integrity penalty / enters the broadcast — and only on CHRONIC non-response,
+                        # so ordinary timeouts never zero a miner or pollute the pooled total. With the
+                        # split OFF, the window still shrinks here but the penalty was already applied
+                        # per-article above (legacy broadcast preserved).
+                        if adaptive_dispatch:
+                            for hk in timed_out_hotkeys:
+                                self._validator._adaptive_metrics.incr("timeout")
+                                escalate = self._validator._article_cooldown.record_timeout(hk)
+                                if penalty_split and escalate:
+                                    bt.logging.info(f"[ValidationClient.run] Chronic timeout escalation for {hk[:12]}.. — applying integrity penalty")
+                                    self._validator._miner_penalty.add_penalty(hk, 1)
+                                    self._validator._buffer_penalty_detail([self._timeout_penalty_row(
+                                        hk, "article", "chronic-timeout")])
                         bt.logging.debug("[ValidationClient.run] Fetching unscored articles from api and local store")
                         unscored_articles = (await self.api_client.get_unscored_articles(limit=config.VALIDATION_FETCH_LIMIT)) + [item.article for item in self._validator._article_store.get_unprocessed_articles()]
 
@@ -275,6 +326,8 @@ class ValidationClient:
                 # Flush display-only penalty attribution (best-effort, decoupled from
                 # consensus — never blocks scoring/weights; failures drop the snapshot).
                 await self._flush_penalty_detail()
+                # Same channel, for the adaptive-dispatch status snapshot (throttled).
+                await self._flush_dispatch_status()
 
                 # Persist local state.
                 try:

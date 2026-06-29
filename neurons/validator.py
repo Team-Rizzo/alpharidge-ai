@@ -31,7 +31,10 @@ import alpharidge_ai.protocol
 from alpharidge_ai import config
 from alpharidge_ai.utils.api_models import TweetWithAuthor, CompletedTweetSubmission, TelegramMessageForScoring, CompletedTelegramMessageSubmission, TelegramMessageAnalysis, NewsArticleForScoring, CompletedNewsArticleSubmission
 from alpharidge_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch
-from alpharidge_ai.utils.uids import get_random_uids
+from alpharidge_ai.utils.uids import get_random_uids, get_alive_uids
+from alpharidge_ai.utils.liveness import LivenessRoster
+from alpharidge_ai.utils.dispatch import coverage_depth_select
+from alpharidge_ai.utils.dispatch_metrics import AdaptiveDispatchMetrics
 from alpharidge_ai.utils.tweet_store import TweetStore
 from alpharidge_ai.utils.telegram_store import TelegramStore
 from alpharidge_ai.utils.article_store import ArticleStore
@@ -89,6 +92,7 @@ class Validator(BaseValidatorNeuron):
         # Initialize validation client
         self._validation_client = ValidationClient(validator=self, wallet=self.wallet)
         self._validation_task: Optional[asyncio.Task] = None
+        self._liveness_task: Optional[asyncio.Task] = None
         self._tweet_store = TweetStore()
         self._telegram_store = TelegramStore()
         self._article_store = ArticleStore()
@@ -133,7 +137,14 @@ class Validator(BaseValidatorNeuron):
         self._validating_article_ids: set = set()
         self._tweet_cooldown = MinerCooldownTracker()
         self._telegram_cooldown = MinerCooldownTracker()
-        self._article_cooldown = MinerCooldownTracker()
+        # Article tracker is the only adaptive one (RFC 2026-06-28); tweet/telegram
+        # stay static. Behaves identically to static until ADAPTIVE_DISPATCH_ENABLED.
+        self._article_cooldown = MinerCooldownTracker(adaptive=True)
+        # Liveness roster (adaptive dispatch). Populated off the dispatch path;
+        # only consulted for selection once ADAPTIVE_DISPATCH_ENABLED is on.
+        self._liveness = LivenessRoster()
+        # Per-cycle pilot metrics (adaptive dispatch).
+        self._adaptive_metrics = AdaptiveDispatchMetrics()
 
     def resync_metagraph(self):
         super().resync_metagraph()
@@ -299,6 +310,10 @@ class Validator(BaseValidatorNeuron):
         if not miner_hotkey:
             return synapse
 
+        # A push-back proves the miner is reachable — record liveness off the hot
+        # path. In-memory only; never gates anything until the allocator lands.
+        self._liveness.mark_seen(miner_hotkey)
+
         bt.logging.info(f"[VALIDATION] Received ArticleBatch with {len(synapse.article_batch)} article(s) from miner {miner_hotkey[:12]}..")
 
         sent_batch: List[NewsArticleForScoring] = []
@@ -336,6 +351,18 @@ class Validator(BaseValidatorNeuron):
         batch_aids = {str(getattr(r, "id", "")) for r in synapse.article_batch if getattr(r, "id", "")}
         self._validating_article_ids.update(batch_aids)
 
+        # Adaptive dispatch: capture the dispatch→push-back round-trip latency NOW,
+        # before the reset below repurposes start_time for the validation clock. This
+        # is miner-capacity latency only (it excludes the validator's own analyzer
+        # time), which is what the congestion window must measure (RFC Component 2).
+        _now = time.time()
+        _starts = [
+            self._article_store._articles[aid].start_time
+            for aid in batch_aids
+            if aid in self._article_store._articles and self._article_store._articles[aid].start_time
+        ]
+        pushback_latency_s = (_now - min(_starts)) if _starts else None
+
         for returned in synapse.article_batch:
             aid = str(getattr(returned, "id", ""))
             if aid and aid in self._article_store._articles:
@@ -348,7 +375,7 @@ class Validator(BaseValidatorNeuron):
 
         async def _validate_and_release():
             try:
-                await self._handle_article_miner_batch_response(batch_copy, miner_hotkey, sent_batch_copy, sigs, ncs)
+                await self._handle_article_miner_batch_response(batch_copy, miner_hotkey, sent_batch_copy, sigs, ncs, latency_s=pushback_latency_s)
             finally:
                 self._validating_article_ids -= batch_aids
 
@@ -677,13 +704,18 @@ class Validator(BaseValidatorNeuron):
         sent_batch: List[NewsArticleForScoring],
         miner_signatures=None,
         nonces=None,
+        latency_s: float = None,
     ) -> bool:
+        adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
         if len(article_batch) != len(sent_batch):
             bt.logging.warning(
                 f"[VALIDATION] Article batch size mismatch from miner {miner_hotkey} "
                 f"sent {len(sent_batch)}, got {len(article_batch)}"
             )
             self._miner_penalty.add_penalty(miner_hotkey, 1)
+            if adaptive:
+                self._article_cooldown.record_invalid(miner_hotkey)
+                self._adaptive_metrics.incr("invalid")
             for article in sent_batch:
                 try:
                     self._article_store.reset_to_unprocessed(article.id)
@@ -741,6 +773,11 @@ class Validator(BaseValidatorNeuron):
             self._buffer_penalty_detail(
                 self._penalty_rows_from_discrepancies(discrepancies, miner_hotkey, current_epoch, "article"))
             self._miner_penalty.add_penalty(miner_hotkey, 1)
+            # Adaptive: a real validation failure also shrinks the window (less future
+            # work) on top of the integrity penalty, which stays exactly as-is.
+            if adaptive:
+                self._article_cooldown.record_invalid(miner_hotkey)
+                self._adaptive_metrics.incr("invalid")
             for article in article_batch:
                 try:
                     self._article_store.reset_to_unprocessed(article.id)
@@ -750,6 +787,12 @@ class Validator(BaseValidatorNeuron):
 
         bt.logging.info(f"[VALIDATION] Article batch validation PASSED for miner {miner_hotkey}")
         self._article_cooldown.record_success(miner_hotkey)
+        # Adaptive: grow the window if the round-trip was comfortably on-time, else
+        # freeze (objective 8 — find capacity without ramping into a timeout).
+        if adaptive:
+            self._article_cooldown.record_timely_valid(miner_hotkey, latency_s)
+            self._adaptive_metrics.incr("valid")
+            self._adaptive_metrics.mark_scored(miner_hotkey)
         for article in article_batch:
             try:
                 self._article_store.update_article(article.id, article)
@@ -871,9 +914,11 @@ class Validator(BaseValidatorNeuron):
             if self.metagraph.hotkeys[uid] in cooled_hotkeys
         ]
         exclude = [int(self.uid)] + cooled_uids
-        uids = list(get_random_uids(self, k=len(miner_batches), exclude=exclude))
+        targets = self._select_article_targets(miner_batches, exclude)
 
-        for miner_batch, uid in zip(miner_batches, uids):
+        adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
+        epoch = self._current_epoch() if adaptive else 0
+        for uid, miner_batch in targets:
             if len(self._pending_miner_tasks) >= self._max_pending_miner_tasks:
                 bt.logging.warning(
                     f"[VALIDATION] Too many pending miner dispatch tasks ({len(self._pending_miner_tasks)}); "
@@ -882,6 +927,113 @@ class Validator(BaseValidatorNeuron):
                 break
             task = asyncio.create_task(self._dispatch_article_miner_batch(miner_batch, int(uid)))
             self._track_task(task)
+            # Mark covered on actual dispatch (not at allocation time): if the pending-cap
+            # break above drops a coverage assignment, the miner must NOT be recorded as
+            # covered for this epoch without having been sent work.
+            if adaptive:
+                try:
+                    self._article_cooldown.mark_covered(self.metagraph.hotkeys[int(uid)], epoch)
+                except Exception:
+                    pass
+
+    def _reconcile_article_inflight(self):
+        """Rebuild per-miner in-flight from the article store's PROCESSING set, so a
+        missed or duplicated completion event can never strand the window. PROCESSING
+        is per-article; the window is per-batch, so convert with
+        ceil(articles / batch_size). This is the sole source of truth for in-flight
+        under adaptive dispatch (the dispatch coroutine no longer releases at the ack)."""
+        batch_size = max(1, int(getattr(config, "MINER_BATCH_SIZE", 20)))
+        article_counts = {}
+        for item in self._article_store.get_processing_articles():
+            hk = getattr(item, "hotkey", None)
+            if hk:
+                article_counts[hk] = article_counts.get(hk, 0) + 1
+        batch_counts = {hk: -(-c // batch_size) for hk, c in article_counts.items()}
+        self._article_cooldown.reconcile_inflight(batch_counts)
+
+    def _current_epoch(self) -> int:
+        try:
+            return int(self.block) // int(getattr(config, "BLOCK_LENGTH", 100))
+        except Exception:
+            return 0
+
+    def _build_dispatch_status(self) -> list:
+        """Per-miner adaptive-dispatch status snapshot for the dashboard diagnostics
+        flush (display-only, consensus-decoupled). Covers every currently-live miner
+        plus any miner we hold cooldown/window state for."""
+        hotkeys = list(self.metagraph.hotkeys)
+        hk_to_uid = {hk: u for u, hk in enumerate(hotkeys)}
+        ct = self._article_cooldown.snapshot()
+        live_hks = {hotkeys[u] for u in self._liveness.live_uids(self.metagraph)}
+        w_min = float(getattr(config, "DISPATCH_WINDOW_MIN", 1))
+        rows = []
+        for hk in (set(ct) | live_hks):
+            st = ct.get(hk, {})
+            rows.append({
+                "hotkey": hk,
+                "uid": int(hk_to_uid.get(hk, -1)),
+                "alive": bool(self._liveness.is_alive(hk)),
+                "window": float(st.get("window", w_min)),
+                "inflight": int(st.get("inflight", 0)),
+                "consec_to": int(st.get("consec_to", 0)),
+                "covered_epoch": int(st.get("covered_epoch", -1)),
+                "on_cooldown": bool(st.get("on_cooldown", False)),
+                "cooldown_remaining_s": int(st.get("cooldown_remaining_s", 0)),
+            })
+        return rows
+
+    def _select_article_targets(self, miner_batches, exclude):
+        """
+        Choose (uid, batch) dispatch targets.
+
+        Flag off: unchanged random selection. Flag on: coverage-then-depth over the
+        live roster (see utils/dispatch.coverage_depth_select). Read-only on the
+        tracker here — the real per-miner reservation stays in
+        _dispatch_article_miner_batch.try_acquire, so a pending-cap truncation cannot
+        leak a reserved slot.
+        """
+        n_batches = len(miner_batches)
+        if not getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False):
+            uids = list(get_random_uids(self, k=n_batches, exclude=exclude))
+            return [(int(u), b) for b, u in zip(miner_batches, uids)]
+
+        # Sync in-flight to ground truth before allocating (leak-proof; see method).
+        self._reconcile_article_inflight()
+
+        hotkeys = list(self.metagraph.hotkeys)
+        blacklisted = getattr(config, "BLACKLISTED_MINER_HOTKEYS", set()) or set()
+        exclude_set = {int(u) for u in exclude}
+        live = [
+            u for u in self._liveness.live_uids(self.metagraph)
+            if u not in exclude_set and 0 <= u < len(hotkeys) and hotkeys[u] not in blacklisted
+        ]
+        if not live:
+            bt.logging.warning("[DISPATCH] adaptive dispatch on but live roster is empty this tick; no targets")
+            return []
+
+        # Anti-monopoly cap, recomputed per tick: cap_pct of the validator's total
+        # in-flight send budget (a stable, exogenous quantity — NOT the sum of
+        # windows, which would feed back and run away). Grows when concurrency is
+        # raised in Component 4. With the default concurrency of 8 this keeps windows
+        # at ~1 (coverage only) until concurrency is deliberately raised.
+        cap_pct = float(getattr(config, "DISPATCH_WINDOW_CAP_PCT", 0.15))
+        w_min = float(getattr(config, "DISPATCH_WINDOW_MIN", 1))
+        budget = float(getattr(config, "VALIDATOR_MINER_QUERY_CONCURRENCY", 8))
+        self._article_cooldown.set_cap(max(w_min, cap_pct * budget))
+
+        epoch = self._current_epoch()
+        assignments = coverage_depth_select(live, hotkeys, self._article_cooldown, epoch, n_batches)
+
+        n_assigned = len(assignments)
+        if n_assigned < n_batches:
+            bt.logging.info(
+                f"[DISPATCH] adaptive: {n_batches - n_assigned}/{n_batches} batch(es) unassigned this "
+                f"tick (live windows full); they stay unprocessed and retry next tick."
+            )
+        else:
+            distinct = len({u for u, _ in assignments})
+            bt.logging.info(f"[DISPATCH] adaptive: assigned {n_assigned} batch(es) across {distinct} live miner(s)")
+        return [(uid, miner_batches[bi]) for uid, bi in assignments]
 
     async def _dispatch_telegram_miner_batch(self, miner_batch: List[TelegramMessageForScoring], uid: int) -> None:
         hotkey = None
@@ -920,10 +1072,16 @@ class Validator(BaseValidatorNeuron):
             async with self._miner_dispatch_semaphore:
                 await self._process_article_miner_batch(miner_batch, uid)
         finally:
-            if hotkey:
+            # Static path releases at the ack as before. Under adaptive dispatch the ack
+            # is not "work done": in-flight is reconciled from the article store's
+            # PROCESSING set each cycle (_reconcile_article_inflight), so releasing here
+            # would double-free against the reconcile. A failed send resets its articles
+            # to UNPROCESSED, so they leave PROCESSING and the next reconcile reclaims
+            # the slot automatically.
+            if hotkey and not getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False):
                 self._article_cooldown.release(hotkey)
 
-    async def _process_miner_batch( 
+    async def _process_miner_batch(
         self, 
         miner_batch: List[TweetWithAuthor],
         uid: int
@@ -1090,15 +1248,30 @@ class Validator(BaseValidatorNeuron):
                 article_batch=miner_batch
             )
             axon = self.metagraph.axons[uid]
+            # Adaptive dispatch: a short ack timeout replaces the 30 s blocking send so
+            # dead axons stop holding a dispatch slot. The latency signal the window
+            # needs comes from the push-back, not this ack.
+            adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
+            send_timeout = (
+                float(getattr(config, "DISPATCH_ACK_TIMEOUT_S", 3.0)) if adaptive
+                else float(getattr(config, "ARTICLE_SEND_TIMEOUT", 30.0))
+            )
             responses = await self.dendrite.forward(
                 axons=[axon],
                 synapse=article_batch,
-                timeout=float(getattr(config, "ARTICLE_SEND_TIMEOUT", 30.0)),
+                timeout=send_timeout,
                 deserialize=True
             )
+            if adaptive:
+                self._adaptive_metrics.incr("dispatched")
             if not responses[0].dendrite.status_code == 200:
                 bt.logging.error(f"[VALIDATION] Failed to process article miner batch: {responses[0].dendrite.status_message}")
-                if miner_hotkey:
+                # Under adaptive dispatch a failed send = unreachable miner, not a cheater:
+                # it simply ages out of the liveness roster (no push-back, no heartbeat).
+                # No integrity penalty. The static path keeps the legacy cooldown behaviour.
+                if adaptive:
+                    self._adaptive_metrics.incr("ack_fail")
+                if miner_hotkey and not adaptive:
                     self._article_cooldown.record_failure(miner_hotkey)
                 for article in miner_batch:
                     try:
@@ -1107,12 +1280,24 @@ class Validator(BaseValidatorNeuron):
                         pass
                 return None
 
+            if adaptive:
+                self._adaptive_metrics.incr("ack_ok")
+                # Ack round-trip — reveals whether the send semaphore is being held
+                # across slow acks (busy miner axons), which bounds the depth ramp.
+                try:
+                    _pt = getattr(responses[0].dendrite, "process_time", None)
+                    if _pt is not None:
+                        self._adaptive_metrics.record_ack(float(_pt))
+                except Exception:
+                    pass
             if miner_hotkey:
                 self._article_cooldown.record_success(miner_hotkey)
             return responses[0]
         except Exception as e:
             bt.logging.error(f"[VALIDATION] Failed to process article miner batch: {e}", exc_info=True)
-            if miner_hotkey:
+            # See above: under adaptive dispatch a send-path failure is not an integrity
+            # penalty; the miner ages out of the liveness roster instead.
+            if miner_hotkey and not getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False):
                 self._article_cooldown.record_failure(miner_hotkey)
             for article in miner_batch:
                 try:
@@ -1276,6 +1461,11 @@ class Validator(BaseValidatorNeuron):
             )
             bt.logging.info("[VALIDATION] Started validation client")
 
+        # Liveness heartbeat (adaptive dispatch). Off the dispatch path; the loop
+        # itself no-ops while the flag is disabled, so this is inert by default.
+        if self._liveness_task is None or self._liveness_task.done():
+            self._liveness_task = asyncio.create_task(self._liveness_sweep_loop())
+
         self.save_state()
         
         # Periodically prune old data to prevent memory growth (every 100 steps)
@@ -1287,9 +1477,47 @@ class Validator(BaseValidatorNeuron):
                 self._telegram_analyzer._cache.log_stats("TELEGRAM_LLM_CACHE")
             if hasattr(self._news_analyzer, '_cache'):
                 self._news_analyzer._cache.log_stats("NEWS_LLM_CACHE")
-        
+
+        # Adaptive dispatch pilot metrics: one parseable line per cycle, then reset.
+        if self.step % 100 == 0 and getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False):
+            try:
+                _, on_cd = self._article_cooldown.stats()
+                _, live = self._liveness.stats()
+                bt.logging.info(self._adaptive_metrics.format_line(
+                    self._article_cooldown.window_values(), live, on_cd))
+                self._adaptive_metrics.reset()
+            except Exception as e:
+                bt.logging.warning(f"[ADAPTIVE_METRICS] failed to emit: {e}")
+
         return await forward(self)
-    
+
+    async def _liveness_sweep_loop(self):
+        """
+        Background heartbeat that keeps the liveness roster fresh, fully OFF the
+        dispatch path. While ADAPTIVE_DISPATCH_ENABLED is off it just sleeps, so it
+        is inert by default and toggling the remote flag turns it on within one
+        interval without a restart. Maps alive UIDs → hotkeys (roster is hotkey-keyed).
+        """
+        while True:
+            interval = max(5, int(getattr(config, "LIVENESS_SWEEP_INTERVAL_S", 60)))
+            try:
+                if getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False):
+                    alive_uids = await get_alive_uids(self.metagraph, self.dendrite)
+                    hotkeys = list(self.metagraph.hotkeys)
+                    alive_hotkeys = [hotkeys[u] for u in alive_uids if 0 <= u < len(hotkeys)]
+                    self._liveness.update_from_heartbeat(alive_hotkeys)
+                    self._liveness.prune(set(hotkeys))
+                    tracked, live = self._liveness.stats()
+                    bt.logging.info(
+                        f"[LIVENESS] heartbeat: {len(alive_hotkeys)} alive via IsAlive; "
+                        f"roster {live}/{tracked} live"
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                bt.logging.warning(f"[LIVENESS] sweep error: {e}")
+            await asyncio.sleep(interval)
+
     def _prune_stores(self):
         """Prune old data from stores to maintain bounded memory usage."""
         try:
