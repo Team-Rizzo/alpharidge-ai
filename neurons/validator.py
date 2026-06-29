@@ -1257,6 +1257,14 @@ class Validator(BaseValidatorNeuron):
 
             if adaptive:
                 self._adaptive_metrics.incr("ack_ok")
+                # Ack round-trip — reveals whether the send semaphore is being held
+                # across slow acks (busy miner axons), which bounds the depth ramp.
+                try:
+                    _pt = getattr(responses[0].dendrite, "process_time", None)
+                    if _pt is not None:
+                        self._adaptive_metrics.record_ack(float(_pt))
+                except Exception:
+                    pass
             if miner_hotkey:
                 self._article_cooldown.record_success(miner_hotkey)
             return responses[0]

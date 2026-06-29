@@ -38,6 +38,25 @@ def test_counts_and_rates():
     assert d["on_cooldown"] == "1"
 
 
+def test_ack_latency_percentiles():
+    m = AdaptiveDispatchMetrics()
+    for v in [0.1, 0.2, 0.3, 0.4, 5.0]:   # one slow tail
+        m.record_ack(v)
+    m.record_ack(None)                     # ignored
+    d = _parse(m.format_line(window_values=[], live=0, on_cooldown=0))
+    assert d["ack_n"] == "5"
+    assert d["ack_p50"] == "0.30"          # median
+    assert d["ack_p95"] == "5.00"          # tail surfaces
+
+
+def test_ack_empty_safe():
+    m = AdaptiveDispatchMetrics()
+    d = _parse(m.format_line(window_values=[], live=0, on_cooldown=0))
+    assert d["ack_n"] == "0"
+    assert d["ack_p50"] == "0.00"
+    assert d["ack_p95"] == "0.00"
+
+
 def test_empty_is_safe_no_div_zero():
     m = AdaptiveDispatchMetrics()
     d = _parse(m.format_line(window_values=[], live=0, on_cooldown=0))
@@ -52,10 +71,12 @@ def test_reset_clears_counts_and_scored():
     m = AdaptiveDispatchMetrics()
     m.incr("dispatched", 5)
     m.mark_scored("a")
+    m.record_ack(2.0)
     m.reset()
     d = _parse(m.format_line(window_values=[], live=0, on_cooldown=0))
     assert d["dispatched"] == "0"
     assert d["distinct_scored"] == "0"
+    assert d["ack_n"] == "0"
 
 
 def test_distinct_scored_dedupes():
