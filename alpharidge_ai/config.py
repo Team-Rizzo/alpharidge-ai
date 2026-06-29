@@ -211,6 +211,19 @@ DISPATCH_ACK_TIMEOUT_S = float(os.getenv("DISPATCH_ACK_TIMEOUT_S", "12.0"))
 DISPATCH_CHRONIC_TIMEOUT_N = int(os.getenv("DISPATCH_CHRONIC_TIMEOUT_N", "5"))
 LIVENESS_TTL_S = int(os.getenv("LIVENESS_TTL_S", "120"))
 LIVENESS_SWEEP_INTERVAL_S = int(os.getenv("LIVENESS_SWEEP_INTERVAL_S", "60"))
+# Penalty-split sub-flag: when adaptive dispatch is on, this gates the
+# consensus-affecting timeout→broadcast reclassification SEPARATELY, so it can be
+# enabled/rolled back independently of the dispatch behaviour. Default true = the
+# Stage-A-validated behaviour (timeouts are capacity signals; only chronic non-response
+# penalizes/broadcasts). Set false to run adaptive dispatch with the legacy per-timeout
+# penalty/broadcast intact (window still shrinks on timeout either way).
+ADAPTIVE_PENALTY_SPLIT_ENABLED = _as_bool(os.getenv("ADAPTIVE_PENALTY_SPLIT_ENABLED", "true"))
+
+# Validation quality floor (composite >= TIER3_THRESHOLD). Served subnet-wide so the
+# legit validators validate IDENTICALLY — divergent thresholds make them pass/fail
+# different articles, which breaks the consistent co-backing Stage B depends on. Not
+# gated by the dispatch flag (it's the scoring track). Default 0.70.
+TIER3_THRESHOLD = float(os.getenv("TIER3_THRESHOLD", "0.70"))
 
 
 _REMOTE_CONFIG_KEYS = {
@@ -231,6 +244,9 @@ _REMOTE_CONFIG_KEYS = {
     "DISPATCH_CHRONIC_TIMEOUT_N": (int,   "DISPATCH_CHRONIC_TIMEOUT_N"),
     "LIVENESS_TTL_S":             (int,   "LIVENESS_TTL_S"),
     "LIVENESS_SWEEP_INTERVAL_S":  (int,   "LIVENESS_SWEEP_INTERVAL_S"),
+    "ADAPTIVE_PENALTY_SPLIT_ENABLED": (_as_bool, "ADAPTIVE_PENALTY_SPLIT_ENABLED"),
+    # Scoring track (not gated by the dispatch flag): served so all validators match.
+    "TIER3_THRESHOLD":            (float, "TIER3_THRESHOLD"),
 }
 
 REMOTE_CONFIG_REFRESH_SECONDS = int(os.getenv("REMOTE_CONFIG_REFRESH_SECONDS", "3600"))

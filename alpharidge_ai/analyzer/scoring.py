@@ -1329,13 +1329,20 @@ def validate_article_intelligence(
     details["tier3"] = {k: {"score": round(tier3_scores[k], 4), "weight": weights[k]} for k in weights}
     details["tier3"]["composite"] = round(composite, 4)
 
-    # Quality floor (module-level TIER3_THRESHOLD, env-overridable). Recalibrated
-    # 0.75 -> 0.70 on an n~920 honest sweep; see the constant's definition above.
-    is_valid = composite >= TIER3_THRESHOLD
+    # Quality floor. Read live from config (served subnet-wide / OVERRIDE-able) so it
+    # can be recalibrated without a code change AND stays identical across validators;
+    # falls back to the module default (recalibrated 0.75 -> 0.70 on an n~920 honest
+    # sweep) if config is unavailable.
+    try:
+        from alpharidge_ai import config as _cfg
+        _threshold = float(getattr(_cfg, "TIER3_THRESHOLD", TIER3_THRESHOLD))
+    except Exception:
+        _threshold = TIER3_THRESHOLD
+    is_valid = composite >= _threshold
     if is_valid:
         bt.logging.success(f"[V2_VALIDATE] Article ACCEPTED: composite={composite:.4f}")
     else:
-        bt.logging.warning(f"[V2_VALIDATE] Article REJECTED: composite={composite:.4f} < {TIER3_THRESHOLD}")
+        bt.logging.warning(f"[V2_VALIDATE] Article REJECTED: composite={composite:.4f} < {_threshold}")
 
     return is_valid, composite, details
 

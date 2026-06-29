@@ -34,3 +34,27 @@ LLM_CACHE_MAX_SIZE=1024
 # ENFORCE_SIGNED_ATTESTATIONS=true
 # Fraction of received attestations to deep-verify against the API (default 0.1).
 # DEEP_VERIFY_SAMPLE_RATE=0.1
+
+# --- Adaptive dispatch (RFC 2026-06-28) ---
+# These are served subnet-wide by the API (/config/subnet) with safe defaults, so you
+# normally do NOT set them here. To FORCE a per-validator value (e.g. the Stage A pilot
+# on a single validator), set OVERRIDE_<KEY> — it wins over the API-served value.
+#
+# Master flag — coverage/window/liveness dispatch. Default false (inert = today's behaviour).
+# OVERRIDE_ADAPTIVE_DISPATCH_ENABLED=true
+# Penalty-split sub-flag — the consensus-affecting timeout->broadcast change. Default true
+# (active when the master flag is on). Set false to run adaptive dispatch WITHOUT the
+# broadcast change, so it can be staged / rolled back on its own.
+# OVERRIDE_ADAPTIVE_PENALTY_SPLIT_ENABLED=true
+# Send-ack timeout (s). MUST match the 12s IsAlive liveness ping (Stage A: 3s fails
+# alive-but-slow miners). Default 12.
+# OVERRIDE_DISPATCH_ACK_TIMEOUT_S=12
+# Validation quality floor (composite >= TIER3_THRESHOLD). Served subnet-wide so all legit
+# validators validate IDENTICALLY; OVERRIDE only for local testing. Default 0.70.
+# OVERRIDE_TIER3_THRESHOLD=0.70
+# Per-validator dispatch concurrency (the depth ramp). NOT remote-config — read at startup
+# (semaphore is built once), so changing it needs a restart. Keep at 8 for coverage-only Stage A.
+# VALIDATOR_MINER_QUERY_CONCURRENCY=8
+# (Window/liveness tuning knobs — DISPATCH_WINDOW_*, DISPATCH_LATE_FRACTION,
+# DISPATCH_CHRONIC_TIMEOUT_N, LIVENESS_TTL_S, LIVENESS_SWEEP_INTERVAL_S — are also
+# API-served; OVERRIDE_<KEY> to pin one locally.)

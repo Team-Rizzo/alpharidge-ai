@@ -207,6 +207,9 @@ class ValidationClient:
                         bt.logging.debug("[ValidationClient.run] Checking for timed-out articles")
                         timed_out_articles = self._validator._article_store.get_timeouts()
                         adaptive_dispatch = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
+                        # Penalty split (the consensus-affecting broadcast change) is gated
+                        # SEPARATELY so it can be enabled / rolled back on its own.
+                        penalty_split = adaptive_dispatch and getattr(config, "ADAPTIVE_PENALTY_SPLIT_ENABLED", True)
                         timed_out_hotkeys = set()
                         for article_item in timed_out_articles:
                             bt.logging.debug(f"[ValidationClient.run] Resetting timed out article {article_item.article.id} to unprocessed")
@@ -214,29 +217,31 @@ class ValidationClient:
                             if not article_item.hotkey:
                                 continue
                             if adaptive_dispatch:
-                                # Capacity signal — collect; the window shrink + penalty
-                                # decision happen once per hotkey below, NOT per article.
+                                # Collect for the once-per-hotkey window update below.
                                 timed_out_hotkeys.add(article_item.hotkey)
-                            else:
+                            # Legacy broadcast behaviour: per-article penalty. Active when adaptive
+                            # dispatch is off OR the penalty split is explicitly disabled.
+                            if not penalty_split:
                                 bt.logging.info(f"[ValidationClient.run] Adding penalty to hotkey {article_item.hotkey} for article id {article_item.article.id}")
                                 self._validator._miner_penalty.add_penalty(article_item.hotkey, 1)
                                 # V3: display-only timeout attribution (decoupled from consensus).
                                 self._validator._buffer_penalty_detail([self._timeout_penalty_row(
                                     article_item.hotkey, "article", article_item.article.id)])
-                        # Adaptive penalty split + broadcast guard: a timeout is a capacity
-                        # signal (shrinks the window) once per miner per reclaim cycle. It
-                        # becomes an integrity penalty — and only then enters the
-                        # cross-validator broadcast (which reads _miner_penalty) — solely on
-                        # CHRONIC non-response. So ordinary timeouts never zero a miner or
-                        # pollute the pooled penalty total on any validator.
-                        for hk in timed_out_hotkeys:
-                            self._validator._adaptive_metrics.incr("timeout")
-                            escalate = self._validator._article_cooldown.record_timeout(hk)
-                            if escalate:
-                                bt.logging.info(f"[ValidationClient.run] Chronic timeout escalation for {hk[:12]}.. — applying integrity penalty")
-                                self._validator._miner_penalty.add_penalty(hk, 1)
-                                self._validator._buffer_penalty_detail([self._timeout_penalty_row(
-                                    hk, "article", "chronic-timeout")])
+                        # Adaptive window dynamics: one capacity signal per miner per reclaim cycle.
+                        # With the split ON (default), this is the ONLY path by which a timeout becomes
+                        # an integrity penalty / enters the broadcast — and only on CHRONIC non-response,
+                        # so ordinary timeouts never zero a miner or pollute the pooled total. With the
+                        # split OFF, the window still shrinks here but the penalty was already applied
+                        # per-article above (legacy broadcast preserved).
+                        if adaptive_dispatch:
+                            for hk in timed_out_hotkeys:
+                                self._validator._adaptive_metrics.incr("timeout")
+                                escalate = self._validator._article_cooldown.record_timeout(hk)
+                                if penalty_split and escalate:
+                                    bt.logging.info(f"[ValidationClient.run] Chronic timeout escalation for {hk[:12]}.. — applying integrity penalty")
+                                    self._validator._miner_penalty.add_penalty(hk, 1)
+                                    self._validator._buffer_penalty_detail([self._timeout_penalty_row(
+                                        hk, "article", "chronic-timeout")])
                         bt.logging.debug("[ValidationClient.run] Fetching unscored articles from api and local store")
                         unscored_articles = (await self.api_client.get_unscored_articles(limit=config.VALIDATION_FETCH_LIMIT)) + [item.article for item in self._validator._article_store.get_unprocessed_articles()]
 
