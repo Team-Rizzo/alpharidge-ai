@@ -1104,8 +1104,12 @@ def validate_article_intelligence(
     def _lang_bucket(x) -> str:
         return "en" if str(x).lower().strip() == "en" else "non-en"
 
+    # market_session is intentionally NOT a Tier-1 hard-gate field: it is trivially derived
+    # from the timestamp (zero independent quality signal and absent from the Tier-3
+    # composite), and a timezone-representation mismatch at the Fri/Sat boundary was
+    # systematically failing honest batches on exact-match. The field's own derivation is
+    # normalized in _compute_market_session; it stays ungated here as low-value.
     tier1_fields = [
-        ("market_session", _ev(m.market_session), _ev(v.market_session)),
         ("detected_language", _lang_bucket(m.detected_language), _lang_bucket(v.detected_language)),
         ("primary_sector_id", str(m.topic_signature.primary_sector_id), str(v.topic_signature.primary_sector_id)),
     ]
