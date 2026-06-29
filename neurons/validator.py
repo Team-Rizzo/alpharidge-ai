@@ -353,7 +353,7 @@ class Validator(BaseValidatorNeuron):
 
         # Adaptive dispatch: capture the dispatch→push-back round-trip latency NOW,
         # before the reset below repurposes start_time for the validation clock. This
-        # is miner-capacity latency only (it excludes our validator's own analyzer
+        # is miner-capacity latency only (it excludes the validator's own analyzer
         # time), which is what the congestion window must measure (RFC Component 2).
         _now = time.time()
         _starts = [

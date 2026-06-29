@@ -6,8 +6,8 @@ isolation. Given the live miner UIDs and a window-aware tracker, it returns
 ``(uid, batch_index)`` assignments:
 
   1. Coverage pass — every live miner that has not been covered this epoch and
-     has a free window slot gets exactly one batch (the coverage floor that puts
-     every live miner across κ).
+     has a free window slot gets exactly one batch (the coverage floor — every live
+     miner is scored each epoch).
   2. Depth pass — remaining batches go to miners with window headroom, highest
      window first, round-robin so a single miner can't drain the queue before
      others get a turn.

@@ -1,9 +1,9 @@
 """
-Per-cycle pilot metrics for adaptive dispatch (RFC 2026-06-28, Component 6).
+Per-cycle dispatch metrics for adaptive dispatch (RFC 2026-06-28).
 
 Lightweight counters accumulated at the dispatch/validation/reclaim hook points,
 emitted as a single parseable log line per weight cycle (then reset) so the
-dashboard can scrape the pilot signals at fixed pricing:
+dashboard can scrape the dispatch signals:
 distinct miners scored, completion %, accept-vs-ack-fail, timeout rate, the
 per-miner window-size distribution, and the ack-latency distribution (how long
 the miner takes to ack a send — `dendrite.process_time` — which reveals whether

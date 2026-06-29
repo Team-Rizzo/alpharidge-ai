@@ -203,26 +203,23 @@ DISPATCH_WINDOW_CAP_PCT = float(os.getenv("DISPATCH_WINDOW_CAP_PCT", "0.15"))
 DISPATCH_WINDOW_GROW = float(os.getenv("DISPATCH_WINDOW_GROW", "1.0"))
 DISPATCH_WINDOW_SHRINK = float(os.getenv("DISPATCH_WINDOW_SHRINK", "0.5"))
 DISPATCH_LATE_FRACTION = float(os.getenv("DISPATCH_LATE_FRACTION", "0.6"))
-# Must match the IsAlive liveness ping timeout (12s in get_alive_uids): the roster
-# is built from that ping, so a shorter ack window systematically fails alive-but-slow
-# miners. Stage A pilot (2026-06-28): 3s -> ack-fail ~50-89%/completion ~3.5%;
-# 12s -> ack-fail ~3%/completion ~23%. (TODO: share one constant with get_alive_uids.)
+# Must match the IsAlive liveness ping timeout (12s in get_alive_uids): the roster is
+# built from that ping, so a shorter ack window systematically fails alive-but-slow
+# miners. (TODO: share one constant with get_alive_uids so they can't drift.)
 DISPATCH_ACK_TIMEOUT_S = float(os.getenv("DISPATCH_ACK_TIMEOUT_S", "12.0"))
 DISPATCH_CHRONIC_TIMEOUT_N = int(os.getenv("DISPATCH_CHRONIC_TIMEOUT_N", "5"))
 LIVENESS_TTL_S = int(os.getenv("LIVENESS_TTL_S", "120"))
 LIVENESS_SWEEP_INTERVAL_S = int(os.getenv("LIVENESS_SWEEP_INTERVAL_S", "60"))
-# Penalty-split sub-flag: when adaptive dispatch is on, this gates the
-# consensus-affecting timeout→broadcast reclassification SEPARATELY, so it can be
-# enabled/rolled back independently of the dispatch behaviour. Default true = the
-# Stage-A-validated behaviour (timeouts are capacity signals; only chronic non-response
-# penalizes/broadcasts). Set false to run adaptive dispatch with the legacy per-timeout
-# penalty/broadcast intact (window still shrinks on timeout either way).
+# Penalty-split sub-flag: when adaptive dispatch is on, this gates the cross-validator
+# timeout→broadcast reclassification SEPARATELY, so it can be enabled/rolled back
+# independently of the dispatch behaviour. Default true (timeouts are capacity signals;
+# only chronic non-response penalizes/broadcasts). Set false to run adaptive dispatch
+# with the legacy per-timeout penalty/broadcast intact (window still shrinks either way).
 ADAPTIVE_PENALTY_SPLIT_ENABLED = _as_bool(os.getenv("ADAPTIVE_PENALTY_SPLIT_ENABLED", "true"))
 
-# Validation quality floor (composite >= TIER3_THRESHOLD). Served subnet-wide so the
-# legit validators validate IDENTICALLY — divergent thresholds make them pass/fail
-# different articles, which breaks the consistent co-backing Stage B depends on. Not
-# gated by the dispatch flag (it's the scoring track). Default 0.70.
+# Validation quality floor (composite >= TIER3_THRESHOLD). Served centrally so every
+# validator uses the same threshold — divergent thresholds would score the same article
+# differently. Not gated by the dispatch flag (separate scoring track). Default 0.70.
 TIER3_THRESHOLD = float(os.getenv("TIER3_THRESHOLD", "0.70"))
 
 
