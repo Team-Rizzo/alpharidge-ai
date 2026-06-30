@@ -55,6 +55,13 @@ class MinerCooldownTracker:
     def _shrink(self) -> float:
         return float(_cfg("DISPATCH_WINDOW_SHRINK", 0.5))
 
+    def _shrink_capacity(self) -> float:
+        """Backoff factor for CAPACITY signals (lease-timeout, incomplete analysis),
+        as opposed to integrity (genuine invalid). Defaults to the integrity shrink;
+        set DISPATCH_CAPACITY_SHRINK=1.0 to FREEZE the window (hold) on capacity so a
+        transient timeout doesn't collapse a depth window every cycle."""
+        return float(_cfg("DISPATCH_CAPACITY_SHRINK", self._shrink()))
+
     def _chronic_n(self) -> int:
         return int(_cfg("DISPATCH_CHRONIC_TIMEOUT_N", 5))
 
@@ -158,14 +165,24 @@ class MinerCooldownTracker:
         self._consec_to[hotkey] = 0
         self._window[hotkey] = max(self._window_min(), self._get_window(hotkey) * self._shrink())
 
+    def record_capacity_backoff(self, hotkey: str) -> None:
+        """Incomplete/missing analysis: a capacity signal (the miner responded but
+        hasn't drained the burst), not bad quality. Back the window off by the
+        capacity factor (freezable) and reset the chronic counter — it responded, so
+        it is not non-responsive. Mirrors record_invalid but with no integrity penalty
+        and the capacity shrink, so freeze applies here too."""
+        self._consec_to[hotkey] = 0
+        self._window[hotkey] = max(self._window_min(), self._get_window(hotkey) * self._shrink_capacity())
+
     def record_timeout(self, hotkey: str) -> bool:
         """A reclaim cycle in which this miner had ≥1 lease timeout: shrink the window
-        and advance the consecutive-timeout counter. Call once per hotkey per reclaim
-        cycle (not per article). Returns True when chronic (>= DISPATCH_CHRONIC_TIMEOUT_N
-        consecutive) — the caller then applies the integrity penalty/broadcast. On
-        chronic it also drops the miner into the exponential-backoff cooldown and resets
-        the counter (clean slate for a fair re-probe after cooldown)."""
-        self._window[hotkey] = max(self._window_min(), self._get_window(hotkey) * self._shrink())
+        (capacity factor — freezable) and advance the consecutive-timeout counter. Call
+        once per hotkey per reclaim cycle (not per article). Returns True when chronic
+        (>= DISPATCH_CHRONIC_TIMEOUT_N consecutive) — the caller then applies the
+        integrity penalty/broadcast. On chronic it also drops the miner into the
+        exponential-backoff cooldown and resets the counter (clean slate for a fair
+        re-probe after cooldown)."""
+        self._window[hotkey] = max(self._window_min(), self._get_window(hotkey) * self._shrink_capacity())
         n = self._consec_to.get(hotkey, 0) + 1
         if n >= self._chronic_n():
             self._consec_to[hotkey] = 0

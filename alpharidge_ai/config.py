@@ -202,6 +202,12 @@ DISPATCH_WINDOW_MIN = int(os.getenv("DISPATCH_WINDOW_MIN", "1"))
 DISPATCH_WINDOW_CAP_PCT = float(os.getenv("DISPATCH_WINDOW_CAP_PCT", "0.15"))
 DISPATCH_WINDOW_GROW = float(os.getenv("DISPATCH_WINDOW_GROW", "1.0"))
 DISPATCH_WINDOW_SHRINK = float(os.getenv("DISPATCH_WINDOW_SHRINK", "0.5"))
+# Window backoff for CAPACITY signals (lease-timeout / incomplete analysis), kept
+# separate from the integrity shrink above. Default = DISPATCH_WINDOW_SHRINK, so
+# behavior is unchanged until set. Raise toward 1.0 to FREEZE the window on capacity
+# signals (hold instead of shrink) so transient timeout bursts don't collapse a depth
+# window every cycle. Genuine integrity failures still take the full shrink.
+DISPATCH_CAPACITY_SHRINK = float(os.getenv("DISPATCH_CAPACITY_SHRINK", "0.5"))
 DISPATCH_LATE_FRACTION = float(os.getenv("DISPATCH_LATE_FRACTION", "0.6"))
 # Must match the IsAlive liveness ping timeout (12s in get_alive_uids): the roster is
 # built from that ping, so a shorter ack window systematically fails alive-but-slow
@@ -255,6 +261,7 @@ _REMOTE_CONFIG_KEYS = {
     "DISPATCH_WINDOW_CAP_PCT":    (float, "DISPATCH_WINDOW_CAP_PCT"),
     "DISPATCH_WINDOW_GROW":       (float, "DISPATCH_WINDOW_GROW"),
     "DISPATCH_WINDOW_SHRINK":     (float, "DISPATCH_WINDOW_SHRINK"),
+    "DISPATCH_CAPACITY_SHRINK":   (float, "DISPATCH_CAPACITY_SHRINK"),
     "DISPATCH_LATE_FRACTION":     (float, "DISPATCH_LATE_FRACTION"),
     "DISPATCH_ACK_TIMEOUT_S":     (float, "DISPATCH_ACK_TIMEOUT_S"),
     "DISPATCH_CHRONIC_TIMEOUT_N": (int,   "DISPATCH_CHRONIC_TIMEOUT_N"),

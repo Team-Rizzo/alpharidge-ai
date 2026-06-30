@@ -113,6 +113,56 @@ def test_window_never_below_min(adaptive_on):
     assert t.window("hk") == pytest.approx(1.0)   # W_MIN floor
 
 
+# ---- Capacity-class backoff (DISPATCH_CAPACITY_SHRINK; freeze option) ----
+
+def test_capacity_shrink_defaults_to_integrity_shrink(adaptive_on, monkeypatch):
+    """Unset/default DISPATCH_CAPACITY_SHRINK -> capacity backoff == the 0.5 shrink,
+    i.e. behavior is unchanged for timeout and incomplete-analysis."""
+    monkeypatch.setattr(config, "DISPATCH_CAPACITY_SHRINK", 0.5, raising=False)
+    t = MinerCooldownTracker(adaptive=True)
+    t.set_cap(100)
+    for _ in range(3):
+        t.record_timely_valid("hk", latency_s=10)
+    w = t.window("hk")
+    t.record_timeout("hk")
+    assert t.window("hk") == pytest.approx(w * 0.5)        # lease-timeout
+    t.set_cap(100)
+    for _ in range(3):
+        t.record_timely_valid("hk2", latency_s=10)
+    w2 = t.window("hk2")
+    t.record_capacity_backoff("hk2")
+    assert t.window("hk2") == pytest.approx(w2 * 0.5)      # incomplete analysis
+
+
+def test_capacity_freeze_holds_window(adaptive_on, monkeypatch):
+    """DISPATCH_CAPACITY_SHRINK=1.0 freezes the window on capacity signals so a
+    transient timeout/incomplete doesn't collapse a depth window — while a genuine
+    integrity invalid still takes the full 0.5 shrink."""
+    monkeypatch.setattr(config, "DISPATCH_CAPACITY_SHRINK", 1.0, raising=False)
+    t = MinerCooldownTracker(adaptive=True)
+    t.set_cap(100)
+    for _ in range(3):
+        t.record_timely_valid("hk", latency_s=10)
+    w = t.window("hk")
+    assert w > 2.0
+    t.record_timeout("hk")
+    assert t.window("hk") == pytest.approx(w)              # frozen, not shrunk
+    t.record_capacity_backoff("hk")
+    assert t.window("hk") == pytest.approx(w)              # frozen
+    t.record_invalid("hk")                                 # integrity still shrinks
+    assert t.window("hk") == pytest.approx(w * 0.5)
+
+
+def test_capacity_freeze_still_escalates_chronic(adaptive_on, monkeypatch):
+    """Freezing the window must NOT disable chronic-timeout escalation — non-response
+    still counts toward the cooldown threshold even when the window is held."""
+    monkeypatch.setattr(config, "DISPATCH_CAPACITY_SHRINK", 1.0, raising=False)
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(4):
+        assert t.record_timeout("hk") is False
+    assert t.record_timeout("hk") is True                 # 5th = chronic
+
+
 # ---- consec_to rules (resolved decisions) ----
 
 def test_timeout_increments_then_chronic_escalates(adaptive_on):

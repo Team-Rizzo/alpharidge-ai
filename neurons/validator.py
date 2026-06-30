@@ -795,7 +795,7 @@ class Validator(BaseValidatorNeuron):
                     bt.logging.info(
                         f"[VALIDATION] incomplete analysis from {miner_hotkey} (capacity, not integrity) "
                         f"— backing off window, no penalty")
-                    self._article_cooldown.record_invalid(miner_hotkey)
+                    self._article_cooldown.record_capacity_backoff(miner_hotkey)
                     self._adaptive_metrics.incr("incomplete")
             else:
                 # Genuine integrity failure (or the split is disabled) — unchanged:
