@@ -62,10 +62,20 @@ class AdaptiveDispatchMetrics:
         else:
             wmin = wmax = wmed = wmean = 0.0
         al = sorted(self._ack_latencies)
+        # Window-depth breadth: how many live miners actually crossed into a
+        # depth slot. The allocator's slot limit is int(window), so window>=2.0
+        # is the first tick a miner can hold a 2nd batch. Under coverage every
+        # window sits at ~1 and these are all 0; they are the primary signal that
+        # the concurrency ramp is buying depth (and across how many miners, not
+        # just the single one window_max reflects).
+        window_ge2 = sum(1 for w in wv if w >= 2.0)
+        window_ge3 = sum(1 for w in wv if w >= 3.0)
+        window_ge4 = sum(1 for w in wv if w >= 4.0)
         parts = [
             "[ADAPTIVE_METRICS]",
             f"distinct_scored={len(self._scored)}",
             f"dispatched={dispatched}",
+            f"depth_dispatched={c.get('depth_dispatched', 0)}",
             f"ack_ok={c.get('ack_ok', 0)}",
             f"ack_fail={c.get('ack_fail', 0)}",
             f"valid={valid}",
@@ -79,6 +89,9 @@ class AdaptiveDispatchMetrics:
             f"window_med={wmed:.2f}",
             f"window_mean={wmean:.2f}",
             f"window_max={wmax:.2f}",
+            f"window_ge2={window_ge2}",
+            f"window_ge3={window_ge3}",
+            f"window_ge4={window_ge4}",
             f"window_n={len(wv)}",
             f"ack_p50={self._pctile(al, 0.50):.2f}",
             f"ack_p95={self._pctile(al, 0.95):.2f}",

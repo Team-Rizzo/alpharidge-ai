@@ -24,8 +24,11 @@ def test_counts_and_rates():
     for hk in ("a", "b", "c"):
         m.mark_scored(hk)
 
+    m.incr("depth_dispatched", 4)
+
     d = _parse(m.format_line(window_values=[1.0, 2.0, 3.0], live=5, on_cooldown=1))
     assert d["dispatched"] == "10"
+    assert d["depth_dispatched"] == "4"
     assert d["distinct_scored"] == "3"
     assert d["ack_fail"] == "2"
     assert d["completion_pct"] == "60.0"     # 6/10
@@ -34,6 +37,9 @@ def test_counts_and_rates():
     assert d["window_min"] == "1.00"
     assert d["window_max"] == "3.00"
     assert d["window_med"] == "2.00"
+    assert d["window_ge2"] == "2"            # windows 2.0 and 3.0
+    assert d["window_ge3"] == "1"            # window 3.0
+    assert d["window_ge4"] == "0"
     assert d["live"] == "5"
     assert d["on_cooldown"] == "1"
 
@@ -65,6 +71,8 @@ def test_empty_is_safe_no_div_zero():
     assert d["timeout_pct"] == "0.0"
     assert d["window_n"] == "0"
     assert d["window_med"] == "0.00"
+    assert d["window_ge2"] == "0"
+    assert d["depth_dispatched"] == "0"
 
 
 def test_reset_clears_counts_and_scored():

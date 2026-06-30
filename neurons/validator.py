@@ -939,6 +939,7 @@ class Validator(BaseValidatorNeuron):
 
         adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
         epoch = self._current_epoch() if adaptive else 0
+        dispatched_uids_this_tick = set()
         for uid, miner_batch in targets:
             if len(self._pending_miner_tasks) >= self._max_pending_miner_tasks:
                 bt.logging.warning(
@@ -946,6 +947,14 @@ class Validator(BaseValidatorNeuron):
                     f"skipping scheduling remaining article batches this tick."
                 )
                 break
+            # A 2nd+ batch to the same miner within one tick is a depth dispatch
+            # (the coverage floor only ever assigns one). Count it so the metrics
+            # line shows how much of the volume is depth vs coverage.
+            if adaptive:
+                if int(uid) in dispatched_uids_this_tick:
+                    self._adaptive_metrics.incr("depth_dispatched")
+                else:
+                    dispatched_uids_this_tick.add(int(uid))
             task = asyncio.create_task(self._dispatch_article_miner_batch(miner_batch, int(uid)))
             self._track_task(task)
             # Mark covered on actual dispatch (not at allocation time): if the pending-cap
