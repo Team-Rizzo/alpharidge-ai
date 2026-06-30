@@ -222,6 +222,17 @@ ADAPTIVE_PENALTY_SPLIT_ENABLED = _as_bool(os.getenv("ADAPTIVE_PENALTY_SPLIT_ENAB
 # differently. Not gated by the dispatch flag (separate scoring track). Default 0.70.
 TIER3_THRESHOLD = float(os.getenv("TIER3_THRESHOLD", "0.70"))
 
+# Cross-article cloned-embedding gate. The within-batch title-embedding similarity
+# above which a pair is a clone candidate (default 0.99 = current behavior). When
+# CLONE_DIFFERENTIAL_ENABLED is off, any candidate is flagged (the legacy absolute
+# rule); when on, a candidate is only a clone if the miner's similarity exceeds the
+# validator's own re-embedding of the same titles by >= CLONE_DIVERGENCE_MARGIN —
+# so honest syndicated clusters (which the validator also sees as similar) pass.
+# Defaults reproduce current behavior, so deploying this is a no-op until served.
+CLONE_COSINE_THRESHOLD     = float(os.getenv("CLONE_COSINE_THRESHOLD", "0.99"))
+CLONE_DIFFERENTIAL_ENABLED = _as_bool(os.getenv("CLONE_DIFFERENTIAL_ENABLED", "false"))
+CLONE_DIVERGENCE_MARGIN    = float(os.getenv("CLONE_DIVERGENCE_MARGIN", "0.05"))
+
 
 _REMOTE_CONFIG_KEYS = {
     "USD_PRICE_PER_POINT":    (float, "USD_PRICE_PER_POINT"),
@@ -244,6 +255,9 @@ _REMOTE_CONFIG_KEYS = {
     "ADAPTIVE_PENALTY_SPLIT_ENABLED": (_as_bool, "ADAPTIVE_PENALTY_SPLIT_ENABLED"),
     # Scoring track (not gated by the dispatch flag): served so all validators match.
     "TIER3_THRESHOLD":            (float, "TIER3_THRESHOLD"),
+    "CLONE_COSINE_THRESHOLD":     (float, "CLONE_COSINE_THRESHOLD"),
+    "CLONE_DIFFERENTIAL_ENABLED": (_as_bool, "CLONE_DIFFERENTIAL_ENABLED"),
+    "CLONE_DIVERGENCE_MARGIN":    (float, "CLONE_DIVERGENCE_MARGIN"),
 }
 
 REMOTE_CONFIG_REFRESH_SECONDS = int(os.getenv("REMOTE_CONFIG_REFRESH_SECONDS", "3600"))

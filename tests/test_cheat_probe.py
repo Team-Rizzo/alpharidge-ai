@@ -98,10 +98,24 @@ def make_article(intel: ArticleIntelligence) -> NewsArticleForScoring:
     )
 
 
+class _StubNER:
+    """Local-embedder shim: returns the validator's title embedding for a known title.
+    Mirrors analyzer.ner_engine.encode_text (the cheap MiniLM path Phase 1 uses to
+    corroborate clone candidates), without loading the real model."""
+    def __init__(self, title_to_embedding: dict):
+        self._by_title = title_to_embedding
+
+    def encode_text(self, text):
+        return self._by_title.get(text)
+
+
 class StubAnalyzer:
-    """Returns the precomputed validator reference per article-id — fully offline."""
+    """Returns the precomputed validator reference per article-id — fully offline.
+    Exposes `ner_engine.encode_text` so the Phase-1 differential clone check can read
+    the validator's own title embeddings (here, straight from the references)."""
     def __init__(self, reference_by_id: dict):
         self._ref = reference_by_id
+        self.ner_engine = _StubNER({r.title: r.title_embedding for r in reference_by_id.values()})
 
     def analyze(self, article_id=None, url=None, title=None, source=None,
                 published=None, summary=None, content=None, miner_hotkey=None, raw_html=None):
@@ -202,7 +216,29 @@ def _run_one(builder):
     return bool(batch_valid), expected
 
 
-def run_cheat_probe() -> dict:
+class _clone_config:
+    """Pin the clone-gate config for a probe run (restores afterward). Mirrors how the
+    fleet flips Phase 1 via served `CLONE_DIFFERENTIAL_ENABLED` — scoring reads it live."""
+    _KEYS = ("CLONE_DIFFERENTIAL_ENABLED", "CLONE_COSINE_THRESHOLD", "CLONE_DIVERGENCE_MARGIN")
+
+    def __init__(self, differential, threshold=0.99, margin=0.05):
+        self._want = dict(CLONE_DIFFERENTIAL_ENABLED=differential,
+                          CLONE_COSINE_THRESHOLD=threshold, CLONE_DIVERGENCE_MARGIN=margin)
+
+    def __enter__(self):
+        from alpharidge_ai import config as _cfg
+        self._cfg = _cfg
+        self._saved = {k: getattr(_cfg, k, None) for k in self._KEYS}
+        for k, v in self._want.items():
+            setattr(_cfg, k, v)
+        return self
+
+    def __exit__(self, *exc):
+        for k, v in self._saved.items():
+            setattr(self._cfg, k, v)
+
+
+def run_cheat_probe(differential: bool = False) -> dict:
     scenarios = {
         "honest": scenario_honest,
         "boundary_market_session": scenario_boundary_market_session,
@@ -211,38 +247,60 @@ def run_cheat_probe() -> dict:
         "recycled": scenario_recycled,
         "cloned": scenario_cloned,
     }
-    results = {name: _run_one(b) for name, b in scenarios.items()}
+    with _clone_config(differential=differential):
+        results = {name: _run_one(b) for name, b in scenarios.items()}
+        fp_now, _fp_target = _run_one(scenario_syndicated_fp_PHASE1)
     cheats_accepted = sum(1 for c in CHEATS if results[c][0] is True)
     honest_accepted = sum(1 for h in HONEST if results[h][0] is True)
-    # known Phase-1 gap (measured, not part of the gate yet)
-    fp_now, fp_target = _run_one(scenario_syndicated_fp_PHASE1)
     return {
         "results": results,
         "cheat_acceptance_rate": cheats_accepted / len(CHEATS),
         "honest_accept_rate": honest_accepted / len(HONEST),
-        "syndicated_fp_passes_now": fp_now,  # False on current code = the FP Phase 1 fixes
+        # legacy gate: False (the FP). Differential gate: True (FP fixed, Phase 1).
+        "syndicated_fp_passes": fp_now,
     }
 
 
 # ---- pytest gate ----------------------------------------------------------
 
 def test_cheats_are_rejected():
-    out = run_cheat_probe()
+    """Legacy (default) gate: no cheat is accepted."""
+    out = run_cheat_probe(differential=False)
     assert out["cheat_acceptance_rate"] == 0.0, out["results"]
 
 
 def test_honest_and_boundary_pass():
-    out = run_cheat_probe()
+    """Legacy (default) gate: honest + boundary cases pass; the near-dup FP still rejects."""
+    out = run_cheat_probe(differential=False)
+    assert out["honest_accept_rate"] == 1.0, out["results"]
+    assert out["syndicated_fp_passes"] is False, "legacy 0.99 gate should still false-reject the near-dup"
+
+
+def test_differential_keeps_cheats_rejected():
+    """Phase 1: the scoped clone check must NOT let cloned/low-effort/recycled through."""
+    out = run_cheat_probe(differential=True)
+    assert out["cheat_acceptance_rate"] == 0.0, out["results"]
+
+
+def test_differential_fixes_syndicated_fp():
+    """Phase 1 acceptance test: the honest near-duplicate (cosine 0.995) now PASSES,
+    because the validator corroborates the similarity — while honest stays 1.0."""
+    out = run_cheat_probe(differential=True)
+    assert out["syndicated_fp_passes"] is True, out["results"]
     assert out["honest_accept_rate"] == 1.0, out["results"]
 
 
-if __name__ == "__main__":
-    out = run_cheat_probe()
-    print("[CHEAT_PROBE]")
+def _print_mode(label, out):
+    print(f"[CHEAT_PROBE] {label}")
     for name, (actual, expected) in out["results"].items():
         flag = "ok" if actual == expected else "XX"
         print(f"  {flag}  {name:28s} accepted={actual}  expected={expected}")
     print(f"  cheat_acceptance_rate = {out['cheat_acceptance_rate']:.2f}  (target 0.00)")
     print(f"  honest_accept_rate    = {out['honest_accept_rate']:.2f}  (target 1.00)")
-    print(f"  syndicated_fp_passes_now = {out['syndicated_fp_passes_now']}  "
-          f"(False today = the >0.99 clone false-positive Phase 1 should fix)")
+    print(f"  syndicated_fp_passes  = {out['syndicated_fp_passes']}")
+
+
+if __name__ == "__main__":
+    _print_mode("legacy gate (CLONE_DIFFERENTIAL_ENABLED=false)", run_cheat_probe(differential=False))
+    print()
+    _print_mode("Phase 1 gate (CLONE_DIFFERENTIAL_ENABLED=true)", run_cheat_probe(differential=True))
