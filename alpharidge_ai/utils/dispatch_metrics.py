@@ -22,6 +22,7 @@ class AdaptiveDispatchMetrics:
     def __init__(self):
         self._counts: Dict[str, int] = {}
         self._scored: Set[str] = set()
+        self._timed_out: Set[str] = set()
         self._ack_latencies: List[float] = []
 
     def incr(self, key: str, n: int = 1) -> None:
@@ -31,6 +32,14 @@ class AdaptiveDispatchMetrics:
         if hotkey:
             self._scored.add(hotkey)
 
+    def mark_timeout(self, hotkey: str) -> None:
+        """Distinct miners with >=1 lease timeout this cycle. `timeout` counts
+        events (one per miner per reclaim cycle, summed); this counts the unique
+        set — the depth tripwire is whether that set BROADENS past the existing
+        small cluster (~10) as windows open, which the event count alone hides."""
+        if hotkey:
+            self._timed_out.add(hotkey)
+
     def record_ack(self, latency_s) -> None:
         """Record a successful send-ack round-trip (dendrite.process_time, seconds)."""
         if latency_s is not None and len(self._ack_latencies) < _MAX_ACK_SAMPLES:
@@ -39,6 +48,7 @@ class AdaptiveDispatchMetrics:
     def reset(self) -> None:
         self._counts = {}
         self._scored = set()
+        self._timed_out = set()
         self._ack_latencies = []
 
     @staticmethod
@@ -82,6 +92,7 @@ class AdaptiveDispatchMetrics:
             f"invalid={c.get('invalid', 0)}",
             f"incomplete={c.get('incomplete', 0)}",
             f"timeout={c.get('timeout', 0)}",
+            f"timeout_miners={len(self._timed_out)}",
             f"completion_pct={self._pct(valid, dispatched):.1f}",
             f"ackfail_pct={self._pct(c.get('ack_fail', 0), dispatched):.1f}",
             f"timeout_pct={self._pct(c.get('timeout', 0), dispatched):.1f}",

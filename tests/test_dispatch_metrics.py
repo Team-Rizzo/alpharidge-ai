@@ -25,10 +25,15 @@ def test_counts_and_rates():
         m.mark_scored(hk)
 
     m.incr("depth_dispatched", 4)
+    for hk in ("a", "a", "d"):     # 'a' seen twice -> 2 distinct timed-out miners
+        m.mark_timeout(hk)
+    m.mark_timeout("")             # ignored
 
     d = _parse(m.format_line(window_values=[1.0, 2.0, 3.0], live=5, on_cooldown=1))
     assert d["dispatched"] == "10"
     assert d["depth_dispatched"] == "4"
+    assert d["timeout"] == "2"             # event count
+    assert d["timeout_miners"] == "2"      # distinct set (a, d)
     assert d["distinct_scored"] == "3"
     assert d["ack_fail"] == "2"
     assert d["completion_pct"] == "60.0"     # 6/10

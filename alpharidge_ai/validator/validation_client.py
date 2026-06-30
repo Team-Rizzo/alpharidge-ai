@@ -260,6 +260,7 @@ class ValidationClient:
                         if adaptive_dispatch:
                             for hk in timed_out_hotkeys:
                                 self._validator._adaptive_metrics.incr("timeout")
+                                self._validator._adaptive_metrics.mark_timeout(hk)
                                 escalate = self._validator._article_cooldown.record_timeout(hk)
                                 if penalty_split and escalate:
                                     bt.logging.info(f"[ValidationClient.run] Chronic timeout escalation for {hk[:12]}.. — applying integrity penalty")
