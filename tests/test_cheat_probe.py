@@ -20,7 +20,8 @@ from alpharidge_ai.models.article_intelligence import (
     ArticleContentType, ImpactPotential, TechnicalQuality, Sentiment,
     SentimentDirection, FactualConfidence, MarketSession, EventType,
 )
-from alpharidge_ai.analyzer.scoring import validate_miner_article_intelligence_batch
+from alpharidge_ai.analyzer.scoring import (
+    validate_miner_article_intelligence_batch, classify_article_batch_failure)
 from alpharidge_ai.utils.api_models import NewsArticleForScoring, NewsArticleAnalysisBase
 
 
@@ -204,6 +205,19 @@ def scenario_syndicated_fp_PHASE1():
     return refs, batch, True  # target outcome (Phase 1); will be False on current code
 
 
+def scenario_unanalyzed():
+    """One article ships no analysis_data — the miner hasn't finished analyzing the burst
+    we dispatched. The batch must NOT validate, and the failure must classify as CAPACITY
+    (so the validator backs off the window but applies no integrity penalty)."""
+    refs = _base_refs()
+    batch = [make_article(refs[i]) for i in range(4)]
+    batch[1] = NewsArticleForScoring(
+        id=1, url=refs[1].url, title=refs[1].title, source="Example Wire",
+        published=refs[1].published_at, content="body " * 50,
+        analysis=NewsArticleAnalysisBase(analysis_data={}))
+    return refs, batch, False
+
+
 CHEATS = ["lowEffort", "recycled", "cloned"]
 HONEST = ["honest", "boundary_market_session", "honest_syndicated"]
 
@@ -288,6 +302,50 @@ def test_differential_fixes_syndicated_fp():
     out = run_cheat_probe(differential=True)
     assert out["syndicated_fp_passes"] is True, out["results"]
     assert out["honest_accept_rate"] == 1.0, out["results"]
+
+
+# ---- capacity vs integrity split (missing-analysis penalty fix) -----------
+
+def _run_details(builder):
+    refs, batch, expected = builder()
+    analyzer = StubAnalyzer(refs)
+    batch_valid, details = validate_miner_article_intelligence_batch(
+        batch, analyzer, sample_size=len(batch), seed=0)
+    return bool(batch_valid), details, expected
+
+
+def test_unanalyzed_classifies_as_capacity():
+    """A batch with an un-analyzed article fails to validate (no credit) but is CAPACITY,
+    so the validator will back off without an integrity penalty."""
+    valid, details, _ = _run_details(scenario_unanalyzed)
+    assert valid is False
+    assert classify_article_batch_failure(details["discrepancies"]) == "capacity", details["discrepancies"]
+
+
+def test_wrong_and_cloned_stay_integrity():
+    """Cheats must still classify as integrity — the fix must not let them dodge penalties."""
+    for builder in (scenario_recycled, scenario_lowEffort, scenario_cloned):
+        valid, details, _ = _run_details(builder)
+        assert valid is False, builder.__name__
+        assert classify_article_batch_failure(details["discrepancies"]) == "integrity", \
+            (builder.__name__, details["discrepancies"])
+
+
+def test_classify_buckets():
+    """Unit-test the classifier directly over every reason, incl. mixed batches."""
+    f = classify_article_batch_failure
+    assert f([{"reason": "no_v2_analysis_data"}]) == "capacity"
+    assert f([{"reason": "missing_analysis"}]) == "capacity"
+    assert f([{"reason": "missing_miner_classification"}]) == "capacity"
+    assert f([{"reason": "miner_needs_update"}]) == "capacity"
+    assert f([{"reason": "invalid_analysis_data: boom"}]) == "capacity"
+    assert f([{"reason": "validator_analysis_failed"}]) == "validator_side"
+    assert f([{"reason": "validation_failed"}]) == "integrity"
+    assert f([{"reason": "cloned_embeddings"}]) == "integrity"
+    # ANY integrity reason dominates a mixed batch (a real cheat isn't excused).
+    assert f([{"reason": "no_v2_analysis_data"}, {"reason": "cloned_embeddings"}]) == "integrity"
+    # capacity + validator-side (no integrity) -> capacity.
+    assert f([{"reason": "no_v2_analysis_data"}, {"reason": "validator_analysis_failed"}]) == "capacity"
 
 
 def _print_mode(label, out):

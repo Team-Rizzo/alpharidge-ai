@@ -44,7 +44,7 @@ from alpharidge_ai.validator.reward_broadcast_store import RewardBroadcastStore
 from alpharidge_ai.validator.penalty_broadcast_store import PenaltyBroadcastStore
 from alpharidge_ai.protocol import ValidatorRewards
 from alpharidge_ai.protocol import ValidatorPenalties
-from alpharidge_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch
+from alpharidge_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch, classify_article_batch_failure
 from alpharidge_ai.analyzer import setup_telegram_analyzer
 from alpharidge_ai.utils.cooldown import MinerCooldownTracker
 from alpharidge_ai.validator.verdict_payload import build_verdict_fields, collect_verdict_meta  # T5: verdict payload
@@ -768,16 +768,37 @@ class Validator(BaseValidatorNeuron):
                     bt.logging.warning(f"[VALIDATION] Article rejection for {miner_hotkey}: reason={reason}, preview={preview[:100]}")
 
             current_epoch = self._miner_reward._get_current_epoch()
-            # V6/V2: see tweet path — drop the leaking invalid _verdict_meta write and
-            # record decoupled display-only attribution instead.
-            self._buffer_penalty_detail(
-                self._penalty_rows_from_discrepancies(discrepancies, miner_hotkey, current_epoch, "article"))
-            self._miner_penalty.add_penalty(miner_hotkey, 1)
-            # Adaptive: a real validation failure also shrinks the window (less future
-            # work) on top of the integrity penalty, which stays exactly as-is.
-            if adaptive:
-                self._article_cooldown.record_invalid(miner_hotkey)
-                self._adaptive_metrics.incr("invalid")
+            # Missing/incomplete-analysis is a CAPACITY signal (the miner hasn't caught up
+            # with the burst we dispatched), not cheating — split it out like a timeout
+            # rather than scoring it as an integrity failure. Gated separately so it can
+            # be piloted / rolled back on its own; off = legacy "penalize everything".
+            missing_split = adaptive and getattr(config, "ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED", False)
+            failure_class = classify_article_batch_failure(discrepancies)
+
+            if missing_split and failure_class != "integrity":
+                if failure_class == "validator_side":
+                    # Our own analyzer failed — the miner did nothing wrong and isn't even
+                    # overloaded: no penalty, no window change, just retry.
+                    bt.logging.info(
+                        f"[VALIDATION] validator-side analysis failure for {miner_hotkey} — no penalty, retrying")
+                else:
+                    # Capacity: back off the dispatch window (so we stop dumping work it
+                    # can't drain), but no integrity penalty / no emission-gate hit.
+                    bt.logging.info(
+                        f"[VALIDATION] incomplete analysis from {miner_hotkey} (capacity, not integrity) "
+                        f"— backing off window, no penalty")
+                    self._article_cooldown.record_invalid(miner_hotkey)
+                    self._adaptive_metrics.incr("incomplete")
+            else:
+                # Genuine integrity failure (or the split is disabled) — unchanged:
+                # display-only attribution + integrity penalty + window shrink.
+                self._buffer_penalty_detail(
+                    self._penalty_rows_from_discrepancies(discrepancies, miner_hotkey, current_epoch, "article"))
+                self._miner_penalty.add_penalty(miner_hotkey, 1)
+                if adaptive:
+                    self._article_cooldown.record_invalid(miner_hotkey)
+                    self._adaptive_metrics.incr("invalid")
+
             for article in article_batch:
                 try:
                     self._article_store.reset_to_unprocessed(article.id)

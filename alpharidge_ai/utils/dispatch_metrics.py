@@ -70,6 +70,7 @@ class AdaptiveDispatchMetrics:
             f"ack_fail={c.get('ack_fail', 0)}",
             f"valid={valid}",
             f"invalid={c.get('invalid', 0)}",
+            f"incomplete={c.get('incomplete', 0)}",
             f"timeout={c.get('timeout', 0)}",
             f"completion_pct={self._pct(valid, dispatched):.1f}",
             f"ackfail_pct={self._pct(c.get('ack_fail', 0), dispatched):.1f}",

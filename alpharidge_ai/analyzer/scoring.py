@@ -1398,6 +1398,42 @@ def _validator_title_embedding(analyzer, article):
         return None
 
 
+# Failure classes for an article batch. Capacity = the miner hasn't finished the work
+# we dispatched (a burst out-pacing its analyzer) — not cheating. Validator-side = OUR
+# analyzer/classifier failed. Everything else is a genuine integrity failure.
+_CAPACITY_REASONS = {
+    "missing_analysis",               # V2: sampled article carried no analysis object
+    "no_v2_analysis_data",            # V2: sampled article carried no analysis_data dict
+    "missing_miner_classification",   # V1: nothing submitted yet
+    "miner_needs_update",             # V1: stale miner build (version, not cheating)
+}
+_VALIDATOR_SIDE_REASONS = {
+    "validator_analysis_failed",      # V2: our analyzer.analyze returned None
+    "validator_classification_failed",  # V1: our classifier failed
+}
+
+
+def classify_article_batch_failure(discrepancies) -> str:
+    """Bucket a failed batch's discrepancies into 'integrity' | 'capacity' |
+    'validator_side'. ANY genuine wrong/cloned discrepancy makes the whole batch
+    integrity (a real cheat is never excused by an un-analyzed sibling article).
+    'invalid_analysis_data: <exc>' is prefix-matched to capacity (incomplete/unparseable
+    write — earns no credit, so there's no exploit in not penalizing it)."""
+    reasons = [d.get("reason", "") for d in (discrepancies or [])]
+
+    def _capacity(r):
+        return r in _CAPACITY_REASONS or r.startswith("invalid_analysis_data")
+
+    def _validator_side(r):
+        return r in _VALIDATOR_SIDE_REASONS
+
+    if any(not _capacity(r) and not _validator_side(r) for r in reasons):
+        return "integrity"
+    if reasons and all(_validator_side(r) for r in reasons):
+        return "validator_side"
+    return "capacity"
+
+
 def validate_miner_article_intelligence_batch(
     miner_batch: List[NewsArticleForScoring],
     analyzer,
