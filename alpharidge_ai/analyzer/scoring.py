@@ -1351,6 +1351,53 @@ def validate_article_intelligence(
     return is_valid, composite, details
 
 
+def _cfg_get(name: str, default):
+    """Read a remote-config-served value live (falls back to the module default)."""
+    try:
+        from alpharidge_ai import config as _cfg
+        return getattr(_cfg, name, default)
+    except Exception:
+        return default
+
+
+def _same_source_article(a, b) -> bool:
+    """True if two batch items are the same underlying article (duplicate input,
+    not a clone). Matches on URL, falling back to the analysis content_hash."""
+    ua, ub = getattr(a, "url", None), getattr(b, "url", None)
+    if ua and ub and ua == ub:
+        return True
+
+    def _content_hash(x):
+        ad = getattr(getattr(x, "analysis", None), "analysis_data", None)
+        if isinstance(ad, dict):
+            fp = ad.get("event_fingerprint")
+            if isinstance(fp, dict):
+                return fp.get("content_hash")
+        return None
+
+    ha, hb = _content_hash(a), _content_hash(b)
+    return bool(ha and hb and ha == hb)
+
+
+def _validator_title_embedding(analyzer, article):
+    """The validator's own normalized title embedding for a batch item, via the local
+    embedder (cheap, no LLM). Returns None if unavailable — caller then falls back to
+    the conservative absolute clone rule for that pair."""
+    try:
+        title = getattr(article, "title", None)
+        engine = getattr(analyzer, "ner_engine", None)
+        if not title or engine is None or not hasattr(engine, "encode_text"):
+            return None
+        emb = engine.encode_text(title)
+        if not emb:
+            return None
+        v = np.array(emb, dtype=np.float32)
+        norm = float(np.linalg.norm(v))
+        return v / norm if norm > 0 else None
+    except Exception:
+        return None
+
+
 def validate_miner_article_intelligence_batch(
     miner_batch: List[NewsArticleForScoring],
     analyzer,
@@ -1414,30 +1461,56 @@ def validate_miner_article_intelligence_batch(
                 "composite_score": composite, "details": details,
             })
 
-    # Cross-article adversarial detection: check for cloned embeddings
+    # Cross-article adversarial detection: cloned embeddings.
+    # Legacy rule (default): flag any within-batch title-embedding pair with cosine
+    # above the threshold. When CLONE_DIFFERENTIAL_ENABLED is served on, a candidate
+    # pair is only a clone if the miner's similarity exceeds the validator's own
+    # re-embedding of the same titles by >= margin — honest syndicated clusters (which
+    # the validator also sees as similar) no longer false-reject.
     EMBEDDING_DIM = 384
-    miner_embeddings = []
-    for article in miner_batch:
+    clone_threshold = float(_cfg_get("CLONE_COSINE_THRESHOLD", 0.99))
+    clone_differential = bool(_cfg_get("CLONE_DIFFERENTIAL_ENABLED", False))
+    clone_margin = float(_cfg_get("CLONE_DIVERGENCE_MARGIN", 0.05))
+
+    indexed = []  # (batch_index, article, normalized_miner_embedding)
+    for idx, article in enumerate(miner_batch):
         ad = getattr(getattr(article, "analysis", None), "analysis_data", None)
         if ad and isinstance(ad, dict):
             te = ad.get("title_embedding")
             if te and isinstance(te, list) and len(te) == EMBEDDING_DIM:
-                miner_embeddings.append(np.array(te, dtype=np.float32))
+                indexed.append((idx, article, np.array(te, dtype=np.float32)))
 
-    if len(miner_embeddings) >= 3:
-        emb_matrix = np.stack(miner_embeddings)
-        pairwise = emb_matrix @ emb_matrix.T
-        n = len(pairwise)
-        for i in range(n):
-            for j in range(i + 1, n):
-                if pairwise[i][j] > 0.99:
-                    bt.logging.warning(f"[V2_VALIDATE] Adversarial: articles {i} and {j} have "
-                                       f"near-identical embeddings (cosine={pairwise[i][j]:.4f})")
-                    discrepancies.append({
-                        "reason": "cloned_embeddings",
-                        "articles": [i, j],
-                        "cosine": float(pairwise[i][j]),
-                    })
+    if len(indexed) >= 3:
+        for a in range(len(indexed)):
+            for b in range(a + 1, len(indexed)):
+                miner_cos = float(indexed[a][2] @ indexed[b][2])
+                if miner_cos <= clone_threshold:
+                    continue
+                if clone_differential:
+                    ai, bi = indexed[a][0], indexed[b][0]
+                    # A duplicate of the SAME underlying article isn't cloning.
+                    if _same_source_article(indexed[a][1], indexed[b][1]):
+                        bt.logging.info(f"[V2_VALIDATE] clone candidate suppressed: articles {ai},{bi} "
+                                        f"miner_cos={miner_cos:.4f} (same source article)")
+                        continue
+                    # Corroborate against the validator's own embeddings of the titles.
+                    v_a = _validator_title_embedding(analyzer, indexed[a][1])
+                    v_b = _validator_title_embedding(analyzer, indexed[b][1])
+                    if v_a is not None and v_b is not None:
+                        validator_cos = float(np.dot(v_a, v_b))
+                        if (miner_cos - validator_cos) < clone_margin:
+                            # validator agrees they're similar -> honest syndicate, not a clone
+                            bt.logging.info(f"[V2_VALIDATE] clone candidate suppressed: articles {ai},{bi} "
+                                            f"miner_cos={miner_cos:.4f} validator_cos={validator_cos:.4f} "
+                                            f"delta={miner_cos - validator_cos:.4f} (validator corroborates)")
+                            continue
+                bt.logging.warning(f"[V2_VALIDATE] Adversarial: articles {indexed[a][0]} and "
+                                   f"{indexed[b][0]} have cloned embeddings (miner_cos={miner_cos:.4f})")
+                discrepancies.append({
+                    "reason": "cloned_embeddings",
+                    "articles": [indexed[a][0], indexed[b][0]],
+                    "cosine": miner_cos,
+                })
 
     batch_valid = matches == sample_size and len(discrepancies) == 0
     avg_composite = total_composite / max(matches, 1)
