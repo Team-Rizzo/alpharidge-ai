@@ -976,7 +976,11 @@ class ArticleIntelligenceAnalyzer:
         if not published:
             return MarketSession.REGULAR_HOURS
         try:
-            dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
+            # Normalize to UTC so weekday()/hour are representation-independent. The hour
+            # buckets below are UTC-based (US market open 09:30 ET == 13:30 UTC), so a
+            # tz-aware input in another offset would otherwise misclassify the session and
+            # flip WEEKEND/AFTER_HOURS across the Fri/Sat boundary for the same instant.
+            dt = datetime.fromisoformat(published.replace("Z", "+00:00")).astimezone(timezone.utc)
             if dt.weekday() >= 5:
                 return MarketSession.WEEKEND
             h = dt.hour
