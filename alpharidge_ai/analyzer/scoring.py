@@ -1487,8 +1487,11 @@ def validate_miner_article_intelligence_batch(
                 if miner_cos <= clone_threshold:
                     continue
                 if clone_differential:
+                    ai, bi = indexed[a][0], indexed[b][0]
                     # A duplicate of the SAME underlying article isn't cloning.
                     if _same_source_article(indexed[a][1], indexed[b][1]):
+                        bt.logging.info(f"[V2_VALIDATE] clone candidate suppressed: articles {ai},{bi} "
+                                        f"miner_cos={miner_cos:.4f} (same source article)")
                         continue
                     # Corroborate against the validator's own embeddings of the titles.
                     v_a = _validator_title_embedding(analyzer, indexed[a][1])
@@ -1496,7 +1499,11 @@ def validate_miner_article_intelligence_batch(
                     if v_a is not None and v_b is not None:
                         validator_cos = float(np.dot(v_a, v_b))
                         if (miner_cos - validator_cos) < clone_margin:
-                            continue  # validator agrees they're similar -> honest syndicate
+                            # validator agrees they're similar -> honest syndicate, not a clone
+                            bt.logging.info(f"[V2_VALIDATE] clone candidate suppressed: articles {ai},{bi} "
+                                            f"miner_cos={miner_cos:.4f} validator_cos={validator_cos:.4f} "
+                                            f"delta={miner_cos - validator_cos:.4f} (validator corroborates)")
+                            continue
                 bt.logging.warning(f"[V2_VALIDATE] Adversarial: articles {indexed[a][0]} and "
                                    f"{indexed[b][0]} have cloned embeddings (miner_cos={miner_cos:.4f})")
                 discrepancies.append({
