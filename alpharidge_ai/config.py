@@ -217,6 +217,14 @@ LIVENESS_SWEEP_INTERVAL_S = int(os.getenv("LIVENESS_SWEEP_INTERVAL_S", "60"))
 # with the legacy per-timeout penalty/broadcast intact (window still shrinks either way).
 ADAPTIVE_PENALTY_SPLIT_ENABLED = _as_bool(os.getenv("ADAPTIVE_PENALTY_SPLIT_ENABLED", "true"))
 
+# Missing/incomplete-analysis penalty split. A batch returned without finished
+# analysis (the miner hasn't caught up with a dispatched burst) is a CAPACITY signal,
+# not cheating — like a timeout, not a wrong answer. With this on, such failures back
+# off the dispatch window (no integrity penalty, no emission-gate hit); wrong/cloned
+# analysis still penalizes. Default false = legacy (penalize everything) so the deploy
+# is a no-op until piloted. Gated separately from the timeout split for isolated rollback.
+ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED = _as_bool(os.getenv("ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED", "false"))
+
 # Validation quality floor (composite >= TIER3_THRESHOLD). Served centrally so every
 # validator uses the same threshold — divergent thresholds would score the same article
 # differently. Not gated by the dispatch flag (separate scoring track). Default 0.70.
@@ -253,6 +261,7 @@ _REMOTE_CONFIG_KEYS = {
     "LIVENESS_TTL_S":             (int,   "LIVENESS_TTL_S"),
     "LIVENESS_SWEEP_INTERVAL_S":  (int,   "LIVENESS_SWEEP_INTERVAL_S"),
     "ADAPTIVE_PENALTY_SPLIT_ENABLED": (_as_bool, "ADAPTIVE_PENALTY_SPLIT_ENABLED"),
+    "ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED": (_as_bool, "ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED"),
     # Scoring track (not gated by the dispatch flag): served so all validators match.
     "TIER3_THRESHOLD":            (float, "TIER3_THRESHOLD"),
     "CLONE_COSINE_THRESHOLD":     (float, "CLONE_COSINE_THRESHOLD"),
