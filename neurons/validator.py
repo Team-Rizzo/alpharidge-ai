@@ -1513,8 +1513,16 @@ class Validator(BaseValidatorNeuron):
             try:
                 _, on_cd = self._article_cooldown.stats()
                 _, live = self._liveness.stats()
+                # Direct validation-backlog gauge: jobs queued on the executor but not
+                # yet picked up by a worker. This is the real-time saturation signal —
+                # completion_pct is a lagging ratio. Grows when pushbacks outrun the
+                # VALIDATION_MAX_WORKERS ceiling (the depth binding constraint). -1 = unreadable.
+                try:
+                    val_backlog = self._validation_executor._work_queue.qsize()
+                except Exception:
+                    val_backlog = -1
                 bt.logging.info(self._adaptive_metrics.format_line(
-                    self._article_cooldown.window_values(), live, on_cd))
+                    self._article_cooldown.window_values(), live, on_cd, val_backlog=val_backlog))
                 self._adaptive_metrics.reset()
             except Exception as e:
                 bt.logging.warning(f"[ADAPTIVE_METRICS] failed to emit: {e}")

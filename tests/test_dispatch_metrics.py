@@ -34,6 +34,7 @@ def test_counts_and_rates():
     assert d["depth_dispatched"] == "4"
     assert d["timeout"] == "2"             # event count
     assert d["timeout_miners"] == "2"      # distinct set (a, d)
+    assert d["val_backlog"] == "0"         # default when not passed
     assert d["distinct_scored"] == "3"
     assert d["ack_fail"] == "2"
     assert d["completion_pct"] == "60.0"     # 6/10
@@ -66,6 +67,12 @@ def test_ack_empty_safe():
     assert d["ack_n"] == "0"
     assert d["ack_p50"] == "0.00"
     assert d["ack_p95"] == "0.00"
+
+
+def test_val_backlog_passthrough():
+    m = AdaptiveDispatchMetrics()
+    d = _parse(m.format_line(window_values=[], live=0, on_cooldown=0, val_backlog=37))
+    assert d["val_backlog"] == "37"
 
 
 def test_empty_is_safe_no_div_zero():

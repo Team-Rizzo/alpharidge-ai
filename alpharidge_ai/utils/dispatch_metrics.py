@@ -62,7 +62,8 @@ class AdaptiveDispatchMetrics:
         i = min(len(sorted_xs) - 1, int(q * len(sorted_xs)))
         return sorted_xs[i]
 
-    def format_line(self, window_values: List[float], live: int, on_cooldown: int) -> str:
+    def format_line(self, window_values: List[float], live: int, on_cooldown: int,
+                    val_backlog: int = 0) -> str:
         c = self._counts
         dispatched = c.get("dispatched", 0)
         valid = c.get("valid", 0)
@@ -94,6 +95,7 @@ class AdaptiveDispatchMetrics:
             f"timeout={c.get('timeout', 0)}",
             f"timeout_miners={len(self._timed_out)}",
             f"completion_pct={self._pct(valid, dispatched):.1f}",
+            f"val_backlog={val_backlog}",
             f"ackfail_pct={self._pct(c.get('ack_fail', 0), dispatched):.1f}",
             f"timeout_pct={self._pct(c.get('timeout', 0), dispatched):.1f}",
             f"window_min={wmin:.2f}",
