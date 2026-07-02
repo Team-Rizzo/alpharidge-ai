@@ -75,6 +75,19 @@ def test_val_backlog_passthrough():
     assert d["val_backlog"] == "37"
 
 
+def test_val_backlog_max_tracks_peak_and_resets():
+    m = AdaptiveDispatchMetrics()
+    for n in (4, 19, 7, 12):          # peak is 19, not the last sample
+        m.record_backlog_sample(n)
+    m.record_backlog_sample(None)     # ignored, no crash
+    d = _parse(m.format_line(window_values=[], live=0, on_cooldown=0, val_backlog=7))
+    assert d["val_backlog"] == "7"        # emit-time sample
+    assert d["val_backlog_max"] == "19"   # cycle peak
+    m.reset()
+    d = _parse(m.format_line(window_values=[], live=0, on_cooldown=0))
+    assert d["val_backlog_max"] == "0"
+
+
 def test_empty_is_safe_no_div_zero():
     m = AdaptiveDispatchMetrics()
     d = _parse(m.format_line(window_values=[], live=0, on_cooldown=0))

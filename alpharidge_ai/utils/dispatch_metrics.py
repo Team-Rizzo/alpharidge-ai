@@ -24,6 +24,7 @@ class AdaptiveDispatchMetrics:
         self._scored: Set[str] = set()
         self._timed_out: Set[str] = set()
         self._ack_latencies: List[float] = []
+        self._backlog_max: int = 0
 
     def incr(self, key: str, n: int = 1) -> None:
         self._counts[key] = self._counts.get(key, 0) + n
@@ -45,11 +46,23 @@ class AdaptiveDispatchMetrics:
         if latency_s is not None and len(self._ack_latencies) < _MAX_ACK_SAMPLES:
             self._ack_latencies.append(float(latency_s))
 
+    def record_backlog_sample(self, n) -> None:
+        """Sample the validation queue depth (call on each pushback — frequent, and
+        exactly when work is about to enqueue). Keeps the per-cycle peak so a single
+        emit-time sample landing in a trough can't hide a busy-cycle backlog."""
+        try:
+            n = int(n)
+        except (TypeError, ValueError):
+            return
+        if n > self._backlog_max:
+            self._backlog_max = n
+
     def reset(self) -> None:
         self._counts = {}
         self._scored = set()
         self._timed_out = set()
         self._ack_latencies = []
+        self._backlog_max = 0
 
     @staticmethod
     def _pct(num: int, den: int) -> float:
@@ -96,6 +109,7 @@ class AdaptiveDispatchMetrics:
             f"timeout_miners={len(self._timed_out)}",
             f"completion_pct={self._pct(valid, dispatched):.1f}",
             f"val_backlog={val_backlog}",
+            f"val_backlog_max={self._backlog_max}",
             f"ackfail_pct={self._pct(c.get('ack_fail', 0), dispatched):.1f}",
             f"timeout_pct={self._pct(c.get('timeout', 0), dispatched):.1f}",
             f"window_min={wmin:.2f}",

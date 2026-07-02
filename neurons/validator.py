@@ -314,6 +314,14 @@ class Validator(BaseValidatorNeuron):
         # path. In-memory only; never gates anything until the allocator lands.
         self._liveness.mark_seen(miner_hotkey)
 
+        # Sample validation-queue depth here (a pushback is about to enqueue a
+        # validation job) so the per-cycle peak backlog is captured, not just the
+        # instantaneous depth at metrics-emit time.
+        try:
+            self._adaptive_metrics.record_backlog_sample(self._validation_executor._work_queue.qsize())
+        except Exception:
+            pass
+
         bt.logging.info(f"[VALIDATION] Received ArticleBatch with {len(synapse.article_batch)} article(s) from miner {miner_hotkey[:12]}..")
 
         sent_batch: List[NewsArticleForScoring] = []
