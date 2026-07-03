@@ -53,6 +53,15 @@ except ImportError:
 MODEL = os.getenv("MODEL", "null")
 API_KEY = os.getenv("API_KEY", "null")
 LLM_BASE = os.getenv("LLM_BASE", "null")
+# OpenRouter provider routing for the analyzer's LLM calls. Empty (default) = no
+# routing = current behavior (OpenRouter load-balances across all providers of the
+# model). Set to "throughput" (or "latency"/"price") to prefer faster providers so
+# validation re-analysis stops queueing behind slow ones under concurrency (24s->37s
+# @32 workers). allow_fallbacks stays TRUE so the provider distribution stays broad
+# (not pinned to one) — keeps the validator's outputs from systematically diverging
+# from the miner population's provider spread. Consensus-critical: A/B on the
+# validator and confirm scoring accept-rate doesn't shift before fleet-wide.
+OPENROUTER_PROVIDER_SORT = os.getenv("OPENROUTER_PROVIDER_SORT", "")
 
 # X/Twitter API Configuration
 X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN", "null")

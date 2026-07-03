@@ -393,6 +393,12 @@ class ArticleIntelligenceAnalyzer:
 
         self.client = OpenAI(base_url=self.llm_base, api_key=self.api_key)
 
+        # OpenRouter provider routing (empty = current load-balance behavior). When set
+        # (e.g. "throughput"), prefer faster providers so validation re-analysis stops
+        # queueing behind slow ones under concurrency, with fallbacks on to keep the
+        # distribution broad. Consensus-critical — off by default; A/B on the validator.
+        self._provider_sort = (getattr(config, "OPENROUTER_PROVIDER_SORT", "") if config else "") or ""
+
         cache_ttl = float(getattr(config, "LLM_CACHE_TTL", 300)) if config else 300.0
         cache_size = int(getattr(config, "LLM_CACHE_MAX_SIZE", 1024)) if config else 1024
         self._cache = LLMCache(max_size=cache_size, ttl_seconds=cache_ttl)
@@ -671,6 +677,12 @@ class ArticleIntelligenceAnalyzer:
 
     def _llm_call(self, prompt: str, tool: dict, tool_name: str) -> dict:
         try:
+            # Prefer faster OpenRouter providers when configured; empty -> no extra_body,
+            # so the request is byte-identical to the current load-balanced behavior.
+            extra = (
+                {"extra_body": {"provider": {"sort": self._provider_sort, "allow_fallbacks": True}}}
+                if self._provider_sort else {}
+            )
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
@@ -678,6 +690,7 @@ class ArticleIntelligenceAnalyzer:
                 tool_choice={"type": "function", "function": {"name": tool_name}},
                 temperature=0,
                 max_tokens=4000,
+                **extra,
             )
             tc = response.choices[0].message.tool_calls
             if not tc:
