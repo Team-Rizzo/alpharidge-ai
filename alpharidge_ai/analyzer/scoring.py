@@ -1439,10 +1439,13 @@ def validate_miner_article_intelligence_batch(
     analyzer,
     sample_size: int = 1,
     seed: int = None,
+    graded_scorer=None,
 ) -> Tuple[bool, Dict]:
     """Validate a miner's article batch using V2 4-tier validation.
 
-    Falls back to V1 if analysis_data is missing.
+    Falls back to V1 if analysis_data is missing. When `graded_scorer` is provided, a
+    continuous per-sampled-article observation is also collected (result["observations"]);
+    this is independent of the pass/fail result and has no effect on it.
     """
     if seed is not None:
         random.seed(seed)
@@ -1455,6 +1458,7 @@ def validate_miner_article_intelligence_batch(
     matches = 0
     total_composite = 0.0
     discrepancies = []
+    observations = []  # (article_id, graded, weight) when graded_scorer is set
 
     for i, article in enumerate(sampled):
         miner_analysis = article.analysis
@@ -1496,6 +1500,13 @@ def validate_miner_article_intelligence_batch(
                 "article_index": i, "reason": "validation_failed",
                 "composite_score": composite, "details": details,
             })
+
+        if graded_scorer is not None:
+            try:
+                g, w = graded_scorer.score(miner_intel, validator_intel, article)
+                observations.append((int(article.id), float(g), float(w)))
+            except Exception as e:
+                bt.logging.warning(f"[REPUTATION] graded scoring failed: {e}")
 
     # Cross-article adversarial detection: cloned embeddings.
     # Legacy rule (default): flag any within-batch title-embedding pair with cosine
@@ -1554,6 +1565,7 @@ def validate_miner_article_intelligence_batch(
     result = {
         "is_valid": batch_valid, "matches": matches, "total_sampled": sample_size,
         "avg_composite_score": round(avg_composite, 4), "discrepancies": discrepancies,
+        "observations": observations,
     }
 
     if batch_valid:

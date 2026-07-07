@@ -20,7 +20,8 @@ covered without sending it work. ``provisional`` mirrors what those acquisitions
 will be so we don't assign a miner more than ``floor(window)`` within one tick.
 """
 
-from typing import Dict, List, Sequence, Tuple
+import random
+from typing import Dict, List, Optional, Sequence, Tuple
 
 
 def _slot_limit(tracker, hotkey: str) -> int:
@@ -33,7 +34,15 @@ def coverage_depth_select(
     tracker,
     epoch: int,
     n_batches: int,
+    rng: Optional[random.Random] = None,
 ) -> List[Tuple[int, int]]:
+    # Serve in a randomized order so priority does not track UID: when a tick has
+    # fewer batches than uncovered targets the front of the list is served first,
+    # and window ties in the depth pass break by list order. Selection is a local,
+    # non-consensus choice, so a fresh shuffle each tick is safe.
+    order = list(live_uids)
+    (rng or random).shuffle(order)
+
     provisional: Dict[str, int] = {}
 
     def has_slot(uid: int) -> bool:
@@ -48,7 +57,7 @@ def coverage_depth_select(
     bi = 0
 
     # Coverage pass.
-    for uid in live_uids:
+    for uid in order:
         if bi >= n_batches:
             break
         hk = hotkeys[uid]
@@ -59,7 +68,7 @@ def coverage_depth_select(
 
     # Depth pass.
     if bi < n_batches:
-        depth_order = sorted(live_uids, key=lambda u: tracker.window(hotkeys[u]), reverse=True)
+        depth_order = sorted(order, key=lambda u: tracker.window(hotkeys[u]), reverse=True)
         while bi < n_batches:
             progressed = False
             for uid in depth_order:

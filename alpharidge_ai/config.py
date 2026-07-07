@@ -241,6 +241,18 @@ CLONE_COSINE_THRESHOLD     = float(os.getenv("CLONE_COSINE_THRESHOLD", "0.99"))
 CLONE_DIFFERENTIAL_ENABLED = _as_bool(os.getenv("CLONE_DIFFERENTIAL_ENABLED", "false"))
 CLONE_DIVERGENCE_MARGIN    = float(os.getenv("CLONE_DIVERGENCE_MARGIN", "0.05"))
 
+# Reputation-scoring track. Served so every validator matches (consensus-critical).
+# SCORING_ENABLED computes + observes only (no effect on weights); GATING_ENABLED lets
+# reputation drive emission. Both default off => deploy is a no-op until served on.
+REPUTATION_SCORING_ENABLED  = _as_bool(os.getenv("REPUTATION_SCORING_ENABLED", "false"))
+REPUTATION_GATING_ENABLED   = _as_bool(os.getenv("REPUTATION_GATING_ENABLED", "false"))
+REPUTATION_EMA_ALPHA        = float(os.getenv("REPUTATION_EMA_ALPHA", "0.03"))
+REPUTATION_PRIOR            = float(os.getenv("REPUTATION_PRIOR", "0.5"))
+EMISSION_MIDPOINT           = float(os.getenv("EMISSION_MIDPOINT", "0.59"))
+EMISSION_GAIN               = float(os.getenv("EMISSION_GAIN", "100.0"))
+VALIDATION_SAMPLE_SIZE      = int(os.getenv("VALIDATION_SAMPLE_SIZE", "1"))
+SAMPLING_SUBSTANTIVE_WEIGHT = float(os.getenv("SAMPLING_SUBSTANTIVE_WEIGHT", "2.0"))
+
 
 _REMOTE_CONFIG_KEYS = {
     "USD_PRICE_PER_POINT":    (float, "USD_PRICE_PER_POINT"),
@@ -267,6 +279,15 @@ _REMOTE_CONFIG_KEYS = {
     "CLONE_COSINE_THRESHOLD":     (float, "CLONE_COSINE_THRESHOLD"),
     "CLONE_DIFFERENTIAL_ENABLED": (_as_bool, "CLONE_DIFFERENTIAL_ENABLED"),
     "CLONE_DIVERGENCE_MARGIN":    (float, "CLONE_DIVERGENCE_MARGIN"),
+    # Reputation-scoring track (served so all validators match).
+    "REPUTATION_SCORING_ENABLED": (_as_bool, "REPUTATION_SCORING_ENABLED"),
+    "REPUTATION_GATING_ENABLED":  (_as_bool, "REPUTATION_GATING_ENABLED"),
+    "REPUTATION_EMA_ALPHA":       (float, "REPUTATION_EMA_ALPHA"),
+    "REPUTATION_PRIOR":           (float, "REPUTATION_PRIOR"),
+    "EMISSION_MIDPOINT":          (float, "EMISSION_MIDPOINT"),
+    "EMISSION_GAIN":              (float, "EMISSION_GAIN"),
+    "VALIDATION_SAMPLE_SIZE":     (int,   "VALIDATION_SAMPLE_SIZE"),
+    "SAMPLING_SUBSTANTIVE_WEIGHT":(float, "SAMPLING_SUBSTANTIVE_WEIGHT"),
 }
 
 REMOTE_CONFIG_REFRESH_SECONDS = int(os.getenv("REMOTE_CONFIG_REFRESH_SECONDS", "3600"))

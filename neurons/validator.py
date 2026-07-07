@@ -44,7 +44,9 @@ from alpharidge_ai.validator.reward_broadcast_store import RewardBroadcastStore
 from alpharidge_ai.validator.penalty_broadcast_store import PenaltyBroadcastStore
 from alpharidge_ai.protocol import ValidatorRewards
 from alpharidge_ai.protocol import ValidatorPenalties
+from alpharidge_ai.protocol import ValidatorReputationObs
 from alpharidge_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch, classify_article_batch_failure
+from alpharidge_ai.validator.reputation_store import ReputationStore
 from alpharidge_ai.analyzer import setup_telegram_analyzer
 from alpharidge_ai.utils.cooldown import MinerCooldownTracker
 from alpharidge_ai.validator.verdict_payload import build_verdict_fields, collect_verdict_meta  # T5: verdict payload
@@ -103,6 +105,10 @@ class Validator(BaseValidatorNeuron):
         # Rewards broadcast store: holds validator↔validator reward messages for delayed application.
         self._reward_broadcasts = RewardBroadcastStore()
         self._reward_broadcasts.load()
+
+        self._reputation_store = ReputationStore()
+        self._reputation_store.load()
+        self._graded_scorer = None  # lazy; built on first use when scoring is served on
         # Transient per-item verdict metadata (resource_id -> {miner_signature, nonce,
         # validator_verdict, epoch}); populated during validation, drained at submission.
         self._verdict_meta = {}
@@ -697,6 +703,24 @@ class Validator(BaseValidatorNeuron):
             collect_verdict_meta(message_batch, miner_signatures, nonces, "valid", current_epoch))
         return True
 
+    def _get_graded_scorer(self):
+        if self._graded_scorer is None:
+            from alpharidge_ai.validator.graded_scorer import GradedScorer
+            self._graded_scorer = GradedScorer()
+        return self._graded_scorer
+
+    def _record_observations(self, target_hotkey, observations):
+        if not observations:
+            return
+        try:
+            epoch = self._miner_reward._get_current_epoch()
+            self_hk = self.wallet.hotkey.ss58_address
+            for aid, g, w in observations:
+                self._reputation_store.record_local(
+                    epoch, self_hk, target_hotkey, int(aid), float(g), float(w))
+        except Exception as e:
+            bt.logging.warning(f"[REPUTATION] record failed: {e}")
+
     async def _handle_article_miner_batch_response(
         self,
         article_batch: List[NewsArticleForScoring],
@@ -733,11 +757,15 @@ class Validator(BaseValidatorNeuron):
             for a in article_batch if a.analysis
         )
         if has_v2 and self._article_intel_analyzer is not None:
+            sample_size = int(getattr(config, "VALIDATION_SAMPLE_SIZE", 1))
+            gscorer = self._get_graded_scorer() if config.REPUTATION_SCORING_ENABLED else None
             is_valid, validation_result = await loop.run_in_executor(
                 self._validation_executor,
                 validate_miner_article_intelligence_batch,
-                article_batch, self._article_intel_analyzer, 1,
+                article_batch, self._article_intel_analyzer, sample_size, None, gscorer,
             )
+            if gscorer is not None:
+                self._record_observations(miner_hotkey, (validation_result or {}).get("observations") or [])
         else:
             is_valid, validation_result = await loop.run_in_executor(
                 self._validation_executor,
@@ -1632,6 +1660,22 @@ class Validator(BaseValidatorNeuron):
                 )
         except Exception as e:
             bt.logging.debug(f"[PENALTY_BROADCAST] Failed to ingest penalties: {e}")
+        return synapse
+
+    async def forward_validator_reputation_obs(self, synapse: ValidatorReputationObs) -> ValidatorReputationObs:
+        """Receive graded observations from other validators and buffer for aggregation."""
+        if not getattr(config, "REPUTATION_SCORING_ENABLED", False):
+            return synapse
+        try:
+            sender = synapse.dendrite.hotkey
+            targets = {t: [tuple(o) for o in lst] for t, lst in (synapse.observations or {}).items()}
+            self._reputation_store.ingest(sender, int(synapse.epoch), targets)
+            self._reputation_store.save()
+            bt.logging.info(
+                f"[REPUTATION_BROADCAST] Ingested from {sender[:12]}.. "
+                f"epoch={synapse.epoch} targets={len(targets)}")
+        except Exception as e:
+            bt.logging.debug(f"[REPUTATION_BROADCAST] Failed to ingest: {e}")
         return synapse
 
 

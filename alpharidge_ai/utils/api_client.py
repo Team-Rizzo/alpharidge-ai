@@ -380,6 +380,11 @@ class AlpharidgeAPIClient:
             "reason": reason, "evidence": evidence,
         })
 
+    async def post_reputation_snapshot(self, epoch: int, snapshots: list) -> Dict[str, Any]:
+        """Push per-hotkey reputation rows for an epoch (display/monitoring only)."""
+        return await self._request("POST", "/reputation/snapshot",
+                                   json={"epoch": int(epoch), "snapshots": snapshots})
+
     # =========================================================================
     # Reward Methods
     # =========================================================================

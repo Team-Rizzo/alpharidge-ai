@@ -119,6 +119,27 @@ class ValidatorPenalties(bt.Synapse):
     sender_hotkey: str
     seq: int
 
+
+class ValidatorReputationObs(bt.Synapse):
+    """
+    Synapse for broadcasting per-target graded observations to other validators for a
+    single epoch. Both validators aggregate the union of observations, so all derive the
+    same reputation.
+
+    Fields:
+      - epoch: scoring epoch index (block//BLOCK_LENGTH)
+      - observations: { target_hotkey: [[article_id, graded, weight], ...] }
+      - sender_hotkey: validator hotkey broadcasting this data
+      - seq: per-sender sequence number (epoch by default)
+    """
+    required_hash_fields: ClassVar[tuple[str, ...]] = ("epoch", "observations", "sender_hotkey", "seq")
+
+    epoch: int
+    observations: Dict[str, List[List[float]]]
+    sender_hotkey: str
+    seq: int
+
+
 class ValidationResult(bt.Synapse):
     """
     Synapse for sending validation results from validator to miner.

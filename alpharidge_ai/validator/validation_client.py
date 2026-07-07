@@ -14,7 +14,9 @@ from alpharidge_ai.utils.burn import calculate_weights
 from alpharidge_ai.models.reward import Reward
 from alpharidge_ai.protocol import ValidatorRewards
 from alpharidge_ai.protocol import ValidatorPenalties
+from alpharidge_ai.protocol import ValidatorReputationObs
 from alpharidge_ai.protocol import Score
+from alpharidge_ai.validator import reputation
 from alpharidge_ai.utils.validators import get_validator_hotkeys
 from alpharidge_ai.validator import deep_verify
 
@@ -482,6 +484,20 @@ class ValidationClient:
                                     timeout=12.0,
                                     deserialize=True,
                                 )
+                            if getattr(config, "REPUTATION_SCORING_ENABLED", False):
+                                try:
+                                    self_hk = str(self._validator.wallet.hotkey.ss58_address)
+                                    exp = self._validator._reputation_store.export(int(publish_epoch), self_hk)
+                                    obs_payload = {t: [[float(a), float(g), float(w)] for (a, g, w) in lst]
+                                                   for t, lst in exp.items()}
+                                    if obs_payload:
+                                        repobs_syn = ValidatorReputationObs(
+                                            epoch=int(publish_epoch), observations=obs_payload,
+                                            sender_hotkey=self_hk, seq=int(publish_epoch))
+                                        await self._validator.dendrite.forward(
+                                            axons=axons, synapse=repobs_syn, timeout=12.0, deserialize=True)
+                                except Exception as e:
+                                    bt.logging.debug(f"[REPUTATION_BROADCAST] send failed: {e}")
                         else:
                             bt.logging.info(
                                 f"[BROADCAST] Skipping publish epoch={publish_epoch}: "
@@ -494,6 +510,31 @@ class ValidationClient:
                 # ---- Aggregate rewards/penalties and update scores ----
                 target_epoch = current_epoch - 2
                 bt.logging.debug(f"[ValidationClient.run] Calculating weights and scores for target_epoch={target_epoch}")
+
+                # Apply the union of reputation observations for the settled epoch (both
+                # validators aggregate the same set -> identical reputation), then push a
+                # snapshot (once per epoch, display/monitoring only).
+                if getattr(config, "REPUTATION_SCORING_ENABLED", False) and target_epoch >= 0:
+                    try:
+                        self._validator._reputation_store.finalize(
+                            int(target_epoch), alpha=getattr(config, "REPUTATION_EMA_ALPHA", 0.03))
+                        self._validator._reputation_store.save()
+                    except Exception as e:
+                        bt.logging.debug(f"[REPUTATION] finalize failed: {e}")
+                    if int(target_epoch) != getattr(self, "_last_rep_snapshot_epoch", -1):
+                        try:
+                            mid = getattr(config, "EMISSION_MIDPOINT", 0.59)
+                            gain = getattr(config, "EMISSION_GAIN", 100.0)
+                            snap = self._validator._reputation_store.snapshot()
+                            rows = [{"miner_hotkey": hk, "reputation": float(st.get("r", 0.5)),
+                                     "samples": int(st.get("n", 0)),
+                                     "gate": reputation.gate(float(st.get("r", 0.5)), mid, gain)}
+                                    for hk, st in snap.items()]
+                            if rows:
+                                await self.api_client.post_reputation_snapshot(int(target_epoch), rows)
+                            self._last_rep_snapshot_epoch = int(target_epoch)
+                        except Exception as e:
+                            bt.logging.debug(f"[REPUTATION] snapshot push failed: {e}")
                 combined_uid_rewards: Dict[int, int] = {}
 
                 # Local rewards to uid->points
@@ -560,12 +601,21 @@ class ValidationClient:
                 # pooled points exceed pooled penalties; otherwise zero (net-negative miner ->
                 # its share goes to burn). This is the documented "zero only if penalties >= rewards".
                 rewards = []
+                rep_gating = getattr(config, "REPUTATION_GATING_ENABLED", False)
                 bt.logging.debug(f"[ValidationClient.run] Building rewards list, penalty_totals: {uid_penalty_totals}")
                 for uid, pts in combined_uid_rewards.items():
                     try:
                         hk = self._validator.metagraph.hotkeys[int(uid)]
                     except Exception:
                         bt.logging.debug(f"[ValidationClient.run] Could not resolve hotkey for UID={uid}, skipping.")
+                        continue
+                    if rep_gating:
+                        r = self._validator._reputation_store.reputation(hk)
+                        g = reputation.gate(r, getattr(config, "EMISSION_MIDPOINT", 0.59),
+                                            getattr(config, "EMISSION_GAIN", 100.0))
+                        val = int(round(g * int(pts)))
+                        bt.logging.info(f"[REWARDS] UID={uid} hk={hk[:12]}.. gated={val} (rep={r:.3f} gate={g:.3f} vol={pts})")
+                        rewards.append(Reward(hotkey=hk, reward=val, epoch=target_epoch))
                         continue
                     pen = uid_penalty_totals.get(uid, 0)
                     if pts > pen:

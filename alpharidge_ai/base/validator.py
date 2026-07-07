@@ -41,6 +41,7 @@ from alpharidge_ai.utils.api_client import AlpharidgeAPIClient
 from alpharidge_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch
 from alpharidge_ai.protocol import ValidatorRewards
 from alpharidge_ai.protocol import ValidatorPenalties
+from alpharidge_ai.protocol import ValidatorReputationObs
 from alpharidge_ai import config
 
 
@@ -200,6 +201,12 @@ class BaseValidatorNeuron(BaseNeuron):
                     forward_fn=self.forward_validator_penalties,
                     blacklist_fn=self.blacklist_validator_penalties,
                     priority_fn=self.priority_validator_penalties,
+                )
+                # Allow validator↔validator reputation-observation broadcasts.
+                self.axon.attach(
+                    forward_fn=self.forward_validator_reputation_obs,
+                    blacklist_fn=self.blacklist_validator_reputation_obs,
+                    priority_fn=self.priority_validator_reputation_obs,
                 )
                 # Allow miners to push TelegramBatch results back.
                 self.axon.attach(
@@ -381,7 +388,26 @@ class BaseValidatorNeuron(BaseNeuron):
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
         return False, "Hotkey recognized!"
-    
+
+    async def blacklist_validator_reputation_obs(
+        self, synapse: ValidatorReputationObs
+    ) -> typing.Tuple[bool, str]:
+        if synapse.dendrite is None or synapse.dendrite.hotkey is None:
+            return True, "Missing dendrite or hotkey"
+        if (not self.config.blacklist.allow_non_registered
+                and synapse.dendrite.hotkey not in self.metagraph.hotkeys):
+            return True, "Unrecognized hotkey"
+        try:
+            uid = self.metagraph.hotkeys.index(synapse.dendrite.hotkey)
+        except ValueError:
+            return True, "Hotkey not in metagraph"
+        if not self.metagraph.validator_permit[uid]:
+            return True, "Non-validator hotkey"
+        return False, "Hotkey recognized!"
+
+    async def priority_validator_reputation_obs(self, synapse: ValidatorReputationObs) -> float:
+        return 1.0
+
     async def priority_tweets(self, synapse: alpharidge_ai.protocol.TweetBatch) -> float:
         """
         Priority tweets to the network.
