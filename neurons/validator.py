@@ -707,6 +707,8 @@ class Validator(BaseValidatorNeuron):
         latency_s: float = None,
     ) -> bool:
         adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
+        if latency_s is not None:
+            bt.logging.info(f"[LATPROBE] hotkey={miner_hotkey} latency_s={latency_s:.2f} n={len(sent_batch)}")
         if len(article_batch) != len(sent_batch):
             bt.logging.warning(
                 f"[VALIDATION] Article batch size mismatch from miner {miner_hotkey} "
