@@ -759,10 +759,12 @@ class Validator(BaseValidatorNeuron):
         if has_v2 and self._article_intel_analyzer is not None:
             sample_size = int(getattr(config, "VALIDATION_SAMPLE_SIZE", 1))
             gscorer = self._get_graded_scorer() if config.REPUTATION_SCORING_ENABLED else None
+            reference_by_id = {str(a.id): a for a in sent_batch}
             is_valid, validation_result = await loop.run_in_executor(
                 self._validation_executor,
                 validate_miner_article_intelligence_batch,
                 article_batch, self._article_intel_analyzer, sample_size, None, gscorer,
+                reference_by_id,
             )
             if gscorer is not None:
                 self._record_observations(miner_hotkey, (validation_result or {}).get("observations") or [])

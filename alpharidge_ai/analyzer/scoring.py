@@ -1434,12 +1434,22 @@ def classify_article_batch_failure(discrepancies) -> str:
     return "capacity"
 
 
+def _titles_match(record, reference) -> bool:
+    if reference is None:
+        return True
+    blob = getattr(getattr(record, "analysis", None), "analysis_data", None)
+    a = _normalize_text((blob.get("title") if isinstance(blob, dict) else "") or "")
+    b = _normalize_text(getattr(reference, "title", "") or "")
+    return a != "" and a == b
+
+
 def validate_miner_article_intelligence_batch(
     miner_batch: List[NewsArticleForScoring],
     analyzer,
     sample_size: int = 1,
     seed: int = None,
     graded_scorer=None,
+    reference_by_id=None,
 ) -> Tuple[bool, Dict]:
     """Validate a miner's article batch using V2 4-tier validation.
 
@@ -1447,6 +1457,26 @@ def validate_miner_article_intelligence_batch(
     continuous per-sampled-article observation is also collected (result["observations"]);
     this is independent of the pass/fail result and has no effect on it.
     """
+    if reference_by_id is not None:
+        mismatches = []
+        for i, a in enumerate(miner_batch):
+            ref = reference_by_id.get(str(getattr(a, "id", "")))
+            if ref is None:
+                continue
+            if not _titles_match(a, ref):
+                blob = getattr(getattr(a, "analysis", None), "analysis_data", None)
+                claimed = (blob.get("title") if isinstance(blob, dict) else None) or ""
+                mismatches.append({
+                    "article_index": i,
+                    "resource_id": str(getattr(a, "id", "")),
+                    "reason": "article_content_mismatch",
+                    "article_preview": (getattr(ref, "title", "") or "")[:100],
+                    "miner": {"title": str(claimed)[:80]},
+                    "validator": {"title": (getattr(ref, "title", "") or "")[:80]},
+                })
+        if mismatches:
+            return False, {"discrepancies": mismatches, "match_rate": 0.0, "observations": []}
+
     if seed is not None:
         random.seed(seed)
 
