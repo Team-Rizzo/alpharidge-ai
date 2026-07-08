@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 import os
 import random
+import threading
 import bittensor as bt
 import numpy as np
 
@@ -1443,6 +1444,43 @@ def _titles_match(record, reference) -> bool:
     return a != "" and a == b
 
 
+_ml_embedder = None
+_ml_embedder_lock = threading.Lock()
+
+
+def _get_ml_embedder():
+    global _ml_embedder
+    if _ml_embedder is None:
+        with _ml_embedder_lock:
+            if _ml_embedder is None:
+                from sentence_transformers import SentenceTransformer
+                _ml_embedder = SentenceTransformer(
+                    "paraphrase-multilingual-MiniLM-L12-v2", device="cpu")
+    return _ml_embedder
+
+
+def _summary_text(intel):
+    cs = getattr(intel, "chart_summary", None)
+    if cs is None:
+        return ""
+    h = getattr(cs, "headline", "") or ""
+    o = getattr(cs, "one_liner", "") or ""
+    return (str(h) + " " + str(o)).strip()
+
+
+def _summary_agreement(record_intel, reference_intel):
+    a = _summary_text(record_intel)
+    b = _summary_text(reference_intel)
+    if len(a) < 3 or len(b) < 3:
+        return None
+    try:
+        emb = _get_ml_embedder().encode([a, b], normalize_embeddings=True)
+        return float(np.dot(emb[0], emb[1]))
+    except Exception as e:
+        bt.logging.warning(f"[V2_VALIDATE] summary comparison unavailable: {e}")
+        return None
+
+
 def validate_miner_article_intelligence_batch(
     miner_batch: List[NewsArticleForScoring],
     analyzer,
@@ -1450,6 +1488,7 @@ def validate_miner_article_intelligence_batch(
     seed: int = None,
     graded_scorer=None,
     reference_by_id=None,
+    miner_hotkey=None,
 ) -> Tuple[bool, Dict]:
     """Validate a miner's article batch using V2 4-tier validation.
 
@@ -1507,19 +1546,34 @@ def validate_miner_article_intelligence_batch(
             discrepancies.append({"article_index": i, "reason": f"invalid_analysis_data: {e}"})
             continue
 
+        ref = (reference_by_id or {}).get(str(getattr(article, "id", "")))
+        src = ref or article
         validator_intel = analyzer.analyze(
             article_id=article.id,
-            url=article.url,
-            title=article.title,
-            source=article.source,
-            published=article.published,
-            summary=article.summary,
-            content=article.content,
-            raw_html=getattr(article, "raw_html", None),
+            url=src.url,
+            title=src.title,
+            source=src.source,
+            published=src.published,
+            summary=src.summary,
+            content=src.content,
+            raw_html=getattr(src, "raw_html", None),
         )
         if validator_intel is None:
             discrepancies.append({"article_index": i, "reason": "validator_analysis_failed"})
             continue
+
+        if ref is not None:
+            agreement = _summary_agreement(miner_intel, validator_intel)
+            if agreement is not None:
+                bt.logging.info(f"[V2_VALIDATE] summary_agreement={agreement:.3f} id={getattr(article, 'id', '')} hk={miner_hotkey}")
+                if agreement < float(_cfg_get("SUMMARY_AGREEMENT_FLOOR", 0.4)):
+                    discrepancies.append({
+                        "article_index": i,
+                        "resource_id": str(getattr(article, "id", "")),
+                        "reason": "article_content_mismatch",
+                        "article_preview": (getattr(src, "title", "") or "")[:100],
+                    })
+                    continue
 
         is_valid, composite, details = validate_article_intelligence(miner_intel, validator_intel)
         if is_valid:

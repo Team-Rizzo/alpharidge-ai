@@ -764,7 +764,7 @@ class Validator(BaseValidatorNeuron):
                 self._validation_executor,
                 validate_miner_article_intelligence_batch,
                 article_batch, self._article_intel_analyzer, sample_size, None, gscorer,
-                reference_by_id,
+                reference_by_id, miner_hotkey,
             )
             if gscorer is not None:
                 self._record_observations(miner_hotkey, (validation_result or {}).get("observations") or [])
