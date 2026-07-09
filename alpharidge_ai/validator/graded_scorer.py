@@ -37,3 +37,10 @@ class GradedScorer:
         g = quality.graded_score(sub, ref, art, self.emb, self.rarity.weights(), self.faith)
         w = config.SAMPLING_SUBSTANTIVE_WEIGHT if _substantive(ref) else 1.0
         return g, w
+
+    def faithfulness(self, miner_intel, article) -> float:
+        """Reference-free faithfulness of the analysis against the article. `article` must be
+        the validator's own reference copy, not the submitted object."""
+        sub = miner_intel.model_dump(mode="json")
+        art = {"title": getattr(article, "title", None), "content": getattr(article, "content", None)}
+        return float(self.faith.score(sub, art))

@@ -768,6 +768,14 @@ class Validator(BaseValidatorNeuron):
             )
             if gscorer is not None:
                 self._record_observations(miner_hotkey, (validation_result or {}).get("observations") or [])
+                # Faithfulness cooldown update (min over sampled articles).
+                faiths = (validation_result or {}).get("faithfulness_scores") or []
+                if faiths:
+                    min_faith = min(faiths)
+                    bt.logging.info(
+                        f"[FAITHFULNESS] hk={miner_hotkey} min={min_faith:.3f} "
+                        f"scores={[round(f, 3) for f in faiths]} passed={is_valid}")
+                    self._article_cooldown.record_faithfulness(miner_hotkey, min_faith)
         else:
             is_valid, validation_result = await loop.run_in_executor(
                 self._validation_executor,

@@ -1528,6 +1528,7 @@ def validate_miner_article_intelligence_batch(
     total_composite = 0.0
     discrepancies = []
     observations = []  # (article_id, graded, weight) when graded_scorer is set
+    faithfulness_scores = []  # reference-free faithfulness per sampled article
 
     for i, article in enumerate(sampled):
         miner_analysis = article.analysis
@@ -1591,6 +1592,18 @@ def validate_miner_article_intelligence_batch(
                 observations.append((int(article.id), float(g), float(w)))
             except Exception as e:
                 bt.logging.warning(f"[REPUTATION] graded scoring failed: {e}")
+            # Reference-free faithfulness vs the reference article (src). Skip when the
+            # reference has too little content to score it reliably.
+            src_content = (getattr(src, "content", None) or "").strip()
+            if len(src_content) >= int(_cfg_get("FAITHFULNESS_MIN_CONTENT_CHARS", 200)):
+                try:
+                    faithfulness_scores.append(
+                        float(graded_scorer.faithfulness(miner_intel, src)))
+                except Exception as e:
+                    bt.logging.warning(f"[FAITHFULNESS] scoring failed: {e}")
+            else:
+                bt.logging.debug(
+                    f"[FAITHFULNESS] skipped id={getattr(src, 'id', '?')} — content too short")
 
     # Cross-article adversarial detection: cloned embeddings.
     # Legacy rule (default): flag any within-batch title-embedding pair with cosine
@@ -1650,6 +1663,7 @@ def validate_miner_article_intelligence_batch(
         "is_valid": batch_valid, "matches": matches, "total_sampled": sample_size,
         "avg_composite_score": round(avg_composite, 4), "discrepancies": discrepancies,
         "observations": observations,
+        "faithfulness_scores": faithfulness_scores,
     }
 
     if batch_valid:

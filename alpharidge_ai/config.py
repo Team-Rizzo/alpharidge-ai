@@ -225,6 +225,13 @@ ADAPTIVE_PENALTY_SPLIT_ENABLED = _as_bool(os.getenv("ADAPTIVE_PENALTY_SPLIT_ENAB
 # is a no-op until piloted. Gated separately from the timeout split for isolated rollback.
 ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED = _as_bool(os.getenv("ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED", "false"))
 
+# Faithfulness cooldown (2026-07-09).
+DISPATCH_COOLDOWN_SHADOW_MODE = _as_bool(os.getenv("DISPATCH_COOLDOWN_SHADOW_MODE", "true"))
+DISPATCH_COOLDOWN_FAITHFULNESS_FLOOR = float(os.getenv("DISPATCH_COOLDOWN_FAITHFULNESS_FLOOR", "0.5"))
+DISPATCH_CONSEC_INVALID_N = int(os.getenv("DISPATCH_CONSEC_INVALID_N", "10"))
+DISPATCH_INVALID_COOLDOWN_FIRST_S = int(os.getenv("DISPATCH_INVALID_COOLDOWN_FIRST_S", "60"))
+DISPATCH_INVALID_COOLDOWN_MAX_S = int(os.getenv("DISPATCH_INVALID_COOLDOWN_MAX_S", "600"))
+
 # Validation quality floor (composite >= TIER3_THRESHOLD). Served centrally so every
 # validator uses the same threshold — divergent thresholds would score the same article
 # differently. Not gated by the dispatch flag (separate scoring track). Default 0.70.
@@ -275,6 +282,11 @@ _REMOTE_CONFIG_KEYS = {
     "LIVENESS_SWEEP_INTERVAL_S":  (int,   "LIVENESS_SWEEP_INTERVAL_S"),
     "ADAPTIVE_PENALTY_SPLIT_ENABLED": (_as_bool, "ADAPTIVE_PENALTY_SPLIT_ENABLED"),
     "ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED": (_as_bool, "ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED"),
+    "DISPATCH_COOLDOWN_SHADOW_MODE":       (_as_bool, "DISPATCH_COOLDOWN_SHADOW_MODE"),
+    "DISPATCH_COOLDOWN_FAITHFULNESS_FLOOR": (float, "DISPATCH_COOLDOWN_FAITHFULNESS_FLOOR"),
+    "DISPATCH_CONSEC_INVALID_N":           (int, "DISPATCH_CONSEC_INVALID_N"),
+    "DISPATCH_INVALID_COOLDOWN_FIRST_S":   (int, "DISPATCH_INVALID_COOLDOWN_FIRST_S"),
+    "DISPATCH_INVALID_COOLDOWN_MAX_S":     (int, "DISPATCH_INVALID_COOLDOWN_MAX_S"),
     # Scoring track (not gated by the dispatch flag): served so all validators match.
     "TIER3_THRESHOLD":            (float, "TIER3_THRESHOLD"),
     "CLONE_COSINE_THRESHOLD":     (float, "CLONE_COSINE_THRESHOLD"),

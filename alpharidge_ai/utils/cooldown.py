@@ -44,6 +44,13 @@ class MinerCooldownTracker:
         self._covered_ep: Dict[str, int] = {}     # last epoch given a coverage batch
         self._cap: float = None                   # per-tick anti-monopoly cap; None => from config
 
+        # ---- Faithfulness cooldown (2026-07-09) ----
+        # Counters kept separate from _state so the success path doesn't clear them.
+        self._consec_inv: Dict[str, int] = {}     # consecutive low-faithfulness batches
+        self._inv_level: Dict[str, int] = {}      # cooldown escalation level
+        self._inv_until: Dict[str, float] = {}    # cooldown expiry (separate from _state)
+        self._last_faith: Dict[str, float] = {}   # last observed min-faithfulness (telemetry)
+
     # ---- Adaptive knobs (read live so remote-config updates apply) ----
 
     def _window_min(self) -> float:
@@ -118,14 +125,19 @@ class MinerCooldownTracker:
         for the dashboard diagnostics flush)."""
         now = time.time()
         hotkeys = (set(self._window) | set(self._inflight) | set(self._consec_to)
-                   | set(self._covered_ep) | set(self._state))
+                   | set(self._covered_ep) | set(self._state) | set(self._consec_inv)
+                   | set(self._inv_until) | set(self._last_faith))
         out = {}
         for hk in hotkeys:
-            until = self._state.get(hk, (0, 0, 0.0))[2]
+            # Effective cooldown = later of the timeout-cooldown (_state) and the faith-park (_inv_until).
+            until = max(self._state.get(hk, (0, 0, 0.0))[2], self._inv_until.get(hk, 0.0))
             out[hk] = {
                 "window": round(self._get_window(hk), 3),
                 "inflight": self._inflight.get(hk, 0),
                 "consec_to": self._consec_to.get(hk, 0),
+                "consec_inv": self._consec_inv.get(hk, 0),
+                "inv_level": self._inv_level.get(hk, 0),
+                "last_faith": round(self._last_faith[hk], 3) if hk in self._last_faith else None,
                 "covered_epoch": self._covered_ep.get(hk, -1),
                 "on_cooldown": bool(until > 0 and now < until),
                 "cooldown_remaining_s": int(until - now) if until > now else 0,
@@ -157,6 +169,54 @@ class MinerCooldownTracker:
         the non-response counter's."""
         self._consec_to[hotkey] = 0
         self._window[hotkey] = max(self._window_min(), self._get_window(hotkey) * self._shrink())
+
+    # ---- Faithfulness cooldown (2026-07-09) ----
+
+    def record_faithfulness(self, hotkey: str, min_faith) -> None:
+        """Update the cooldown from the batch's min faithfulness. ``min_faith`` None is a
+        no-op; shadow mode only logs."""
+        if min_faith is None:
+            return
+        min_faith = float(min_faith)
+        self._last_faith[hotkey] = min_faith
+        floor = float(_cfg("DISPATCH_COOLDOWN_FAITHFULNESS_FLOOR", 0.5))
+        threshold = int(_cfg("DISPATCH_CONSEC_INVALID_N", CONSECUTIVE_FAILURES_BEFORE_COOLDOWN))
+        if min_faith >= floor:
+            # Grounded batch -> recovered: clear streak, level, and any active park (self-heal).
+            if self._consec_inv.get(hotkey) or self._inv_level.get(hotkey) or hotkey in self._inv_until:
+                self._consec_inv[hotkey] = 0
+                self._inv_level[hotkey] = 0
+                self._inv_until.pop(hotkey, None)
+            return
+        n = self._consec_inv.get(hotkey, 0) + 1
+        self._consec_inv[hotkey] = n
+        bt.logging.info(
+            f"[FAITHFULNESS] {hotkey[:12]}.. faith={min_faith:.3f} < floor={floor:.2f} "
+            f"streak={n}/{threshold}"
+        )
+        if n >= threshold:
+            self._trip_stub_cooldown(hotkey, n, min_faith)
+
+    def _trip_stub_cooldown(self, hotkey: str, consec_inv: int, faith: float) -> None:
+        """Apply the cooldown. Expiry goes in _inv_until (not _state) so the success path
+        can't clear it; _inv_level holds the level across re-probes. Shadow mode only logs."""
+        self._consec_inv[hotkey] = 0
+        lvl = min(self._inv_level.get(hotkey, 0) + 1, 2)
+        self._inv_level[hotkey] = lvl
+        first_s = float(_cfg("DISPATCH_INVALID_COOLDOWN_FIRST_S", 60))
+        max_s = float(_cfg("DISPATCH_INVALID_COOLDOWN_MAX_S", 600))
+        cooldown_secs = first_s if lvl == 1 else max_s
+        if bool(_cfg("DISPATCH_COOLDOWN_SHADOW_MODE", True)):
+            bt.logging.warning(
+                f"[COOLDOWN-SHADOW] WOULD park {hotkey[:12]}.. ({consec_inv} consec faith<floor, "
+                f"last={faith:.3f}) for {int(cooldown_secs)}s (level {lvl}) — shadow, NOT enforced"
+            )
+            return
+        self._inv_until[hotkey] = time.time() + cooldown_secs
+        bt.logging.warning(
+            f"[COOLDOWN] parked {hotkey[:12]}.. ({consec_inv} consec faith<floor, last={faith:.3f}) "
+            f"for {int(cooldown_secs)}s (level {lvl})"
+        )
 
     def record_timeout(self, hotkey: str) -> bool:
         """A reclaim cycle in which this miner had ≥1 lease timeout: shrink the window
@@ -232,15 +292,15 @@ class MinerCooldownTracker:
             del self._state[hotkey]
 
     def is_on_cooldown(self, hotkey: str) -> bool:
-        entry = self._state.get(hotkey)
-        if entry is None:
-            return False
-        _, _, cooldown_until = entry
-        return cooldown_until > 0 and time.time() < cooldown_until
+        now = time.time()
+        _, _, cooldown_until = self._state.get(hotkey, (0, 0, 0.0))
+        return (cooldown_until > 0 and now < cooldown_until) or now < self._inv_until.get(hotkey, 0.0)
 
     def get_cooled_down_hotkeys(self) -> Set[str]:
         now = time.time()
-        return {hk for hk, (_, _, until) in self._state.items() if until > 0 and now < until}
+        cooled = {hk for hk, (_, _, until) in self._state.items() if until > 0 and now < until}
+        cooled |= {hk for hk, until in self._inv_until.items() if now < until}
+        return cooled
 
     def prune(self, active_hotkeys: Set[str]) -> None:
         stale = [hk for hk in self._state if hk not in active_hotkeys]
@@ -249,8 +309,9 @@ class MinerCooldownTracker:
         stale_inflight = [hk for hk in self._inflight if hk not in active_hotkeys]
         for hk in stale_inflight:
             del self._inflight[hk]
-        # Adaptive dispatch maps follow the same lifecycle.
-        for d in (self._window, self._consec_to, self._covered_ep):
+        # Adaptive dispatch maps + faithfulness-cooldown counters follow the same lifecycle.
+        for d in (self._window, self._consec_to, self._covered_ep,
+                  self._consec_inv, self._inv_level, self._inv_until, self._last_faith):
             for hk in [h for h in d if h not in active_hotkeys]:
                 del d[hk]
         if stale:
