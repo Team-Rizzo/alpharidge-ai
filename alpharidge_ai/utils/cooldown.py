@@ -51,6 +51,8 @@ class MinerCooldownTracker:
         self._inv_until: Dict[str, float] = {}    # cooldown expiry (separate from _state)
         self._last_faith: Dict[str, float] = {}   # last observed min-faithfulness (telemetry)
 
+        self._batch_size: Dict[str, float] = {}
+
     # ---- Adaptive knobs (read live so remote-config updates apply) ----
 
     def _window_min(self) -> float:
@@ -71,6 +73,19 @@ class MinerCooldownTracker:
 
     def _adaptive_active(self) -> bool:
         return self._adaptive and bool(_cfg("ADAPTIVE_DISPATCH_ENABLED", False))
+
+    def _bs_active(self) -> bool:
+        return self._adaptive and bool(_cfg("ADAPTIVE_BATCH_SIZE_ENABLED", False))
+
+    def _bs_base(self) -> int:
+        """Served batch-size baseline (the size every validator gives by default)."""
+        return max(1, int(_cfg("MINER_BATCH_SIZE", 12)))
+
+    def _bs_min(self) -> int:
+        return max(1, int(_cfg("MINER_BATCH_SIZE_MIN", self._bs_base())))
+
+    def _bs_max(self) -> int:
+        return max(self._bs_min(), int(_cfg("MINER_BATCH_SIZE_MAX", self._bs_base())))
 
     def _get_window(self, hotkey: str) -> float:
         return self._window.get(hotkey, self._window_min())
@@ -120,13 +135,37 @@ class MinerCooldownTracker:
         """Current per-miner window sizes (for pilot metrics)."""
         return list(self._window.values())
 
+    def batch_size(self, hotkey: str) -> int:
+        """Per-miner batch size, clamped to [MIN, MAX]; baseline when disabled."""
+        if not self._bs_active():
+            return self._bs_base()
+        bs = self._batch_size.get(hotkey, float(self._bs_base()))
+        return int(max(self._bs_min(), min(self._bs_max(), int(bs))))
+
+    def record_batch_valid(self, hotkey: str, latency_s: float) -> None:
+        """Grow on an on-time valid return; hold on valid-but-slow. No-op when disabled."""
+        if not self._bs_active():
+            return
+        if latency_s is not None and latency_s <= self._late_threshold_s():
+            cur = self._batch_size.get(hotkey, float(self._bs_base()))
+            step = int(_cfg("BATCH_SIZE_GROW_STEP", 2))
+            self._batch_size[hotkey] = min(float(self._bs_max()), cur + step)
+
+    def record_batch_shrink(self, hotkey: str) -> None:
+        """Shrink toward MIN. No-op when disabled."""
+        if not self._bs_active():
+            return
+        cur = self._batch_size.get(hotkey, float(self._bs_base()))
+        factor = float(_cfg("BATCH_SIZE_SHRINK_FACTOR", 0.75))
+        self._batch_size[hotkey] = max(float(self._bs_min()), cur * factor)
+
     def snapshot(self) -> Dict[str, dict]:
         """Per-hotkey adaptive state for every miner we hold any state for (display-only,
         for the dashboard diagnostics flush)."""
         now = time.time()
         hotkeys = (set(self._window) | set(self._inflight) | set(self._consec_to)
                    | set(self._covered_ep) | set(self._state) | set(self._consec_inv)
-                   | set(self._inv_until) | set(self._last_faith))
+                   | set(self._inv_until) | set(self._last_faith) | set(self._batch_size))
         out = {}
         for hk in hotkeys:
             # Effective cooldown = later of the timeout-cooldown (_state) and the faith-park (_inv_until).
@@ -138,6 +177,7 @@ class MinerCooldownTracker:
                 "consec_inv": self._consec_inv.get(hk, 0),
                 "inv_level": self._inv_level.get(hk, 0),
                 "last_faith": round(self._last_faith[hk], 3) if hk in self._last_faith else None,
+                "batch_size": self.batch_size(hk),
                 "covered_epoch": self._covered_ep.get(hk, -1),
                 "on_cooldown": bool(until > 0 and now < until),
                 "cooldown_remaining_s": int(until - now) if until > now else 0,
@@ -200,6 +240,7 @@ class MinerCooldownTracker:
     def _trip_stub_cooldown(self, hotkey: str, consec_inv: int, faith: float) -> None:
         """Apply the cooldown. Expiry goes in _inv_until (not _state) so the success path
         can't clear it; _inv_level holds the level across re-probes. Shadow mode only logs."""
+        self.record_batch_shrink(hotkey)
         self._consec_inv[hotkey] = 0
         lvl = min(self._inv_level.get(hotkey, 0) + 1, 2)
         self._inv_level[hotkey] = lvl
@@ -309,9 +350,9 @@ class MinerCooldownTracker:
         stale_inflight = [hk for hk in self._inflight if hk not in active_hotkeys]
         for hk in stale_inflight:
             del self._inflight[hk]
-        # Adaptive dispatch maps + faithfulness-cooldown counters follow the same lifecycle.
         for d in (self._window, self._consec_to, self._covered_ep,
-                  self._consec_inv, self._inv_level, self._inv_until, self._last_faith):
+                  self._consec_inv, self._inv_level, self._inv_until, self._last_faith,
+                  self._batch_size):
             for hk in [h for h in d if h not in active_hotkeys]:
                 del d[hk]
         if stale:

@@ -742,6 +742,7 @@ class Validator(BaseValidatorNeuron):
             if adaptive:
                 self._article_cooldown.record_invalid(miner_hotkey)
                 self._adaptive_metrics.incr("invalid")
+            self._article_cooldown.record_batch_shrink(miner_hotkey)
             for article in sent_batch:
                 try:
                     self._article_store.reset_to_unprocessed(article.id)
@@ -829,6 +830,7 @@ class Validator(BaseValidatorNeuron):
                         f"— backing off window, no penalty")
                     self._article_cooldown.record_invalid(miner_hotkey)
                     self._adaptive_metrics.incr("incomplete")
+                    self._article_cooldown.record_batch_shrink(miner_hotkey)
             else:
                 # Genuine integrity failure (or the split is disabled) — unchanged:
                 # display-only attribution + integrity penalty + window shrink.
@@ -838,6 +840,7 @@ class Validator(BaseValidatorNeuron):
                 if adaptive:
                     self._article_cooldown.record_invalid(miner_hotkey)
                     self._adaptive_metrics.incr("invalid")
+                self._article_cooldown.record_batch_shrink(miner_hotkey)
 
             for article in article_batch:
                 try:
@@ -854,6 +857,7 @@ class Validator(BaseValidatorNeuron):
             self._article_cooldown.record_timely_valid(miner_hotkey, latency_s)
             self._adaptive_metrics.incr("valid")
             self._adaptive_metrics.mark_scored(miner_hotkey)
+        self._article_cooldown.record_batch_valid(miner_hotkey, latency_s)
         for article in article_batch:
             try:
                 self._article_store.update_article(article.id, article)
@@ -966,16 +970,37 @@ class Validator(BaseValidatorNeuron):
         bt.logging.info(f"[VALIDATION] Processing {len(articles)} articles in batch")
         for article in articles:
             self._article_store.add_article(article, set_as_processing=False, overwrite=False)
-        miner_batches = []
-        for i in range(0, len(articles), config.MINER_BATCH_SIZE):
-            miner_batches.append(articles[i:i + config.MINER_BATCH_SIZE])
         cooled_hotkeys = self._article_cooldown.get_cooled_down_hotkeys()
         cooled_uids = [
             uid for uid in range(self.metagraph.n.item())
             if self.metagraph.hotkeys[uid] in cooled_hotkeys
         ]
         exclude = [int(self.uid)] + cooled_uids
-        targets = self._select_article_targets(miner_batches, exclude)
+
+        if getattr(config, "ADAPTIVE_BATCH_SIZE_ENABLED", False):
+            # Draw each selected miner's slice at its per-miner batch_size from the pool, in order.
+            base = max(1, int(getattr(config, "MINER_BATCH_SIZE", 12)))
+            n_slots = max(1, -(-len(articles) // base))  # upper bound on batches this tick
+            ordered = self._select_article_targets([None] * n_slots, exclude)
+            targets = []
+            cursor = 0
+            for uid, _placeholder in ordered:
+                if cursor >= len(articles):
+                    break
+                try:
+                    hk = self.metagraph.hotkeys[int(uid)]
+                except Exception:
+                    continue
+                miner_batch = articles[cursor:cursor + self._article_cooldown.batch_size(hk)]
+                if not miner_batch:
+                    break
+                cursor += len(miner_batch)
+                targets.append((int(uid), miner_batch))
+        else:
+            miner_batches = []
+            for i in range(0, len(articles), config.MINER_BATCH_SIZE):
+                miner_batches.append(articles[i:i + config.MINER_BATCH_SIZE])
+            targets = self._select_article_targets(miner_batches, exclude)
 
         adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
         epoch = self._current_epoch() if adaptive else 0
@@ -1003,13 +1028,25 @@ class Validator(BaseValidatorNeuron):
         is per-article; the window is per-batch, so convert with
         ceil(articles / batch_size). This is the sole source of truth for in-flight
         under adaptive dispatch (the dispatch coroutine no longer releases at the ack)."""
-        batch_size = max(1, int(getattr(config, "MINER_BATCH_SIZE", 20)))
-        article_counts = {}
+        default_size = max(1, int(getattr(config, "MINER_BATCH_SIZE", 12)))
+        # Count PROCESSING articles grouped by (hotkey, size the batch was DISPATCHED at). Each
+        # dispatched batch contributes exactly `size` PROCESSING articles that move together
+        # (a batch is set_processed / reset as a unit), so within a group the count is a whole
+        # number of batches: ceil(count / size) == count // size batches. Summing per hotkey
+        # gives an EXACT in-flight batch count that does not drift when the per-miner size ramps
+        # while old-size batches are still outstanding (the reconcile checklist item). Legacy /
+        # unstamped items fall back to the served baseline.
+        group_counts = {}  # (hotkey, size) -> article count
         for item in self._article_store.get_processing_articles():
             hk = getattr(item, "hotkey", None)
-            if hk:
-                article_counts[hk] = article_counts.get(hk, 0) + 1
-        batch_counts = {hk: -(-c // batch_size) for hk, c in article_counts.items()}
+            if not hk:
+                continue
+            size = getattr(item, "dispatch_batch_size", None) or default_size
+            key = (hk, max(1, int(size)))
+            group_counts[key] = group_counts.get(key, 0) + 1
+        batch_counts = {}
+        for (hk, size), c in group_counts.items():
+            batch_counts[hk] = batch_counts.get(hk, 0) + -(-c // size)
         self._article_cooldown.reconcile_inflight(batch_counts)
 
     def _current_epoch(self) -> int:
@@ -1037,6 +1074,7 @@ class Validator(BaseValidatorNeuron):
                 "window": float(st.get("window", w_min)),
                 "inflight": int(st.get("inflight", 0)),
                 "consec_to": int(st.get("consec_to", 0)),
+                "batch_size": int(st.get("batch_size", self._article_cooldown.batch_size(hk))),
                 "covered_epoch": int(st.get("covered_epoch", -1)),
                 "on_cooldown": bool(st.get("on_cooldown", False)),
                 "cooldown_remaining_s": int(st.get("cooldown_remaining_s", 0)),
@@ -1298,10 +1336,11 @@ class Validator(BaseValidatorNeuron):
                 bt.logging.info(f"[VALIDATION] Skipping blacklisted miner UID={uid} hotkey={miner_hotkey[:12]}.. (articles)")
                 return None
 
+            dispatch_size = len(miner_batch)  # record the ACTUAL dispatched size on the lease
             for article in miner_batch:
                 self._article_store.add_article(article, article_id=article.id, hotkey=miner_hotkey, set_as_processing=False, overwrite=False)
                 try:
-                    self._article_store.set_processing(article.id, hotkey=miner_hotkey)
+                    self._article_store.set_processing(article.id, hotkey=miner_hotkey, batch_size=dispatch_size)
                 except Exception:
                     pass
 

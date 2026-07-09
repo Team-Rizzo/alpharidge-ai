@@ -28,6 +28,8 @@ class ArticleStoreItem(BaseModel):
     # articles age out even when never dispatched (start_time stays None). Legacy
     # items deserialized without this default to None and prune treats them as old.
     added_at: Optional[float] = None
+    # Batch size this article was dispatched in (recorded on the lease). None for legacy items.
+    dispatch_batch_size: Optional[int] = None
     # Idempotency helpers
     submitted_to_api: bool = False
     rewarded: bool = False
@@ -90,13 +92,16 @@ class ArticleStore:
             raise KeyError(f"Article ID {article_id} not found")
         self._articles[article_id].article = article
 
-    def set_processing(self, article_id: str, hotkey: Optional[str] = None):
+    def set_processing(self, article_id: str, hotkey: Optional[str] = None,
+                       batch_size: Optional[int] = None):
         """
         Sets the article as Processing and stores the current time as start_time.
 
         Args:
             article_id: ID of the article to set as processing
             hotkey: Optional miner hotkey processing this article
+            batch_size: Optional size of the batch this article was dispatched in, recorded on
+                the lease so the in-flight reconcile can count batches at their dispatched size.
         """
         article_id = str(article_id)
         if article_id in self._articles:
@@ -104,6 +109,8 @@ class ArticleStore:
             self._articles[article_id].start_time = time.time()
             if hotkey is not None:
                 self._articles[article_id].hotkey = hotkey
+            if batch_size is not None:
+                self._articles[article_id].dispatch_batch_size = int(batch_size)
         else:
             raise KeyError(f"Article ID {article_id} not found")
 

@@ -36,3 +36,17 @@ def gate(reputation, midpoint=MIDPOINT, gain=GAIN):
     """Emission multiplier in (0,1). Steep => ~0 below the floor, ~1 above; the caller
     multiplies this by volume, so a sub-floor value earns ~0 at any volume."""
     return 1.0 / (1.0 + math.exp(-gain * (reputation - midpoint)))
+
+
+def emission(reputation, midpoint=MIDPOINT, gain=GAIN,
+             bonus_ceiling=0.0, bonus_start=0.63, bonus_full=0.75):
+    """Emission multiplier: gate() times a bonus ramp above 1.0 between bonus_start and
+    bonus_full. bonus_ceiling == 0 reproduces gate() exactly."""
+    floor = gate(reputation, midpoint, gain)
+    denom = bonus_full - bonus_start
+    if denom <= 1e-9:
+        # bonus_full <= bonus_start: step at bonus_start (avoid divide-by-zero).
+        ramp = 1.0 if reputation >= bonus_start else 0.0
+    else:
+        ramp = min(1.0, max(0.0, (reputation - bonus_start) / denom))
+    return floor * (1.0 + bonus_ceiling * ramp)

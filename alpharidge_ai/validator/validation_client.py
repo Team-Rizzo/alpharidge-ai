@@ -263,6 +263,7 @@ class ValidationClient:
                             for hk in timed_out_hotkeys:
                                 self._validator._adaptive_metrics.incr("timeout")
                                 escalate = self._validator._article_cooldown.record_timeout(hk)
+                                self._validator._article_cooldown.record_batch_shrink(hk)
                                 if penalty_split and escalate:
                                     bt.logging.info(f"[ValidationClient.run] Chronic timeout escalation for {hk[:12]}.. — applying integrity penalty")
                                     self._validator._miner_penalty.add_penalty(hk, 1)
@@ -525,10 +526,15 @@ class ValidationClient:
                         try:
                             mid = getattr(config, "EMISSION_MIDPOINT", 0.59)
                             gain = getattr(config, "EMISSION_GAIN", 100.0)
+                            b_ceil = getattr(config, "EMISSION_BONUS_CEILING", 0.0)
+                            b_start = getattr(config, "EMISSION_BONUS_START", 0.63)
+                            b_full = getattr(config, "EMISSION_BONUS_FULL", 0.75)
                             snap = self._validator._reputation_store.snapshot()
+                            # display-only, decoupled from consensus.
                             rows = [{"miner_hotkey": hk, "reputation": float(st.get("r", 0.5)),
                                      "samples": int(st.get("n", 0)),
-                                     "gate": reputation.gate(float(st.get("r", 0.5)), mid, gain)}
+                                     "gate": reputation.emission(float(st.get("r", 0.5)), mid, gain,
+                                                                 b_ceil, b_start, b_full)}
                                     for hk, st in snap.items()]
                             if rows:
                                 await self.api_client.post_reputation_snapshot(int(target_epoch), rows)
@@ -611,10 +617,16 @@ class ValidationClient:
                         continue
                     if rep_gating:
                         r = self._validator._reputation_store.reputation(hk)
-                        g = reputation.gate(r, getattr(config, "EMISSION_MIDPOINT", 0.59),
-                                            getattr(config, "EMISSION_GAIN", 100.0))
+                        g = reputation.emission(
+                            r,
+                            getattr(config, "EMISSION_MIDPOINT", 0.59),
+                            getattr(config, "EMISSION_GAIN", 100.0),
+                            getattr(config, "EMISSION_BONUS_CEILING", 0.0),
+                            getattr(config, "EMISSION_BONUS_START", 0.63),
+                            getattr(config, "EMISSION_BONUS_FULL", 0.75),
+                        )
                         val = int(round(g * int(pts)))
-                        bt.logging.info(f"[REWARDS] UID={uid} hk={hk[:12]}.. gated={val} (rep={r:.3f} gate={g:.3f} vol={pts})")
+                        bt.logging.info(f"[REWARDS] UID={uid} hk={hk[:12]}.. gated={val} (rep={r:.3f} mult={g:.3f} vol={pts})")
                         rewards.append(Reward(hotkey=hk, reward=val, epoch=target_epoch))
                         continue
                     pen = uid_penalty_totals.get(uid, 0)

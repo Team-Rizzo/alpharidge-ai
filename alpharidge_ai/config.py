@@ -232,6 +232,13 @@ DISPATCH_CONSEC_INVALID_N = int(os.getenv("DISPATCH_CONSEC_INVALID_N", "10"))
 DISPATCH_INVALID_COOLDOWN_FIRST_S = int(os.getenv("DISPATCH_INVALID_COOLDOWN_FIRST_S", "60"))
 DISPATCH_INVALID_COOLDOWN_MAX_S = int(os.getenv("DISPATCH_INVALID_COOLDOWN_MAX_S", "600"))
 
+# Per-miner batch size, clamped to [MIN, MAX]. Bounds default to MINER_BATCH_SIZE (off until raised).
+ADAPTIVE_BATCH_SIZE_ENABLED = _as_bool(os.getenv("ADAPTIVE_BATCH_SIZE_ENABLED", "false"))
+MINER_BATCH_SIZE_MAX     = int(os.getenv("MINER_BATCH_SIZE_MAX", str(MINER_BATCH_SIZE)))
+MINER_BATCH_SIZE_MIN     = int(os.getenv("MINER_BATCH_SIZE_MIN", str(MINER_BATCH_SIZE)))
+BATCH_SIZE_GROW_STEP     = int(os.getenv("BATCH_SIZE_GROW_STEP", "2"))
+BATCH_SIZE_SHRINK_FACTOR = float(os.getenv("BATCH_SIZE_SHRINK_FACTOR", "0.75"))
+
 # Validation quality floor (composite >= TIER3_THRESHOLD). Served centrally so every
 # validator uses the same threshold — divergent thresholds would score the same article
 # differently. Not gated by the dispatch flag (separate scoring track). Default 0.70.
@@ -257,6 +264,10 @@ REPUTATION_EMA_ALPHA        = float(os.getenv("REPUTATION_EMA_ALPHA", "0.03"))
 REPUTATION_PRIOR            = float(os.getenv("REPUTATION_PRIOR", "0.5"))
 EMISSION_MIDPOINT           = float(os.getenv("EMISSION_MIDPOINT", "0.59"))
 EMISSION_GAIN               = float(os.getenv("EMISSION_GAIN", "100.0"))
+# Emission bonus: multiplier ramps above 1.0 for reputation between START and FULL. CEILING=0 = off.
+EMISSION_BONUS_CEILING      = float(os.getenv("EMISSION_BONUS_CEILING", "0.0"))
+EMISSION_BONUS_START        = float(os.getenv("EMISSION_BONUS_START", "0.63"))
+EMISSION_BONUS_FULL         = float(os.getenv("EMISSION_BONUS_FULL", "0.75"))
 VALIDATION_SAMPLE_SIZE      = int(os.getenv("VALIDATION_SAMPLE_SIZE", "1"))
 SUMMARY_AGREEMENT_FLOOR     = float(os.getenv("SUMMARY_AGREEMENT_FLOOR", "0.4"))
 SAMPLING_SUBSTANTIVE_WEIGHT = float(os.getenv("SAMPLING_SUBSTANTIVE_WEIGHT", "2.0"))
@@ -287,6 +298,13 @@ _REMOTE_CONFIG_KEYS = {
     "DISPATCH_CONSEC_INVALID_N":           (int, "DISPATCH_CONSEC_INVALID_N"),
     "DISPATCH_INVALID_COOLDOWN_FIRST_S":   (int, "DISPATCH_INVALID_COOLDOWN_FIRST_S"),
     "DISPATCH_INVALID_COOLDOWN_MAX_S":     (int, "DISPATCH_INVALID_COOLDOWN_MAX_S"),
+    # Adaptive per-miner batch size (2026-07-08) — local dispatch behavior, served so the
+    # bounds are consistent fleet-wide (the per-miner state stays local).
+    "ADAPTIVE_BATCH_SIZE_ENABLED": (_as_bool, "ADAPTIVE_BATCH_SIZE_ENABLED"),
+    "MINER_BATCH_SIZE_MAX":       (int,   "MINER_BATCH_SIZE_MAX"),
+    "MINER_BATCH_SIZE_MIN":       (int,   "MINER_BATCH_SIZE_MIN"),
+    "BATCH_SIZE_GROW_STEP":       (int,   "BATCH_SIZE_GROW_STEP"),
+    "BATCH_SIZE_SHRINK_FACTOR":   (float, "BATCH_SIZE_SHRINK_FACTOR"),
     # Scoring track (not gated by the dispatch flag): served so all validators match.
     "TIER3_THRESHOLD":            (float, "TIER3_THRESHOLD"),
     "CLONE_COSINE_THRESHOLD":     (float, "CLONE_COSINE_THRESHOLD"),
@@ -299,6 +317,9 @@ _REMOTE_CONFIG_KEYS = {
     "REPUTATION_PRIOR":           (float, "REPUTATION_PRIOR"),
     "EMISSION_MIDPOINT":          (float, "EMISSION_MIDPOINT"),
     "EMISSION_GAIN":              (float, "EMISSION_GAIN"),
+    "EMISSION_BONUS_CEILING":     (float, "EMISSION_BONUS_CEILING"),
+    "EMISSION_BONUS_START":       (float, "EMISSION_BONUS_START"),
+    "EMISSION_BONUS_FULL":        (float, "EMISSION_BONUS_FULL"),
     "VALIDATION_SAMPLE_SIZE":     (int,   "VALIDATION_SAMPLE_SIZE"),
     "SAMPLING_SUBSTANTIVE_WEIGHT":(float, "SAMPLING_SUBSTANTIVE_WEIGHT"),
     "SUMMARY_AGREEMENT_FLOOR":    (float, "SUMMARY_AGREEMENT_FLOOR"),

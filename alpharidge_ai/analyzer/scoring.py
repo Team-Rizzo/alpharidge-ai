@@ -990,14 +990,11 @@ def _ordinal_score(pred: str, gold: str, ladder: List[str]) -> float:
 # neural inference is NOT bit-identical, so the per-asset direction/outlook can
 # differ by a class at a decision boundary (e.g. bullish vs slightly_bullish).
 # We compare on the ordinal sentiment ladder with adjacent-class tolerance and
-# average across the batch's common assets: inherent jitter scores ~1.0 while a
-# true sign reversal (a miner running a different/forged model) scores low.
+# average across the batch's common assets.
 # (_SENTIMENT_LADDER is defined once above with the other tolerant-scoring ladders.)
 _SENTIMENT_IDX = {v: i for i, v in enumerate(_SENTIMENT_LADDER)}
 
-# Mean per-asset agreement a miner must clear. Honest miners agree ~1.0 (measured
-# 38/38 exact cross-process); a different-model miner reverses signs and falls far
-# below. Env-overridable for field tuning.
+# Mean per-asset agreement threshold. Env-overridable for field tuning.
 DET_AGREEMENT_THRESHOLD = float(os.getenv("DET_AGREEMENT_THRESHOLD", "0.80"))
 
 
@@ -1152,8 +1149,7 @@ def validate_article_intelligence(
     # is therefore unachievable AND, at the 1-6 assets an article resolves, a rate
     # threshold collapses to exact-match (one of two assets disagreeing = 0.50).
     # Instead require the MEAN ordinal agreement across the batch's common assets to
-    # clear a threshold: adjacent-class jitter scores ~1.0, a sign reversal (a forged
-    # or different model) scores low and drags the mean below threshold.
+    # clear a threshold, tolerating adjacent-class jitter.
     m_assets = {a.ticker: a for a in m.assets}
     v_assets = {a.ticker: a for a in v.assets}
     # Anti-cheat presence check (asymmetric, mirrors the Tier-2.5 embedding check):
