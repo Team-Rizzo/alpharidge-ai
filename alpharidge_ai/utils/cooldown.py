@@ -50,6 +50,7 @@ class MinerCooldownTracker:
         self._inv_level: Dict[str, int] = {}      # cooldown escalation level
         self._inv_until: Dict[str, float] = {}    # cooldown expiry (separate from _state)
         self._last_faith: Dict[str, float] = {}   # last observed min-faithfulness (telemetry)
+        self._consec_fail: Dict[str, int] = {}    # consecutive validation failures
 
         self._batch_size: Dict[str, float] = {}
 
@@ -165,7 +166,8 @@ class MinerCooldownTracker:
         now = time.time()
         hotkeys = (set(self._window) | set(self._inflight) | set(self._consec_to)
                    | set(self._covered_ep) | set(self._state) | set(self._consec_inv)
-                   | set(self._inv_until) | set(self._last_faith) | set(self._batch_size))
+                   | set(self._inv_until) | set(self._last_faith) | set(self._batch_size)
+                   | set(self._consec_fail))
         out = {}
         for hk in hotkeys:
             # Effective cooldown = later of the timeout-cooldown (_state) and the faith-park (_inv_until).
@@ -175,6 +177,7 @@ class MinerCooldownTracker:
                 "inflight": self._inflight.get(hk, 0),
                 "consec_to": self._consec_to.get(hk, 0),
                 "consec_inv": self._consec_inv.get(hk, 0),
+                "consec_fail": self._consec_fail.get(hk, 0),
                 "inv_level": self._inv_level.get(hk, 0),
                 "last_faith": round(self._last_faith[hk], 3) if hk in self._last_faith else None,
                 "batch_size": self.batch_size(hk),
@@ -235,29 +238,54 @@ class MinerCooldownTracker:
             f"streak={n}/{threshold}"
         )
         if n >= threshold:
-            self._trip_stub_cooldown(hotkey, n, min_faith)
+            shadow = bool(_cfg("DISPATCH_COOLDOWN_SHADOW_MODE", True))
+            self._trip_stub_cooldown(hotkey, f"{n} consec faith<floor, last={min_faith:.3f}",
+                                     shadow, tag="COOLDOWN")
+            self._consec_inv[hotkey] = 0
 
-    def _trip_stub_cooldown(self, hotkey: str, consec_inv: int, faith: float) -> None:
+    # Consecutive validation-fail park (2026-07-09). Its own shadow flag + N so it rolls out
+    # independently of the faithfulness cooldown (which is already enforcing). Shares the park
+    # machinery (_inv_until / _inv_level).
+
+    def record_validation_fail(self, hotkey: str, reason: str = "") -> None:
+        """Advance the consecutive validation-fail counter; park at DISPATCH_CONSEC_FAIL_N.
+        Reset only on a genuine validation pass (record_validation_pass), never on the
+        success/ack path. Callers must exclude validator-side failures."""
+        n = self._consec_fail.get(hotkey, 0) + 1
+        self._consec_fail[hotkey] = n
+        threshold = int(_cfg("DISPATCH_CONSEC_FAIL_N", 10))
+        bt.logging.info(
+            f"[FAILSTREAK] {hotkey[:12]}.. fail (reason={reason}) streak={n}/{threshold}")
+        if n >= threshold:
+            shadow = bool(_cfg("DISPATCH_FAILSTREAK_SHADOW_MODE", True))
+            self._trip_stub_cooldown(hotkey, f"{n} consec fails, last={reason}",
+                                     shadow, tag="FAILSTREAK")
+            self._consec_fail[hotkey] = 0
+
+    def record_validation_pass(self, hotkey: str) -> None:
+        """A genuine validation pass clears the fail streak (not the success/ack path)."""
+        if self._consec_fail.get(hotkey):
+            self._consec_fail[hotkey] = 0
+
+    def _trip_stub_cooldown(self, hotkey: str, detail: str, shadow: bool,
+                            tag: str = "COOLDOWN") -> None:
         """Apply the cooldown. Expiry goes in _inv_until (not _state) so the success path
-        can't clear it; _inv_level holds the level across re-probes. Shadow mode only logs."""
+        can't clear it; _inv_level holds the level across re-probes. Shadow mode only logs.
+        The caller resets its own counter after this returns."""
         self.record_batch_shrink(hotkey)
-        self._consec_inv[hotkey] = 0
         lvl = min(self._inv_level.get(hotkey, 0) + 1, 2)
         self._inv_level[hotkey] = lvl
         first_s = float(_cfg("DISPATCH_INVALID_COOLDOWN_FIRST_S", 60))
         max_s = float(_cfg("DISPATCH_INVALID_COOLDOWN_MAX_S", 600))
         cooldown_secs = first_s if lvl == 1 else max_s
-        if bool(_cfg("DISPATCH_COOLDOWN_SHADOW_MODE", True)):
+        if shadow:
             bt.logging.warning(
-                f"[COOLDOWN-SHADOW] WOULD park {hotkey[:12]}.. ({consec_inv} consec faith<floor, "
-                f"last={faith:.3f}) for {int(cooldown_secs)}s (level {lvl}) — shadow, NOT enforced"
-            )
+                f"[{tag}-SHADOW] WOULD park {hotkey[:12]}.. ({detail}) "
+                f"for {int(cooldown_secs)}s (level {lvl}) — shadow, NOT enforced")
             return
         self._inv_until[hotkey] = time.time() + cooldown_secs
         bt.logging.warning(
-            f"[COOLDOWN] parked {hotkey[:12]}.. ({consec_inv} consec faith<floor, last={faith:.3f}) "
-            f"for {int(cooldown_secs)}s (level {lvl})"
-        )
+            f"[{tag}] parked {hotkey[:12]}.. ({detail}) for {int(cooldown_secs)}s (level {lvl})")
 
     def record_timeout(self, hotkey: str) -> bool:
         """A reclaim cycle in which this miner had ≥1 lease timeout: shrink the window
@@ -352,7 +380,7 @@ class MinerCooldownTracker:
             del self._inflight[hk]
         for d in (self._window, self._consec_to, self._covered_ep,
                   self._consec_inv, self._inv_level, self._inv_until, self._last_faith,
-                  self._batch_size):
+                  self._batch_size, self._consec_fail):
             for hk in [h for h in d if h not in active_hotkeys]:
                 del d[hk]
         if stale:

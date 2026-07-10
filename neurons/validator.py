@@ -741,6 +741,7 @@ class Validator(BaseValidatorNeuron):
             self._miner_penalty.add_penalty(miner_hotkey, 1)
             if adaptive:
                 self._article_cooldown.record_invalid(miner_hotkey)
+                self._article_cooldown.record_validation_fail(miner_hotkey, "size_mismatch")
                 self._adaptive_metrics.incr("invalid")
             self._article_cooldown.record_batch_shrink(miner_hotkey)
             for article in sent_batch:
@@ -809,12 +810,11 @@ class Validator(BaseValidatorNeuron):
                     bt.logging.warning(f"[VALIDATION] Article rejection for {miner_hotkey}: reason={reason}, preview={preview[:100]}")
 
             current_epoch = self._miner_reward._get_current_epoch()
-            # Missing/incomplete-analysis is a CAPACITY signal (the miner hasn't caught up
-            # with the burst we dispatched), not cheating — split it out like a timeout
-            # rather than scoring it as an integrity failure. Gated separately so it can
-            # be piloted / rolled back on its own; off = legacy "penalize everything".
             missing_split = adaptive and getattr(config, "ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED", False)
             failure_class = classify_article_batch_failure(discrepancies)
+            # Consecutive validation-fail park — skip validator-side (our analyzer's fault).
+            if adaptive and failure_class != "validator_side":
+                self._article_cooldown.record_validation_fail(miner_hotkey, failure_class)
 
             if missing_split and failure_class != "integrity":
                 if failure_class == "validator_side":
@@ -851,6 +851,7 @@ class Validator(BaseValidatorNeuron):
 
         bt.logging.info(f"[VALIDATION] Article batch validation PASSED for miner {miner_hotkey}")
         self._article_cooldown.record_success(miner_hotkey)
+        self._article_cooldown.record_validation_pass(miner_hotkey)  # clears the fail streak
         # Adaptive: grow the window if the round-trip was comfortably on-time, else
         # freeze (objective 8 — find capacity without ramping into a timeout).
         if adaptive:
