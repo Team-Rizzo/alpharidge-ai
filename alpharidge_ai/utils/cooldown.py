@@ -1,12 +1,15 @@
 import math
 import time
 import bittensor as bt
+from collections import deque
 from typing import Dict, Set, Tuple
 
 
 BACKOFF_SCHEDULE = [30, 60, 120, 300, 600]  # seconds
 CONSECUTIVE_FAILURES_BEFORE_COOLDOWN = 10
 MAX_INFLIGHT_PER_MINER = 4
+LATENCY_WINDOW = 20  # rolling per-miner batch round-trip samples for the median telemetry
+EVENT_BUFFER_MAX = 2000  # bound the display-only event buffer if the API is unreachable
 
 
 def _cfg(name, default):
@@ -51,6 +54,8 @@ class MinerCooldownTracker:
         self._inv_until: Dict[str, float] = {}    # cooldown expiry (separate from _state)
         self._last_faith: Dict[str, float] = {}   # last observed min-faithfulness (telemetry)
         self._consec_fail: Dict[str, int] = {}    # consecutive validation failures
+        self._latency: Dict[str, deque] = {}      # rolling batch round-trip times (telemetry)
+        self._events: list = []                   # display-only dispatch/cooldown events (drained on flush)
 
         self._batch_size: Dict[str, float] = {}
 
@@ -148,17 +153,66 @@ class MinerCooldownTracker:
         if not self._bs_active():
             return
         if latency_s is not None and latency_s <= self._late_threshold_s():
+            before = self.batch_size(hotkey)
             cur = self._batch_size.get(hotkey, float(self._bs_base()))
             step = int(_cfg("BATCH_SIZE_GROW_STEP", 2))
             self._batch_size[hotkey] = min(float(self._bs_max()), cur + step)
+            after = self.batch_size(hotkey)
+            if after != before:
+                self._emit_event(hotkey, "batch_size_changed", reason="grew on on-time valid",
+                                 detail={"from": before, "to": after})
 
     def record_batch_shrink(self, hotkey: str) -> None:
         """Shrink toward MIN. No-op when disabled."""
         if not self._bs_active():
             return
+        before = self.batch_size(hotkey)
         cur = self._batch_size.get(hotkey, float(self._bs_base()))
         factor = float(_cfg("BATCH_SIZE_SHRINK_FACTOR", 0.75))
         self._batch_size[hotkey] = max(float(self._bs_min()), cur * factor)
+        after = self.batch_size(hotkey)
+        if after != before:
+            self._emit_event(hotkey, "batch_size_changed", reason="shrank on invalid/park",
+                             detail={"from": before, "to": after})
+
+    def _emit_event(self, hotkey: str, event_type: str, **fields) -> None:
+        """Append a display-only dispatch/cooldown event (drained on the dispatch flush).
+        occurred_at is stamped here so buffered events keep accurate timing. Never raises."""
+        try:
+            ev = {"miner_hotkey": hotkey, "event_type": event_type, "occurred_at": time.time()}
+            ev.update({k: v for k, v in fields.items() if v is not None})
+            self._events.append(ev)
+            if len(self._events) > EVENT_BUFFER_MAX:
+                del self._events[0:len(self._events) - EVENT_BUFFER_MAX]
+        except Exception:
+            pass
+
+    def drain_events(self) -> list:
+        """Return and clear the buffered events (called by the validator's dispatch flush)."""
+        evs = self._events
+        self._events = []
+        return evs
+
+    def record_latency(self, hotkey: str, latency_s: float) -> None:
+        """Record a batch round-trip time for telemetry (rolling window). Display-only;
+        fires on every push-back regardless of validity/adaptive flags for a true median."""
+        if latency_s is None:
+            return
+        dq = self._latency.get(hotkey)
+        if dq is None:
+            dq = deque(maxlen=LATENCY_WINDOW)
+            self._latency[hotkey] = dq
+        dq.append(float(latency_s))
+
+    def median_latency(self, hotkey: str):
+        """Median recent batch round-trip time (seconds), or None if unseen."""
+        dq = self._latency.get(hotkey)
+        if not dq:
+            return None
+        vals = sorted(dq)
+        n = len(vals)
+        mid = n // 2
+        return round(vals[mid] if n % 2 else (vals[mid - 1] + vals[mid]) / 2.0, 2)
 
     def snapshot(self) -> Dict[str, dict]:
         """Per-hotkey adaptive state for every miner we hold any state for (display-only,
@@ -167,7 +221,7 @@ class MinerCooldownTracker:
         hotkeys = (set(self._window) | set(self._inflight) | set(self._consec_to)
                    | set(self._covered_ep) | set(self._state) | set(self._consec_inv)
                    | set(self._inv_until) | set(self._last_faith) | set(self._batch_size)
-                   | set(self._consec_fail))
+                   | set(self._consec_fail) | set(self._latency))
         out = {}
         for hk in hotkeys:
             # Effective cooldown = later of the timeout-cooldown (_state) and the faith-park (_inv_until).
@@ -181,6 +235,7 @@ class MinerCooldownTracker:
                 "inv_level": self._inv_level.get(hk, 0),
                 "last_faith": round(self._last_faith[hk], 3) if hk in self._last_faith else None,
                 "batch_size": self.batch_size(hk),
+                "median_latency_s": self.median_latency(hk),
                 "covered_epoch": self._covered_ep.get(hk, -1),
                 "on_cooldown": bool(until > 0 and now < until),
                 "cooldown_remaining_s": int(until - now) if until > now else 0,
@@ -227,9 +282,13 @@ class MinerCooldownTracker:
         if min_faith >= floor:
             # Grounded batch -> recovered: clear streak, level, and any active park (self-heal).
             if self._consec_inv.get(hotkey) or self._inv_level.get(hotkey) or hotkey in self._inv_until:
+                was_parked = hotkey in self._inv_until
                 self._consec_inv[hotkey] = 0
                 self._inv_level[hotkey] = 0
                 self._inv_until.pop(hotkey, None)
+                if was_parked:
+                    self._emit_event(hotkey, "unparked", streak="faith",
+                                     reason=f"recovered, faith={min_faith:.3f}")
             return
         n = self._consec_inv.get(hotkey, 0) + 1
         self._consec_inv[hotkey] = n
@@ -278,14 +337,22 @@ class MinerCooldownTracker:
         first_s = float(_cfg("DISPATCH_INVALID_COOLDOWN_FIRST_S", 60))
         max_s = float(_cfg("DISPATCH_INVALID_COOLDOWN_MAX_S", 600))
         cooldown_secs = first_s if lvl == 1 else max_s
+        streak = "faith" if tag == "COOLDOWN" else ("failstreak" if tag == "FAILSTREAK" else "timeout")
+        park_detail = {"cooldown_s": int(cooldown_secs), "level": lvl,
+                       "last_faith": self._last_faith.get(hotkey)}
         if shadow:
             bt.logging.warning(
                 f"[{tag}-SHADOW] WOULD park {hotkey[:12]}.. ({detail}) "
                 f"for {int(cooldown_secs)}s (level {lvl}) — shadow, NOT enforced")
+            # Emit even in shadow so a miner can see the streak "would have parked" them.
+            self._emit_event(hotkey, "parked", streak=streak, shadow=True,
+                             reason=detail, detail=park_detail)
             return
         self._inv_until[hotkey] = time.time() + cooldown_secs
         bt.logging.warning(
             f"[{tag}] parked {hotkey[:12]}.. ({detail}) for {int(cooldown_secs)}s (level {lvl})")
+        self._emit_event(hotkey, "parked", streak=streak, shadow=False,
+                         reason=detail, detail=park_detail)
 
     def record_timeout(self, hotkey: str) -> bool:
         """A reclaim cycle in which this miner had ≥1 lease timeout: shrink the window
@@ -380,7 +447,7 @@ class MinerCooldownTracker:
             del self._inflight[hk]
         for d in (self._window, self._consec_to, self._covered_ep,
                   self._consec_inv, self._inv_level, self._inv_until, self._last_faith,
-                  self._batch_size, self._consec_fail):
+                  self._batch_size, self._consec_fail, self._latency):
             for hk in [h for h in d if h not in active_hotkeys]:
                 del d[hk]
         if stale:

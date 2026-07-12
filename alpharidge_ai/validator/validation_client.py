@@ -6,6 +6,7 @@ import bittensor as bt
 import numpy as np
 import time
 import random
+from datetime import datetime, timezone
 
 from alpharidge_ai import config
 from alpharidge_ai.utils.api_client import AlpharidgeAPIClient
@@ -133,6 +134,32 @@ class ValidationClient:
                 bt.logging.debug(f"[DISPATCH_STATUS] flush failed, dropped {len(rows)} row(s): {e}")
         except Exception as e:
             bt.logging.debug(f"[DISPATCH_STATUS] flush block error (ignored): {e}")
+
+    async def _flush_miner_events(self):
+        """Best-effort push of buffered per-miner dispatch/cooldown events (park/unpark,
+        batch-size change) to the diagnostics endpoint (display-only, decoupled from
+        consensus). Drained from the cooldown tracker; each event carries its own
+        occurred_at so the flush cadence doesn't affect its timing. Failures are swallowed;
+        this can never stall the loop or touch scoring/weights."""
+        try:
+            events = self._validator._article_cooldown.drain_events()
+            if not events:
+                return
+            # Stamp occurred_at (float epoch) as an ISO8601 UTC string for the API model.
+            out = []
+            for ev in events:
+                e = dict(ev)
+                ts = e.get("occurred_at")
+                if isinstance(ts, (int, float)):
+                    e["occurred_at"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+                out.append(e)
+            try:
+                await self.api_client.submit_miner_events(out)
+                bt.logging.debug(f"[MINER_EVENT] flushed {len(out)} event(s)")
+            except Exception as e:
+                bt.logging.debug(f"[MINER_EVENT] flush failed, dropped {len(out)} event(s): {e}")
+        except Exception as e:
+            bt.logging.debug(f"[MINER_EVENT] flush block error (ignored): {e}")
 
     async def run(
         self,
@@ -331,6 +358,8 @@ class ValidationClient:
                 await self._flush_penalty_detail()
                 # Same channel, for the adaptive-dispatch status snapshot (throttled).
                 await self._flush_dispatch_status()
+                # And the per-miner dispatch/cooldown event log (park/unpark, batch-size).
+                await self._flush_miner_events()
 
                 # Persist local state.
                 try:

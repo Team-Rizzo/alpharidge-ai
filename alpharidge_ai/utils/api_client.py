@@ -526,6 +526,23 @@ class AlpharidgeAPIClient:
         )
         return SubmissionResponse(**data)
 
+    async def submit_miner_events(
+        self,
+        events: List[Dict[str, Any]],
+    ) -> SubmissionResponse:
+        """Push display-only per-miner dispatch/cooldown events for the miner dashboard.
+
+        DECOUPLED from consensus: hits /diagnostics/miner-event, which writes only to the
+        standalone miner_event table and never touches verdicts, attestations, or weights.
+        Best-effort — callers treat failures as non-fatal.
+        """
+        data = await self._request(
+            "POST",
+            "/diagnostics/miner-event",
+            json={"events": events},
+        )
+        return SubmissionResponse(**data)
+
     async def get_penalties(
         self,
         hotkey: Optional[str] = None,

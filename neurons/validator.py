@@ -47,6 +47,7 @@ from alpharidge_ai.protocol import ValidatorPenalties
 from alpharidge_ai.protocol import ValidatorReputationObs
 from alpharidge_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch, classify_article_batch_failure
 from alpharidge_ai.validator.reputation_store import ReputationStore
+from alpharidge_ai.validator.reputation import emission as _rep_emission
 from alpharidge_ai.analyzer import setup_telegram_analyzer
 from alpharidge_ai.utils.cooldown import MinerCooldownTracker
 from alpharidge_ai.validator.verdict_payload import build_verdict_fields, collect_verdict_meta  # T5: verdict payload
@@ -436,6 +437,11 @@ class Validator(BaseValidatorNeuron):
         "classification_mismatch": "classification_mismatch",
         "missing_miner_classification": "missing_classification",
         "miner_needs_update": "needs_update",
+        # July-8 hardening reasons (V2 article path). Without these the rows were dropped
+        # here, silently emptying the buffer — the "0 penalty_detail rows since 07-07" bug.
+        "article_content_mismatch": "article_content_mismatch",
+        "validation_failed": "validation_failed",
+        "cloned_embeddings": "cloned_embeddings",
     }
 
     def _buffer_penalty_detail(self, rows):
@@ -468,6 +474,11 @@ class Validator(BaseValidatorNeuron):
                 failed_fields = [k for k, ok in field_results.items() if not ok] or None
                 preview = (disc.get("post_preview") or disc.get("message_preview")
                            or disc.get("article_preview"))
+                # Numeric behind the rejection, when the check produced one: composite
+                # (validation_failed, vs 0.65) or summary cosine (content mismatch, vs 0.40).
+                score = disc.get("composite_score")
+                if score is None:
+                    score = disc.get("summary_agreement")
                 rows.append({
                     "miner_hotkey": miner_hotkey,
                     "epoch": int(epoch),
@@ -478,6 +489,7 @@ class Validator(BaseValidatorNeuron):
                     "miner_values": disc.get("miner"),
                     "validator_values": disc.get("validator"),
                     "post_preview": preview,
+                    "score": float(score) if score is not None else None,
                 })
             except Exception as e:
                 bt.logging.debug(f"[PENALTY_DETAIL] row build skipped: {e}")
@@ -733,6 +745,7 @@ class Validator(BaseValidatorNeuron):
         adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
         if latency_s is not None:
             bt.logging.info(f"[LATPROBE] hotkey={miner_hotkey} latency_s={latency_s:.2f} n={len(sent_batch)}")
+            self._article_cooldown.record_latency(miner_hotkey, latency_s)  # display-only telemetry
         if len(article_batch) != len(sent_batch):
             bt.logging.warning(
                 f"[VALIDATION] Article batch size mismatch from miner {miner_hotkey} "
@@ -1065,9 +1078,26 @@ class Validator(BaseValidatorNeuron):
         ct = self._article_cooldown.snapshot()
         live_hks = {hotkeys[u] for u in self._liveness.live_uids(self.metagraph)}
         w_min = float(getattr(config, "DISPATCH_WINDOW_MIN", 1))
+        # Per-miner reputation emission multiplier (display-only): ~0 below the cliff, ~1
+        # cleared, up to ~1.3 with the bonus. None when reputation scoring is off.
+        rep_on = getattr(config, "REPUTATION_SCORING_ENABLED", False)
+        _em_args = (
+            getattr(config, "EMISSION_MIDPOINT", 0.59),
+            getattr(config, "EMISSION_GAIN", 100.0),
+            getattr(config, "EMISSION_BONUS_CEILING", 0.0),
+            getattr(config, "EMISSION_BONUS_START", 0.63),
+            getattr(config, "EMISSION_BONUS_FULL", 0.75),
+        )
         rows = []
         for hk in (set(ct) | live_hks):
             st = ct.get(hk, {})
+            emission_mult = None
+            if rep_on:
+                try:
+                    r = self._reputation_store.reputation(hk)
+                    emission_mult = round(float(_rep_emission(r, *_em_args)), 3)
+                except Exception:
+                    emission_mult = None
             rows.append({
                 "hotkey": hk,
                 "uid": int(hk_to_uid.get(hk, -1)),
@@ -1079,6 +1109,13 @@ class Validator(BaseValidatorNeuron):
                 "covered_epoch": int(st.get("covered_epoch", -1)),
                 "on_cooldown": bool(st.get("on_cooldown", False)),
                 "cooldown_remaining_s": int(st.get("cooldown_remaining_s", 0)),
+                # New display-only telemetry (the fields snapshot() carries but this dropped):
+                "consec_inv": int(st.get("consec_inv", 0)),
+                "consec_fail": int(st.get("consec_fail", 0)),
+                "inv_level": int(st.get("inv_level", 0)),
+                "last_faith": st.get("last_faith"),
+                "median_latency_s": st.get("median_latency_s"),
+                "emission_mult": emission_mult,
             })
         return rows
 

@@ -1569,6 +1569,7 @@ def validate_miner_article_intelligence_batch(
                         "resource_id": str(getattr(article, "id", "")),
                         "reason": "article_content_mismatch",
                         "article_preview": (getattr(src, "title", "") or "")[:100],
+                        "summary_agreement": agreement,   # display-only: how close vs the 0.40 floor
                     })
                     continue
 
@@ -1579,6 +1580,7 @@ def validate_miner_article_intelligence_batch(
         else:
             discrepancies.append({
                 "article_index": i, "reason": "validation_failed",
+                "resource_id": str(getattr(article, "id", "")),
                 "composite_score": composite, "details": details,
             })
 
