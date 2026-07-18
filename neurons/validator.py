@@ -29,6 +29,16 @@ from alpharidge_ai.analyzer import setup_news_analyzer
 from alpharidge_ai.analyzer import setup_article_intelligence_analyzer
 import alpharidge_ai.protocol
 from alpharidge_ai import config
+
+# Bound torch intra-op threads before any model runs: each validation worker otherwise spawns
+# torch's default (ncores) OpenMP threads, so the executor oversubscribes the box and validations
+# thrash instead of scaling. See TORCH_NUM_THREADS in config.
+if int(getattr(config, "TORCH_NUM_THREADS", 0) or 0) > 0:
+    try:
+        import torch
+        torch.set_num_threads(int(config.TORCH_NUM_THREADS))
+    except Exception as _e:  # torch absent / already fixed by the runtime
+        pass
 from alpharidge_ai.utils.api_models import TweetWithAuthor, CompletedTweetSubmission, TelegramMessageForScoring, CompletedTelegramMessageSubmission, TelegramMessageAnalysis, NewsArticleForScoring, CompletedNewsArticleSubmission
 from alpharidge_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch
 from alpharidge_ai.utils.uids import get_random_uids, get_alive_uids
@@ -323,39 +333,43 @@ class Validator(BaseValidatorNeuron):
 
         bt.logging.info(f"[VALIDATION] Received ArticleBatch with {len(synapse.article_batch)} article(s) from miner {miner_hotkey[:12]}..")
 
+        # Skip the offending article, don't bin the batch. Each guard below used to `return
+        # synapse`, so ONE collision discarded up to 32 articles of honest work and left them
+        # PROCESSING — holding that miner's only slot until the lease expired. Measured: 152/818
+        # batches (19%) dropped this way. `accepted` stays 1:1 with `sent_batch` so the
+        # size-mismatch penalty in _handle_article_miner_batch_response cannot misfire.
         sent_batch: List[NewsArticleForScoring] = []
+        accepted: List = []
+        skipped = 0
         for returned in synapse.article_batch:
             aid = str(getattr(returned, "id", ""))
             if not aid:
                 continue
             if aid in self._validating_article_ids:
-                bt.logging.info(
-                    f"[VALIDATION] Dropping ArticleBatch from {miner_hotkey[:12]}.. "
-                    f"article {aid} already being validated (replay blocked)"
-                )
-                return synapse
+                skipped += 1
+                continue
             try:
-                status = self._article_store.get_status(aid).value
-                if status != "Processing":
-                    bt.logging.info(
-                        f"[VALIDATION] Dropping ArticleBatch from {miner_hotkey[:12]}.. "
-                        f"article {aid} status={status} (expected Processing)"
-                    )
-                    return synapse
+                if self._article_store.get_status(aid).value != "Processing":
+                    skipped += 1
+                    continue
                 if self._article_store.get_hotkey(aid) != miner_hotkey:
-                    bt.logging.info(
-                        f"[VALIDATION] Dropping ArticleBatch from {miner_hotkey[:12]}.. "
-                        f"article {aid} hotkey mismatch"
-                    )
-                    return synapse
+                    skipped += 1
+                    continue
                 sent_batch.append(self._article_store.get_article(aid))
+                accepted.append(returned)
             except Exception:
-                return synapse
+                skipped += 1
+                continue
 
+        if skipped:
+            bt.logging.info(
+                f"[VALIDATION] {miner_hotkey[:12]}.. skipped {skipped}/{len(synapse.article_batch)} "
+                f"article(s), validating {len(sent_batch)}"
+            )
         if not sent_batch:
             return synapse
 
-        batch_aids = {str(getattr(r, "id", "")) for r in synapse.article_batch if getattr(r, "id", "")}
+        batch_aids = {str(getattr(r, "id", "")) for r in accepted if getattr(r, "id", "")}
         self._validating_article_ids.update(batch_aids)
 
         # Adaptive dispatch: capture the dispatch→push-back round-trip latency NOW,
@@ -370,12 +384,14 @@ class Validator(BaseValidatorNeuron):
         ]
         pushback_latency_s = (_now - min(_starts)) if _starts else None
 
-        for returned in synapse.article_batch:
+        # Accepted only: a skipped article is owned by someone else (hotkey mismatch) or is
+        # already being validated, so re-stamping its clock would extend the wrong lease.
+        for returned in accepted:
             aid = str(getattr(returned, "id", ""))
             if aid and aid in self._article_store._articles:
                 self._article_store._articles[aid].start_time = time.time()
 
-        batch_copy = copy.deepcopy(synapse.article_batch)
+        batch_copy = copy.deepcopy(accepted)
         sent_batch_copy = copy.deepcopy(sent_batch)
         sigs = dict(getattr(synapse, "miner_signatures", {}) or {})
         ncs = dict(getattr(synapse, "nonces", {}) or {})
@@ -1150,12 +1166,14 @@ class Validator(BaseValidatorNeuron):
 
         # Anti-monopoly cap, recomputed per tick: cap_pct of the validator's total
         # in-flight send budget (a stable, exogenous quantity — NOT the sum of
-        # windows, which would feed back and run away). Grows when concurrency is
-        # raised in Component 4. With the default concurrency of 8 this keeps windows
-        # at ~1 (coverage only) until concurrency is deliberately raised.
+        # windows, which would feed back and run away). The budget is its own knob
+        # (config.dispatch_window_budget) rather than the dispatch semaphore, so send
+        # concurrency can be raised for throughput without widening per-miner depth.
+        # Note the allocator floors this cap, so depth only opens up once it reaches
+        # 2.0 — below that every miner is coverage-only at one batch each.
         cap_pct = float(getattr(config, "DISPATCH_WINDOW_CAP_PCT", 0.15))
         w_min = float(getattr(config, "DISPATCH_WINDOW_MIN", 1))
-        budget = float(getattr(config, "VALIDATOR_MINER_QUERY_CONCURRENCY", 8))
+        budget = config.dispatch_window_budget()
         self._article_cooldown.set_cap(max(w_min, cap_pct * budget))
 
         epoch = self._current_epoch()

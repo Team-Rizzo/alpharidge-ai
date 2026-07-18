@@ -1,5 +1,7 @@
 """Unit tests for the adaptive-dispatch congestion window in MinerCooldownTracker."""
 
+import time
+
 import pytest
 
 import alpharidge_ai.config as config
@@ -193,3 +195,144 @@ def test_prune_clears_adaptive_state(adaptive_on):
     assert "drop" not in t._window
     assert "drop" not in t._covered_ep
     assert "keep" in t._window
+
+
+# ---- Faithfulness-based stub cooldown (2026-07-09) ----
+
+@pytest.fixture
+def faith_knobs(adaptive_on, monkeypatch):
+    monkeypatch.setattr(config, "DISPATCH_COOLDOWN_FAITHFULNESS_FLOOR", 0.5, raising=False)
+    monkeypatch.setattr(config, "DISPATCH_CONSEC_INVALID_N", 10, raising=False)
+    monkeypatch.setattr(config, "DISPATCH_INVALID_COOLDOWN_FIRST_S", 60, raising=False)
+    monkeypatch.setattr(config, "DISPATCH_INVALID_COOLDOWN_MAX_S", 600, raising=False)
+    monkeypatch.setattr(config, "DISPATCH_COOLDOWN_SHADOW_MODE", True, raising=False)
+    yield
+
+
+def test_grounded_batches_never_trip(faith_knobs):
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(30):
+        t.record_faithfulness("hk", 0.8)
+    assert "hk" not in t.get_cooled_down_hotkeys()
+    assert t._consec_inv.get("hk", 0) == 0
+
+
+def test_none_faith_is_noop(faith_knobs):
+    t = MinerCooldownTracker(adaptive=True)
+    t.record_faithfulness("hk", None)
+    assert "hk" not in t._consec_inv and "hk" not in t._last_faith
+
+
+def test_shadow_mode_counts_but_does_not_enforce(faith_knobs, monkeypatch):
+    monkeypatch.setattr(config, "DISPATCH_COOLDOWN_SHADOW_MODE", True, raising=False)
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(10):
+        t.record_faithfulness("hk", 0.30)
+    assert "hk" not in t.get_cooled_down_hotkeys()   # not enforced
+    assert "hk" not in t._inv_until                    # no park written in shadow
+    assert t._inv_level.get("hk") == 1                # but the trip was recorded
+
+
+def test_enforce_mode_parks_at_first_s(faith_knobs, monkeypatch):
+    monkeypatch.setattr(config, "DISPATCH_COOLDOWN_SHADOW_MODE", False, raising=False)
+    t = MinerCooldownTracker(adaptive=True)
+    for i in range(9):
+        t.record_faithfulness("hk", 0.30)
+        assert "hk" not in t.get_cooled_down_hotkeys()
+    t.record_faithfulness("hk", 0.30)                 # 10th
+    assert "hk" in t.get_cooled_down_hotkeys()
+    assert "hk" not in t._state                        # park lives in _inv_until, not _state
+    assert t._inv_level["hk"] == 1
+    assert 58 <= (t._inv_until["hk"] - time.time()) <= 61
+
+
+def test_enforce_escalation_survives_reprobe_ack(faith_knobs, monkeypatch):
+    monkeypatch.setattr(config, "DISPATCH_COOLDOWN_SHADOW_MODE", False, raising=False)
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(10):
+        t.record_faithfulness("hk", 0.30)             # trip 1 -> level 1
+    t.record_success("hk")                            # ack; must not reset level or park
+    for _ in range(10):
+        t.record_faithfulness("hk", 0.30)             # trip 2
+    assert t._inv_level["hk"] == 2
+    assert 598 <= (t._inv_until["hk"] - time.time()) <= 601
+
+
+def test_park_is_not_sprung_by_record_success(faith_knobs, monkeypatch):
+    """The durability fix: an enforced park lives in _inv_until, which record_success (the
+    ack-path / passing-batch call that del's _state) must NOT clear."""
+    monkeypatch.setattr(config, "DISPATCH_COOLDOWN_SHADOW_MODE", False, raising=False)
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(10):
+        t.record_faithfulness("hk", 0.30)
+    assert "hk" in t.get_cooled_down_hotkeys()
+    for _ in range(20):                               # concurrent in-flight acks / passing batches
+        t.record_success("hk")
+    assert "hk" in t.get_cooled_down_hotkeys()         # park still held
+    assert "hk" in t._inv_until
+
+
+def test_grounded_batch_self_heals_park(faith_knobs, monkeypatch):
+    monkeypatch.setattr(config, "DISPATCH_COOLDOWN_SHADOW_MODE", False, raising=False)
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(10):
+        t.record_faithfulness("hk", 0.30)
+    assert "hk" in t.get_cooled_down_hotkeys()
+    t.record_faithfulness("hk", 0.9)                  # a grounded in-flight batch returns
+    assert "hk" not in t.get_cooled_down_hotkeys()     # park cleared
+    assert "hk" not in t._inv_until and t._inv_level.get("hk", 0) == 0
+
+
+def test_expired_park_is_dispatchable(faith_knobs, monkeypatch):
+    monkeypatch.setattr(config, "DISPATCH_COOLDOWN_SHADOW_MODE", False, raising=False)
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(10):
+        t.record_faithfulness("hk", 0.30)
+    t._inv_until["hk"] = time.time() - 1              # simulate expiry
+    assert "hk" not in t.get_cooled_down_hotkeys()
+
+
+def test_grounded_batch_resets_streak(faith_knobs):
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(9):
+        t.record_faithfulness("hk", 0.30)
+    t.record_faithfulness("hk", 0.9)                  # grounded -> reset
+    assert t._consec_inv.get("hk") == 0 and t._inv_level.get("hk") == 0
+    for _ in range(9):
+        t.record_faithfulness("hk", 0.30)
+    assert "hk" not in t.get_cooled_down_hotkeys()    # needs a full fresh N
+
+
+def test_legit_dip_then_grounded_never_parks(faith_knobs):
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(50):
+        t.record_faithfulness("hk", 0.30)
+        t.record_faithfulness("hk", 0.8)
+    assert "hk" not in t.get_cooled_down_hotkeys()
+
+
+def test_faithfulness_floor_is_configurable(faith_knobs, monkeypatch):
+    monkeypatch.setattr(config, "DISPATCH_COOLDOWN_FAITHFULNESS_FLOOR", 0.7, raising=False)
+    t = MinerCooldownTracker(adaptive=True)
+    t.record_faithfulness("hk", 0.6)                  # 0.6 < 0.7 -> flagged
+    assert t._consec_inv.get("hk") == 1
+
+
+def test_prune_clears_faith_state(faith_knobs):
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(5):
+        t.record_faithfulness("drop", 0.30)
+    t.prune({"keep"})
+    assert "drop" not in t._consec_inv
+    assert "drop" not in t._inv_level
+    assert "drop" not in t._last_faith
+
+
+def test_snapshot_exposes_faith_fields(faith_knobs):
+    t = MinerCooldownTracker(adaptive=True)
+    for _ in range(4):
+        t.record_faithfulness("hk", 0.30)
+    snap = t.snapshot()
+    assert snap["hk"]["consec_inv"] == 4
+    assert "inv_level" in snap["hk"]
+    assert snap["hk"]["last_faith"] == 0.3

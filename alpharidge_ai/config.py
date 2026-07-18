@@ -106,6 +106,10 @@ VALIDATOR_MAX_PENDING_MINER_TASKS = int(os.getenv("VALIDATOR_MAX_PENDING_MINER_T
 # Validation thread pool: controls how many concurrent LLM-based validations run.
 # Lower values reduce LLM API pressure at the cost of slower validation throughput.
 VALIDATION_MAX_WORKERS = int(os.getenv("VALIDATION_MAX_WORKERS", "8"))
+# Torch intra-op threads per validation worker. Torch defaults to ncores (48 here), so
+# VALIDATION_MAX_WORKERS=16 puts 16*48=768 threads on 96 cores (8x oversubscription).
+# 0 = leave torch's default.
+TORCH_NUM_THREADS = int(os.getenv("TORCH_NUM_THREADS", "0"))
 
 # LLM result cache: avoids redundant API calls for identical post text.
 LLM_CACHE_TTL = float(os.getenv("LLM_CACHE_TTL", "300"))
@@ -200,6 +204,16 @@ def _as_bool(v) -> bool:
 ADAPTIVE_DISPATCH_ENABLED = _as_bool(os.getenv("ADAPTIVE_DISPATCH_ENABLED", "false"))
 DISPATCH_WINDOW_MIN = int(os.getenv("DISPATCH_WINDOW_MIN", "1"))
 DISPATCH_WINDOW_CAP_PCT = float(os.getenv("DISPATCH_WINDOW_CAP_PCT", "0.15"))
+# Budget DISPATCH_WINDOW_CAP_PCT is a percentage of. Was hardwired to
+# VALIDATOR_MINER_QUERY_CONCURRENCY, conflating the send semaphore (an IO limit) with how much
+# work one miner may hold (which drives validation load). 0 = track the semaphore (pre-2026-07-17).
+DISPATCH_WINDOW_BUDGET = float(os.getenv("DISPATCH_WINDOW_BUDGET", "0"))
+
+
+def dispatch_window_budget() -> float:
+    """Send budget the per-miner window cap derives from. Reads globals per call so
+    remote-config / OVERRIDE_ apply without a restart; 0 falls back to the semaphore."""
+    return float(DISPATCH_WINDOW_BUDGET or VALIDATOR_MINER_QUERY_CONCURRENCY)
 DISPATCH_WINDOW_GROW = float(os.getenv("DISPATCH_WINDOW_GROW", "1.0"))
 DISPATCH_WINDOW_SHRINK = float(os.getenv("DISPATCH_WINDOW_SHRINK", "0.5"))
 DISPATCH_LATE_FRACTION = float(os.getenv("DISPATCH_LATE_FRACTION", "0.6"))
@@ -207,6 +221,11 @@ DISPATCH_LATE_FRACTION = float(os.getenv("DISPATCH_LATE_FRACTION", "0.6"))
 # built from that ping, so a shorter ack window systematically fails alive-but-slow
 # miners. (TODO: share one constant with get_alive_uids so they can't drift.)
 DISPATCH_ACK_TIMEOUT_S = float(os.getenv("DISPATCH_ACK_TIMEOUT_S", "12.0"))
+# How long a dispatched article may sit in PROCESSING before it is reclaimed. Both readers
+# (article_store.get_timeouts, cooldown._late_threshold_s) used a hardcoded 900 fallback and it
+# was never declared here. Doubly-loaded: also scales the late-growth threshold (0.6 * TTL),
+# inert only while the window cap floors to 1.
+SCORING_LEASE_TTL_SECONDS = float(os.getenv("SCORING_LEASE_TTL_SECONDS", "900"))
 DISPATCH_CHRONIC_TIMEOUT_N = int(os.getenv("DISPATCH_CHRONIC_TIMEOUT_N", "5"))
 LIVENESS_TTL_S = int(os.getenv("LIVENESS_TTL_S", "120"))
 LIVENESS_SWEEP_INTERVAL_S = int(os.getenv("LIVENESS_SWEEP_INTERVAL_S", "60"))
@@ -286,10 +305,12 @@ _REMOTE_CONFIG_KEYS = {
     "ADAPTIVE_DISPATCH_ENABLED":  (_as_bool, "ADAPTIVE_DISPATCH_ENABLED"),
     "DISPATCH_WINDOW_MIN":        (int,   "DISPATCH_WINDOW_MIN"),
     "DISPATCH_WINDOW_CAP_PCT":    (float, "DISPATCH_WINDOW_CAP_PCT"),
+    "DISPATCH_WINDOW_BUDGET":     (float, "DISPATCH_WINDOW_BUDGET"),
     "DISPATCH_WINDOW_GROW":       (float, "DISPATCH_WINDOW_GROW"),
     "DISPATCH_WINDOW_SHRINK":     (float, "DISPATCH_WINDOW_SHRINK"),
     "DISPATCH_LATE_FRACTION":     (float, "DISPATCH_LATE_FRACTION"),
     "DISPATCH_ACK_TIMEOUT_S":     (float, "DISPATCH_ACK_TIMEOUT_S"),
+    "SCORING_LEASE_TTL_SECONDS":  (float, "SCORING_LEASE_TTL_SECONDS"),
     "DISPATCH_CHRONIC_TIMEOUT_N": (int,   "DISPATCH_CHRONIC_TIMEOUT_N"),
     "LIVENESS_TTL_S":             (int,   "LIVENESS_TTL_S"),
     "LIVENESS_SWEEP_INTERVAL_S":  (int,   "LIVENESS_SWEEP_INTERVAL_S"),

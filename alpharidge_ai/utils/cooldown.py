@@ -99,7 +99,7 @@ class MinerCooldownTracker:
     def _effective_cap(self) -> float:
         if self._cap is not None:
             return self._cap
-        budget = float(_cfg("VALIDATOR_MINER_QUERY_CONCURRENCY", 8))
+        budget = float(_cfg("DISPATCH_WINDOW_BUDGET", 0) or _cfg("VALIDATOR_MINER_QUERY_CONCURRENCY", 8))
         return max(self._window_min(), float(_cfg("DISPATCH_WINDOW_CAP_PCT", 0.15)) * budget)
 
     def set_cap(self, cap: float) -> None:

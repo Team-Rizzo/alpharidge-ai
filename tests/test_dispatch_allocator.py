@@ -111,6 +111,26 @@ def test_batch_indices_are_unique_and_in_range():
     assert all(0 <= bi < n for bi in idxs)
 
 
+def test_coverage_order_does_not_track_uid():
+    # Fewer batches than live miners: only the first-served get coverage each tick.
+    # Across many ticks the served set must spread over all UIDs, not favour low ones.
+    import random
+
+    t = make_tracker(HOTKEYS)
+    live = [0, 1, 2, 3, 4]
+    served = {uid: 0 for uid in live}
+    rng = random.Random(1234)
+    for _ in range(2000):
+        assignments = coverage_depth_select(
+            live, HOTKEYS, t, epoch=1, n_batches=2, rng=rng
+        )
+        for uid, _ in assignments:
+            served[uid] += 1
+    # Every UID served a similar share (~2/5 of ticks); high UIDs not starved.
+    counts = sorted(served.values())
+    assert counts[0] > counts[-1] * 0.7  # tightest-to-widest within 30%
+
+
 def test_no_live_miners_returns_empty():
     t = make_tracker(HOTKEYS)
     assert coverage_depth_select([], HOTKEYS, t, epoch=1, n_batches=5) == []
