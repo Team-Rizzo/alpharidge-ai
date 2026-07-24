@@ -48,6 +48,20 @@ class Miner(BaseMinerNeuron):
         except Exception as e:
             bt.logging.warning(f"[Miner] ArticleIntelligence analyzer init failed, falling back to V1: {e}")
             self.article_intel_analyzer = None
+
+        # Article triage (schema v3): cheap relevance pass before deep analysis.
+        # Keep OFF until validators run a triage-aware release — triage-only
+        # responses fail v2 validation as incomplete on older validators.
+        self.triage_stage = None
+        from alpharidge_ai import config as ar_config
+        if getattr(ar_config, "MINER_TRIAGE_ENABLED", False):
+            try:
+                from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
+                from alpharidge_ai.analyzer.triage_stage import TriageStage
+                self.triage_stage = TriageStage(AssetExtractor())
+                bt.logging.info("[Miner] Article triage stage enabled")
+            except Exception as e:
+                bt.logging.warning(f"[Miner] Triage stage init failed, triage disabled: {e}")
         bt.logging.info("[Miner] Analyzer initialized")
         # NOTE: we intentionally do NOT reuse a single bt.Dendrite across threads/event-loops.
         # Miner responses are sent back to validators from a background thread with its own event loop.
@@ -435,6 +449,22 @@ class Miner(BaseMinerNeuron):
                     bt.logging.warning(f"[Miner] Skipping article {article.id} - no title")
                     continue
 
+                # Triage (schema v3): label every article; deep-analyze only
+                # relevant ones. Irrelevant/borderline articles return just the
+                # triage claim + proof-of-read, both auditable by the validator.
+                triage_rec = proof = None
+                if self.triage_stage is not None:
+                    triage_rec, proof, _ = self.triage_stage.evaluate(
+                        article.title, article.content or "")
+                    if triage_rec["label"] != "relevant":
+                        article.analysis = NewsArticleAnalysisBase(
+                            sentiment="neutral",
+                            analysisData={"schema_version": 3,
+                                          "triage": triage_rec,
+                                          "proof_of_read": proof},
+                        )
+                        continue
+
                 # V2: Full ArticleIntelligence analysis
                 if self.article_intel_analyzer is not None:
                     intel = self.article_intel_analyzer.analyze(
@@ -449,6 +479,10 @@ class Miner(BaseMinerNeuron):
                         miner_hotkey=self.wallet.hotkey.ss58_address if self.wallet else None,
                     )
                     if intel is not None:
+                        analysis_blob = intel.model_dump()
+                        if triage_rec is not None:
+                            analysis_blob["triage"] = triage_rec
+                            analysis_blob["proof_of_read"] = proof
                         article.analysis = NewsArticleAnalysisBase(
                             sentiment=intel.overall_sentiment.value,
                             sectorId=intel.topic_signature.primary_sector_id,
@@ -483,7 +517,7 @@ class Miner(BaseMinerNeuron):
                             topicSignature=intel.topic_signature.model_dump(),
                             textStats=intel.text_stats.model_dump(),
                             inferredImpacts=[i.model_dump() for i in intel.inferred_impacts] if intel.inferred_impacts else None,
-                            analysisData=intel.model_dump(),
+                            analysisData=analysis_blob,
                         )
                         bt.logging.info(f"[Miner] V2 analysis complete for article {article.id}: "
                                         f"{len(intel.assets)} assets, {len(intel.entities)} entities, "

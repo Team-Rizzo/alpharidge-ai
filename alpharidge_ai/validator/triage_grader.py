@@ -59,6 +59,7 @@ class TriageGradeResult:
     relevant_ids: List[int] = field(default_factory=list)     # claimed relevant, feed deep validation
     borderline_ids: List[int] = field(default_factory=list)
     retire_candidate_ids: List[int] = field(default_factory=list)
+    canary_ids: List[int] = field(default_factory=list)
     v2_grace: bool = False
 
     def observations(self, cfg: TriageConfig) -> List[Tuple[float, float]]:
@@ -97,7 +98,7 @@ def grade_batch(
     det_relevant(item): deterministic gazetteer check (R1) on the validator's copy.
     llm_relevant(item): audit-LLM relevance verdict; None = unavailable (no event).
     """
-    res = TriageGradeResult()
+    res = TriageGradeResult(canary_ids=list(canary_labels))
 
     records: Dict[int, Optional[dict]] = {}
     errors: Dict[int, Optional[str]] = {}
@@ -156,24 +157,28 @@ def grade_batch(
         elif kind == "neg" and labels[aid] == LABEL_RELEVANT:
             res.events.append(TriageEvent("soft", "canary_neg_flagged", aid))
 
-    # 3. random audit of claimed-irrelevant (non-canary, proof-passing)
+    # 3. audit claimed-irrelevant (non-canary, proof-passing). The gazetteer
+    # check is pure CPU, so EVERY irrelevant claim gets the deterministic
+    # audit — hiding asset-bearing news is impossible, not just risky. The
+    # audit-LLM (a real model call) only sees a random sample.
     auditable = [
         it for it in items
         if labels[it["article_id"]] == LABEL_IRRELEVANT
         and it["article_id"] not in canary_labels
         and it["article_id"] not in res.proof_failures
     ]
-    audited_ids = set()
-    for it in rng.sample(auditable, min(cfg.audit_irrelevant_n, len(auditable))):
-        aid = it["article_id"]
-        audited_ids.add(aid)
+    det_clean = []
+    for it in auditable:
         if det_relevant(it):
-            res.events.append(TriageEvent("hard", "false_negative_deterministic", aid))
-            continue
-        verdict = llm_relevant(it)
-        if verdict is True:
+            res.events.append(TriageEvent(
+                "hard", "false_negative_deterministic", it["article_id"]))
+        else:
+            det_clean.append(it)
+    for it in rng.sample(det_clean, min(cfg.audit_irrelevant_n, len(det_clean))):
+        if llm_relevant(it) is True:
             severity = "hard" if cfg.hard_llm_verdicts else "soft"
-            res.events.append(TriageEvent(severity, "false_negative_llm", aid))
+            res.events.append(TriageEvent(severity, "false_negative_llm",
+                                          it["article_id"]))
 
     contradicted = {e.article_id for e in res.events}
     res.retire_candidate_ids = [

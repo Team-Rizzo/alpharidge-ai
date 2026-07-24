@@ -108,6 +108,21 @@ def extract_triage(analysis_data: Optional[dict]) -> Tuple[Optional[dict], Optio
     return rec, None
 
 
+def gazetteer_assets(asset_extractor, title: str, content: str) -> list:
+    """The deterministic R1 check, shared verbatim by miner triage and
+    validator audits so the two sides can never diverge on it.
+
+    Language detection feeds the extractor's ambiguity filtering, so it must
+    use the same deterministic detector and the same text slice on both sides.
+    """
+    from alpharidge_ai.analyzer.language_detector import detect_language
+
+    title = title or ""
+    content = content or ""
+    lang = detect_language(f"{title}\n{content[:2000]}").code
+    return asset_extractor.extract_assets(title, content, language=lang)
+
+
 def deterministic_relevant(assets: Optional[list]) -> bool:
     """R1 deterministic branch: any gazetteer/keyword-resolved asset present.
 

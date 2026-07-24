@@ -1477,6 +1477,18 @@ def _summary_agreement(record_intel, reference_intel):
         return None
 
 
+def _reference_relevant(intel) -> bool:
+    """Triage-rubric relevance of an article per the validator's own reference
+    intel: resolvable asset (R1) or economic data / macro-monetary sector (R2)."""
+    if getattr(intel, "assets", None):
+        return True
+    if getattr(intel, "economic_data", None):
+        return True
+    sector = getattr(getattr(intel, "topic_signature", None),
+                     "primary_sector_symbol", None)
+    return sector in ("MACRO", "MONETARY")
+
+
 def validate_miner_article_intelligence_batch(
     miner_batch: List[NewsArticleForScoring],
     analyzer,
@@ -1525,6 +1537,8 @@ def validate_miner_article_intelligence_batch(
     discrepancies = []
     observations = []  # (article_id, graded, weight) when graded_scorer is set
     faithfulness_scores = []  # reference-free faithfulness per sampled article
+    reference_relevance = []  # (article_id, bool) — rubric relevance per the
+    # validator's own reference intel; feeds triage FP events + negative canaries
 
     for i, article in enumerate(sampled):
         miner_analysis = article.analysis
@@ -1558,6 +1572,12 @@ def validate_miner_article_intelligence_batch(
         if validator_intel is None:
             discrepancies.append({"article_index": i, "reason": "validator_analysis_failed"})
             continue
+
+        try:
+            reference_relevance.append(
+                (int(article.id), _reference_relevant(validator_intel)))
+        except Exception:
+            pass
 
         if ref is not None:
             agreement = _summary_agreement(miner_intel, validator_intel)
@@ -1662,6 +1682,7 @@ def validate_miner_article_intelligence_batch(
         "avg_composite_score": round(avg_composite, 4), "discrepancies": discrepancies,
         "observations": observations,
         "faithfulness_scores": faithfulness_scores,
+        "reference_relevance": reference_relevance,
     }
 
     if batch_valid:
