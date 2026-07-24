@@ -144,7 +144,7 @@ class TestEndToEnd:
                  article(3, MACRO_ARTICLE), article(4, JUNK_ARTICLE)]
         returned = mine(stage, batch)
 
-        res = v._grade_triage(returned, "hk1")
+        res = v._grade_triage(returned, batch, "hk1")
         assert res is not None and not res.v2_grace
         assert not res.events and not res.proof_failures
         assert set(res.relevant_ids) == {1, 3}
@@ -166,7 +166,7 @@ class TestEndToEnd:
                  article(3, JUNK_ARTICLE)]
         returned = mine(stage, batch, strategy="lazy")
 
-        res = v._grade_triage(returned, "hk2")
+        res = v._grade_triage(returned, batch, "hk2")
         codes = [(e.kind, e.code) for e in res.events]
         assert ("hard", "false_negative_deterministic") in codes
 
@@ -183,7 +183,7 @@ class TestEndToEnd:
         v = HarnessValidator()
         batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE)]
         returned = mine(stage, batch, strategy="no_read")
-        res = v._grade_triage(returned, "hk3")
+        res = v._grade_triage(returned, batch, "hk3")
         assert set(res.proof_failures) == {1, 2}
         v._record_triage_observations("hk3", res, returned)
         assert v.observations and all(s == 0.0 for _, s, _ in v.observations)
@@ -193,7 +193,7 @@ class TestEndToEnd:
         batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE),
                  article(3, JUNK_ARTICLE)]
         returned = mine(stage, batch, strategy="spam")
-        res = v._grade_triage(returned, "hk4")
+        res = v._grade_triage(returned, batch, "hk4")
         assert set(res.relevant_ids) == {1, 2, 3}
         # Reference analysis refutes the two junk articles.
         v._apply_triage_outcome(returned, "hk4", res, fp_ids={2, 3})
@@ -204,14 +204,96 @@ class TestEndToEnd:
         batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE)]
         legacy = [a.model_copy(update={"analysis": types.SimpleNamespace(
             analysis_data={"schema_version": 2, "title": a.title})}) for a in batch]
-        res = v._grade_triage(legacy, "hk5")
+        res = v._grade_triage(legacy, batch, "hk5")
         assert res.v2_grace and not res.events
 
     def test_triage_disabled_is_inert(self, stage, monkeypatch):
         monkeypatch.setattr(config, "TRIAGE_ENABLED", False, raising=False)
         v = HarnessValidator()
         returned = mine(stage, [article(1, ASSET_ARTICLE)])
-        assert v._grade_triage(returned, "hk6") is None
+        assert v._grade_triage(returned, [article(1, ASSET_ARTICLE)], "hk6") is None
+
+
+class TestExploitResistance:
+    """Regressions for exploits found in adversarial review of this branch."""
+
+    def test_forged_article_text_cannot_launder_an_asset_article(self, stage, triage_on):
+        # Miner echoes back junk text under the real article's id, with a
+        # proof-of-read computed over its own forgery. Grading must audit OUR
+        # copy, so the gazetteer still sees the asset and the proof still fails.
+        v = HarnessValidator()
+        sent = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE),
+                article(3, JUNK_ARTICLE)]
+        forged = article(1, JUNK_ARTICLE)
+        returned = mine(stage, [forged] + sent[1:], strategy="lazy")
+
+        res = v._grade_triage(returned, sent, "evil")
+        assert 1 in res.proof_failures
+        assert 1 not in res.retire_candidate_ids
+
+        # Even with a valid proof, the gazetteer audit runs on our copy.
+        from alpharidge_ai.triage import build_proof_of_read, build_triage_record
+        good_proof = build_proof_of_read(*ASSET_ARTICLE)
+        returned[0] = forged.model_copy(update={"analysis": types.SimpleNamespace(
+            analysis_data={"schema_version": 3,
+                           "triage": build_triage_record("irrelevant", "non_economic"),
+                           "proof_of_read": good_proof})})
+        res2 = v._grade_triage(returned, sent, "evil")
+        assert not res2.proof_failures
+        assert ("hard", "false_negative_deterministic") in [
+            (e.kind, e.code) for e in res2.events]
+
+    def test_borderline_is_not_a_free_pass_on_deterministic_assets(self, stage, triage_on):
+        from alpharidge_ai.triage import build_proof_of_read, build_triage_record
+        v = HarnessValidator()
+        batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE)]
+        returned = [a.model_copy(update={"analysis": types.SimpleNamespace(
+            analysis_data={"schema_version": 3,
+                           "triage": build_triage_record("borderline"),
+                           "proof_of_read": build_proof_of_read(a.title, a.content)})})
+            for a in batch]
+        res = v._grade_triage(returned, batch, "hk")
+        assert ("hard", "false_negative_deterministic") in [
+            (e.kind, e.code) for e in res.events]
+        # Borderline never retires an article either.
+        assert not res.retire_candidate_ids
+
+    def test_borderline_does_not_evade_a_positive_canary(self, stage, triage_on):
+        from alpharidge_ai.triage import build_proof_of_read, build_triage_record
+        v = HarnessValidator()
+        canary = article(10, ASSET_ARTICLE)
+        v._canary_pool.add(10, "pos", deterministic=True)
+        v._canary_articles[10] = canary
+        returned = [canary.model_copy(update={"analysis": types.SimpleNamespace(
+            analysis_data={"schema_version": 3,
+                           "triage": build_triage_record("borderline"),
+                           "proof_of_read": build_proof_of_read(*ASSET_ARTICLE)})})]
+        res = v._grade_triage(returned, [canary], "hk")
+        assert ("hard", "canary_pos_missed") in [(e.kind, e.code) for e in res.events]
+
+    def test_adverse_finding_survives_merge_with_quality_observation(self, stage, triage_on):
+        # The reputation store keeps only the first observation per article id,
+        # so a favourable quality score must not mask a triage finding on it.
+        v = HarnessValidator()
+        batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE)]
+        returned = mine(stage, batch, strategy="spam")
+        res = v._grade_triage(returned, batch, "hk")
+        res.events.append(validator_module.fp_soft_event(2))
+        v._record_triage_observations("hk", res, returned,
+                                      graded_observations=[(2, 0.9, 2.0)])
+        assert dict((aid, s) for aid, s, _ in v.observations)[2] == 0.0
+        assert len([o for o in v.observations if o[0] == 2]) == 1
+
+    def test_canary_readd_does_not_refresh_ttl_or_exposures(self):
+        cfg = TriageConfig(canary_max_exposures=2)
+        clock = {"t": 0.0}
+        pool = CanaryPool(cfg, now=lambda: clock["t"])
+        pool.add(5, "pos", deterministic=True)
+        rng = random.Random(0)
+        pool.draw("pos", rng)
+        pool.add(5, "pos", deterministic=True)   # recirculated through the pool
+        pool.draw("pos", rng)
+        assert pool.draw("pos", rng) is None     # exposure cap still reachable
 
 
 @pytest.fixture
@@ -244,7 +326,7 @@ class TestCanaryFlow:
         v._inject_canaries(batch, random.Random(0))
         returned = mine(stage, batch, strategy="lazy")
 
-        res = v._grade_triage(returned, "hk7")
+        res = v._grade_triage(returned, batch, "hk7")
         assert ("hard", "canary_pos_missed") in [(e.kind, e.code) for e in res.events]
         # Canaries are graded only — never re-stored or re-paid.
         v._apply_triage_outcome(returned, "hk7", res, fp_ids=set())
@@ -258,5 +340,5 @@ class TestCanaryFlow:
         batch = [article(1, JUNK_ARTICLE), article(2, JUNK_ARTICLE),
                  article(3, JUNK_ARTICLE)]
         v._inject_canaries(batch, random.Random(0))
-        res = v._grade_triage(mine(stage, batch), "hk8")
+        res = v._grade_triage(mine(stage, batch), batch, "hk8")
         assert not res.events

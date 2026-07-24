@@ -1477,16 +1477,30 @@ def _summary_agreement(record_intel, reference_intel):
         return None
 
 
-def _reference_relevant(intel) -> bool:
-    """Triage-rubric relevance of an article per the validator's own reference
-    intel: resolvable asset (R1) or economic data / macro-monetary sector (R2)."""
-    if getattr(intel, "assets", None):
-        return True
-    if getattr(intel, "economic_data", None):
-        return True
+# Sectors that carry plausible market transmission under rubric R2 even when no
+# asset resolves and no economic release is extracted — tariffs, sanctions and
+# supply shocks classify here. An article in one of these is never treated as
+# clearly irrelevant, so honest miners keeping it are not charged for it and it
+# never becomes a negative canary.
+_MARKET_ADJACENT_SECTORS = frozenset({
+    "MACRO", "MONETARY", "MARKET", "EQUITIES", "COMMODITIES", "CRYPTO",
+    "GEOPOLITICS", "TECH", "ENERGY", "RATES",
+})
+
+
+def _reference_clearly_irrelevant(intel) -> bool:
+    """True only when the validator's own reference analysis says the article is
+    unambiguously outside the rubric.
+
+    Deliberately one-sided: this drives false-positive charges and negative
+    canary selection, both of which punish miners, so anything defensible —
+    any asset, any economic datum, any market-adjacent sector — returns False.
+    """
+    if getattr(intel, "assets", None) or getattr(intel, "economic_data", None):
+        return False
     sector = getattr(getattr(intel, "topic_signature", None),
                      "primary_sector_symbol", None)
-    return sector in ("MACRO", "MONETARY")
+    return sector not in _MARKET_ADJACENT_SECTORS
 
 
 def validate_miner_article_intelligence_batch(
@@ -1537,8 +1551,9 @@ def validate_miner_article_intelligence_batch(
     discrepancies = []
     observations = []  # (article_id, graded, weight) when graded_scorer is set
     faithfulness_scores = []  # reference-free faithfulness per sampled article
-    reference_relevance = []  # (article_id, bool) — rubric relevance per the
-    # validator's own reference intel; feeds triage FP events + negative canaries
+    reference_irrelevant = []  # (article_id, bool) — True when our own reference
+    # says the article is clearly outside the rubric; feeds triage FP events
+    # and negative-canary selection
 
     for i, article in enumerate(sampled):
         miner_analysis = article.analysis
@@ -1574,8 +1589,8 @@ def validate_miner_article_intelligence_batch(
             continue
 
         try:
-            reference_relevance.append(
-                (int(article.id), _reference_relevant(validator_intel)))
+            reference_irrelevant.append(
+                (int(article.id), _reference_clearly_irrelevant(validator_intel)))
         except Exception:
             pass
 
@@ -1682,7 +1697,7 @@ def validate_miner_article_intelligence_batch(
         "avg_composite_score": round(avg_composite, 4), "discrepancies": discrepancies,
         "observations": observations,
         "faithfulness_scores": faithfulness_scores,
-        "reference_relevance": reference_relevance,
+        "reference_irrelevant": reference_irrelevant,
     }
 
     if batch_valid:

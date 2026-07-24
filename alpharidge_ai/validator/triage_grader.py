@@ -153,34 +153,38 @@ def grade_batch(
         elif labels[aid] == LABEL_BORDERLINE:
             res.borderline_ids.append(aid)
 
-    # 2. canary checks
+    # 2. canary checks. "Not relevant" covers borderline as well as irrelevant:
+    # borderline exists to excuse genuinely ambiguous judgement calls, not to
+    # provide a label that no audit can ever touch.
     for it in items:
         aid = it["article_id"]
         if aid not in canary_labels or aid in res.proof_failures:
             continue
         kind, deterministic = canary_labels[aid]
-        if kind == "pos" and labels[aid] == LABEL_IRRELEVANT:
+        if kind == "pos" and labels[aid] != LABEL_RELEVANT:
             severity = "hard" if deterministic else "soft"
             res.events.append(TriageEvent(severity, "canary_pos_missed", aid))
         elif kind == "neg" and labels[aid] == LABEL_RELEVANT:
             res.events.append(TriageEvent("soft", "canary_neg_flagged", aid))
 
-    # 3. audit claimed-irrelevant (non-canary, proof-passing). The gazetteer
-    # check is pure CPU, so EVERY irrelevant claim gets the deterministic
-    # audit — hiding asset-bearing news is impossible, not just risky. The
-    # audit-LLM (a real model call) only sees a random sample.
-    auditable = [
+    # 3. audit every not-relevant claim. The gazetteer check is pure CPU, so it
+    # runs on ALL of them (borderline included) — hiding an asset-bearing
+    # article behind either label is impossible, not merely risky. Only the
+    # audit-LLM, which costs a model call and can be wrong, is sampled, and it
+    # judges outright irrelevant claims only: an honest borderline call should
+    # never be punished on an LLM opinion alone.
+    not_relevant = [
         it for it in items
-        if labels[it["article_id"]] == LABEL_IRRELEVANT
+        if labels[it["article_id"]] in (LABEL_IRRELEVANT, LABEL_BORDERLINE)
         and it["article_id"] not in canary_labels
         and it["article_id"] not in res.proof_failures
     ]
     det_clean = []
-    for it in auditable:
+    for it in not_relevant:
         if det_relevant(it):
             res.events.append(TriageEvent(
                 "hard", "false_negative_deterministic", it["article_id"]))
-        else:
+        elif labels[it["article_id"]] == LABEL_IRRELEVANT:
             det_clean.append(it)
     for it in rng.sample(det_clean, min(cfg.audit_irrelevant_n, len(det_clean))):
         if llm_relevant(it) is True:
@@ -190,8 +194,9 @@ def grade_batch(
 
     contradicted = {e.article_id for e in res.events}
     res.retire_candidate_ids = [
-        it["article_id"] for it in auditable
+        it["article_id"] for it in not_relevant
         if it["article_id"] not in contradicted
+        and labels[it["article_id"]] == LABEL_IRRELEVANT
     ] + [
         it["article_id"] for it in items
         if labels[it["article_id"]] == LABEL_IRRELEVANT
@@ -227,7 +232,14 @@ class CanaryPool:
                 self._entries = {}
 
     def add(self, article_id: int, kind: str, deterministic: bool) -> None:
+        """Register a canary. Re-adding a known id is a no-op: graded canaries
+        are returned to the article pool and will be seen again, and refreshing
+        their birth time or exposure count would make the TTL and exposure caps
+        unreachable — a fixed set of ids would stay canaries forever and become
+        learnable."""
         assert kind in ("pos", "neg")
+        if article_id in self._entries:
+            return
         self._entries[article_id] = {
             "kind": kind, "deterministic": bool(deterministic),
             "born": self._now(), "exposures": 0,

@@ -52,9 +52,12 @@ class Miner(BaseMinerNeuron):
         # Article triage (schema v3): cheap relevance pass before deep analysis.
         # Keep OFF until validators run a triage-aware release — triage-only
         # responses fail v2 validation as incomplete on older validators.
+        # Requires the V2 analyzer: the V1 fallback emits no analysis_data, so a
+        # triage claim could not ride along and the batch would look malformed.
         self.triage_stage = None
         from alpharidge_ai import config as ar_config
-        if getattr(ar_config, "MINER_TRIAGE_ENABLED", False):
+        if (getattr(ar_config, "MINER_TRIAGE_ENABLED", False)
+                and self.article_intel_analyzer is not None):
             try:
                 from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
                 from alpharidge_ai.analyzer.triage_stage import TriageStage

@@ -124,11 +124,15 @@ def gazetteer_assets(asset_extractor, title: str, content: str) -> list:
 
 
 def deterministic_relevant(assets: Optional[list]) -> bool:
-    """R1 deterministic branch: any gazetteer/keyword-resolved asset present.
+    """R1 deterministic branch: any gazetteer-resolved asset present.
 
-    `assets` is the extractor output (list of dicts with `resolved_via`).
+    Accepts either AssetMatch objects (what `gazetteer_assets` returns) or the
+    serialized dicts carried in analysis_data. Extractor output is gazetteer
+    matching by construction, so an object with no explicit source counts.
     """
     for a in assets or []:
-        if isinstance(a, dict) and a.get("resolved_via") in DETERMINISTIC_ASSET_SOURCES:
+        source = (a.get("resolved_via") if isinstance(a, dict)
+                  else getattr(a, "resolved_via", "keyword"))
+        if source in DETERMINISTIC_ASSET_SOURCES:
             return True
     return False
