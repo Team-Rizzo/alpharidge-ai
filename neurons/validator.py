@@ -174,6 +174,7 @@ class Validator(BaseValidatorNeuron):
         self._canary_articles: dict = {}
         self._triage_extractor = None  # lazy AssetExtractor for audits
         self._triage_auditor = None    # lazy audit-LLM client
+        self._triage_stage = None      # lazy reference TriageStage (canary/FP veto)
 
     def resync_metagraph(self):
         super().resync_metagraph()
@@ -785,25 +786,42 @@ class Validator(BaseValidatorNeuron):
         return auditor.relevance_verdict(item.get("title") or "", item.get("body") or "")
 
     def _confirm_clearly_irrelevant(self, aid_flags, sent_by_id) -> set:
-        """Cross-check the reference LLM's 'clearly irrelevant' verdicts against
-        the deterministic gazetteer before they mint negative canaries or
-        false-positive charges. The reference model can miss an asset the
-        gazetteer resolves; without this check we mint a canary that contradicts
-        our own deterministic audit and then soft-punish every honest
-        gazetteer-based miner for disagreeing with it (observed live 2026-07-24:
-        market-report spam carrying a real ticker). Blocking (gazetteer-bound) —
-        run in the validation executor."""
+        """Confirm the reference LLM's 'clearly irrelevant' verdicts before they
+        mint negative canaries or false-positive charges: the article must ALSO
+        be labeled irrelevant by our own published reference TriageStage.
+
+        Two live incidents (2026-07-24) drove this shape. First the reference
+        model missed a ticker the gazetteer resolves; a gazetteer veto fixed
+        that. Then it missed foreign-listed equities the gazetteer doesn't
+        cover either, and honest miners were soft-punished again for being
+        right. Requiring agreement from the shipped TriageStage (which contains
+        the gazetteer as its R1 branch) makes it structurally impossible to
+        punish a miner for agreeing with our own reference implementation —
+        ground truth is only minted where two independent systems concur.
+        Blocking (gazetteer + regex over content) — run in the validation
+        executor."""
         confirmed = set()
         for aid, flag in aid_flags:
             if not flag:
                 continue
             aid = int(aid)
             art = sent_by_id.get(aid)
-            if art is not None and self._det_relevant_item(
-                    {"title": art.title, "body": art.content or ""}):
+            if art is None:
                 continue
-            confirmed.add(aid)
+            rec, _, _ = self._get_triage_stage().evaluate(
+                art.title or "", art.content or "")
+            if rec["label"] == "irrelevant":
+                confirmed.add(aid)
         return confirmed
+
+    def _get_triage_stage(self):
+        if self._triage_stage is None:
+            from alpharidge_ai.analyzer.triage_stage import TriageStage
+            if self._triage_extractor is None:
+                from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
+                self._triage_extractor = AssetExtractor()
+            self._triage_stage = TriageStage(self._triage_extractor)
+        return self._triage_stage
 
     def _det_relevant_item(self, item: dict) -> bool:
         """Deterministic R1 audit — same helper the reference miner uses, so

@@ -83,6 +83,7 @@ class HarnessValidator:
     _triage_cfg = validator_module.Validator._triage_cfg
     _det_relevant_item = validator_module.Validator._det_relevant_item
     _confirm_clearly_irrelevant = validator_module.Validator._confirm_clearly_irrelevant
+    _get_triage_stage = validator_module.Validator._get_triage_stage
     _llm_relevant_item = validator_module.Validator._llm_relevant_item
     _get_triage_auditor = validator_module.Validator._get_triage_auditor
     _feed_pos_canaries = validator_module.Validator._feed_pos_canaries
@@ -96,6 +97,7 @@ class HarnessValidator:
         self._canary_articles = {}
         self._triage_extractor = None
         self._triage_auditor = None
+        self._triage_stage = None
         self._article_intel_analyzer = None
         self._article_store = FakeStore()
         self._miner_reward = FakeReward()
@@ -297,6 +299,17 @@ class TestExploitResistance:
         confirmed = v._confirm_clearly_irrelevant(
             [(1, True), (2, True), (2, False)], sent_by_id)
         assert confirmed == {2}   # asset article vetoed despite the LLM verdict
+
+    def test_reference_stage_vetoes_foreign_asset_articles(self, stage, triage_on):
+        # Second live incident: a leveraged-funds story on foreign-listed
+        # equities had no gazetteer hit AND a reference miss, so it minted as a
+        # negative canary and honest miners were punished for keeping it. The
+        # shipped TriageStage must also concur before ground truth is minted —
+        # its R2 branch catches what the asset gazetteer does not.
+        v = HarnessValidator()
+        macro_art = article(3, MACRO_ARTICLE)   # TriageStage says relevant, no gazetteer asset
+        confirmed = v._confirm_clearly_irrelevant([(3, True)], {3: macro_art})
+        assert confirmed == set()
 
     def test_canary_readd_does_not_refresh_ttl_or_exposures(self):
         cfg = TriageConfig(canary_max_exposures=2)
