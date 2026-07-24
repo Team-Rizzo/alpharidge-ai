@@ -232,6 +232,9 @@ class CanaryPool:
     def prune(self) -> None:
         self._entries = {k: v for k, v in self._entries.items() if self._alive(v)}
 
+    def ids(self) -> set:
+        return set(self._entries)
+
     def size(self, kind: str) -> int:
         return sum(1 for e in self._entries.values() if e["kind"] == kind and self._alive(e))
 

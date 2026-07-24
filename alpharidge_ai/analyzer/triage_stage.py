@@ -40,16 +40,21 @@ _MACRO_TERMS = re.compile(
     re.IGNORECASE,
 )
 
-# Named economies / blocs / central banks (R2 requires one).
-_ECONOMY_TERMS = re.compile(
-    r"\b(u\.?s\.?a?|united states|america|eurozone|euro area|european union|eu|"
-    r"china|chinese|japan|japanese|germany|german|france|french|uk|britain|british|"
+# Named economies / blocs / central banks (R2 requires one). Split by case
+# sensitivity: short abbreviations must stay case-sensitive or they collide
+# with ordinary words ("us", "eu" in Romance languages, "fed up").
+_ECONOMY_NAMES = re.compile(
+    r"\b(united states|eurozone|euro area|european union|"
+    r"china|chinese|japan|japanese|germany|german|france|french|britain|british|"
     r"india|indian|russia|russian|brazil|canada|canadian|australia|mexico|"
     r"south korea|korean|turkey|turkish|saudi|iran|argentina|indonesia|"
-    r"federal reserve|fed|ecb|bank of england|bank of japan|boj|pboc|bundesbank|"
-    r"treasury|dollar|euro|yen|yuan|renminbi|pound sterling|ruble|rupee)\b",
+    r"federal reserve|bank of england|bank of japan|bundesbank|"
+    r"renminbi|pound sterling)\b",
     re.IGNORECASE,
 )
+_ECONOMY_ABBREVS = re.compile(
+    r"\b(U\.?S\.?A?|EU|UK|IMF|ECB|Fed|BOJ|PBOC|OPEC|Treasury)\b|"
+    r"\b(dollar|euro|yen|yuan|ruble|rupee)s?\b")
 
 
 class TriageStage:
@@ -71,10 +76,13 @@ class TriageStage:
 
         text = f"{title}\n{content[:4000]}"
         macro = bool(_MACRO_TERMS.search(text))
-        economy = bool(_ECONOMY_TERMS.search(text))
+        economy = bool(_ECONOMY_NAMES.search(text)) or bool(_ECONOMY_ABBREVS.search(text))
         if macro and economy:
             return build_triage_record(LABEL_RELEVANT, confidence=0.7), proof, []
-        if macro or economy:
+        if macro:
+            # Macro-event language with no named economy: genuinely ambiguous.
             return build_triage_record(LABEL_BORDERLINE, confidence=0.5), proof, []
+        # A bare country/currency mention with no macro-event language is how
+        # most world news reads; it is not market relevance.
         return (build_triage_record(LABEL_IRRELEVANT, "non_economic", confidence=0.8),
                 proof, [])

@@ -196,6 +196,54 @@ class TestGradeBatch:
         assert (e.kind, e.code, e.article_id) == ("soft", "triage_false_positive", 7)
 
 
+# ---------------------------------------------------------------- miner stage ----
+
+class TestTriageStage:
+    @pytest.fixture(scope="class")
+    def stage(self):
+        from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
+        from alpharidge_ai.analyzer.triage_stage import TriageStage
+        return TriageStage(AssetExtractor())
+
+    def test_asset_article_is_relevant_r1(self, stage):
+        title = "Apple beats earnings expectations"
+        body = ("Apple Inc ($AAPL) reported quarterly revenue of $94 billion, "
+                "beating analyst expectations. Shares rose 6% after hours.")
+        rec, proof, matches = stage.evaluate(title, body)
+        assert rec["label"] == "relevant" and matches
+        assert verify_proof_of_read(proof, title, body)
+
+    def test_macro_with_named_economy_is_relevant_r2(self, stage):
+        rec, _, _ = stage.evaluate(
+            "Central bank surprises with rate cut",
+            "The central bank of Brazil announced a surprise interest rate cut "
+            "on Thursday, citing slowing inflation across the economy.")
+        assert rec["label"] == "relevant"
+
+    def test_macro_without_economy_is_borderline(self, stage):
+        rec, _, _ = stage.evaluate(
+            "Officials debate inflation outlook",
+            "Rising inflation remains a concern for households, officials said, "
+            "though no specific policy response was announced.")
+        assert rec["label"] == "borderline"
+
+    def test_general_news_is_irrelevant(self, stage):
+        rec, _, _ = stage.evaluate(
+            "Local choir wins regional competition",
+            "The community choir took first place at the regional festival on "
+            "Saturday, delighting a crowd of hundreds with folk songs.")
+        assert rec["label"] == "irrelevant" and rec["reason_code"] == "non_economic"
+
+    def test_pronoun_us_does_not_trigger_economy(self, stage):
+        # Regression: case-insensitive "us" matched the pronoun and inflated
+        # the relevant rate from ~15% to ~46% on real data.
+        rec, _, _ = stage.evaluate(
+            "Join us for the summer recipe special",
+            "Come cook with us: this tariff-free guacamole brings the whole "
+            "family together for movie night.")
+        assert rec["label"] != "relevant"
+
+
 # ---------------------------------------------------------------- canaries ----
 
 class TestCanaryPool:
