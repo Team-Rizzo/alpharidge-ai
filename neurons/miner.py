@@ -22,6 +22,8 @@ from alpharidge_ai.analyzer import setup_telegram_analyzer
 from alpharidge_ai.analyzer import setup_news_analyzer
 from alpharidge_ai.analyzer import setup_article_intelligence_analyzer
 from alpharidge_ai.utils.api_models import TweetAnalysisBase, TelegramMessageAnalysis, NewsArticleAnalysisBase
+from alpharidge_ai.models.article_intelligence import SCHEMA_VERSION
+from alpharidge_ai.triage import TRIAGE_SCHEMA_VERSION
 
 
 class Miner(BaseMinerNeuron):
@@ -452,9 +454,10 @@ class Miner(BaseMinerNeuron):
                     bt.logging.warning(f"[Miner] Skipping article {article.id} - no title")
                     continue
 
-                # Triage (schema v3): label every article; deep-analyze only
-                # relevant ones. Irrelevant/borderline articles return just the
-                # triage claim + proof-of-read, both auditable by the validator.
+                # Triage: label every article; deep-analyze only relevant ones.
+                # Irrelevant/borderline articles return just the triage claim +
+                # proof-of-read, both auditable by the validator. The absence of
+                # event_fingerprint is what marks a blob as triage-only.
                 triage_rec = proof = None
                 if self.triage_stage is not None:
                     triage_rec, proof, _ = self.triage_stage.evaluate(
@@ -462,9 +465,12 @@ class Miner(BaseMinerNeuron):
                     if triage_rec["label"] != "relevant":
                         article.analysis = NewsArticleAnalysisBase(
                             sentiment="neutral",
-                            analysisData={"schema_version": 3,
-                                          "triage": triage_rec,
-                                          "proof_of_read": proof},
+                            analysisData={
+                                "schema_version": SCHEMA_VERSION,
+                                "triage_schema_version": TRIAGE_SCHEMA_VERSION,
+                                "triage": triage_rec,
+                                "proof_of_read": proof,
+                            },
                         )
                         continue
 
@@ -484,6 +490,7 @@ class Miner(BaseMinerNeuron):
                     if intel is not None:
                         analysis_blob = intel.model_dump()
                         if triage_rec is not None:
+                            analysis_blob["triage_schema_version"] = TRIAGE_SCHEMA_VERSION
                             analysis_blob["triage"] = triage_rec
                             analysis_blob["proof_of_read"] = proof
                         article.analysis = NewsArticleAnalysisBase(

@@ -19,7 +19,10 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
-SCHEMA_VERSION = "1.0.0"
+# 1.1.0 adds the additive triage keys (`triage`, `proof_of_read`,
+# `triage_schema_version`) carried alongside the analysis payload. Not gated by
+# any validation tier, so miners and validators may run mixed versions.
+SCHEMA_VERSION = "1.1.0"
 
 
 # ============================================================================
