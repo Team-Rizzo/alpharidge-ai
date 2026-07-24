@@ -106,7 +106,7 @@ class TestGradeBatch:
                   "analysis_data": {"assets": []}} for i in range(3)]
         res = grade_batch(items, {}, never_relevant, lambda i: None, RNG(0), CFG)
         assert res.v2_grace and not res.events
-        assert res.observations(CFG) == []
+        assert res.observations(CFG, clean_article_id=0) == []
 
     def test_clean_batch_single_positive_observation(self):
         items = [make_item(1, LABEL_RELEVANT),
@@ -115,7 +115,7 @@ class TestGradeBatch:
         res = grade_batch(items, {}, never_relevant, lambda i: False, RNG(0), CFG)
         assert not res.events and not res.proof_failures
         assert res.relevant_ids == [1]
-        assert res.observations(CFG) == [(1.0, CFG.clean_weight)]
+        assert res.observations(CFG, clean_article_id=1) == [(1, 1.0, CFG.clean_weight)]
         # un-contradicted irrelevant claims become retire candidates
         assert set(res.retire_candidate_ids) == {2, 3}
 
@@ -124,7 +124,9 @@ class TestGradeBatch:
                  make_item(2, LABEL_IRRELEVANT, "non_economic")]
         res = grade_batch(items, {}, never_relevant, lambda i: False, RNG(0), CFG)
         assert res.proof_failures == [1]
-        assert (0.0, CFG.hard_weight) in res.observations(CFG)
+        # A proof-of-read failure must reach the reputation stream, not just
+        # the penalty path — it is the strongest evidence the miner never read.
+        assert (1, 0.0, CFG.hard_weight) in res.observations(CFG, clean_article_id=1)
 
     def test_pos_canary_missed_deterministic_is_hard(self):
         items = [make_item(1, LABEL_IRRELEVANT, "non_economic"),

@@ -173,6 +173,7 @@ class Validator(BaseValidatorNeuron):
             self._triage_cfg(), state_path=".canary_state.json")
         self._canary_articles: dict = {}
         self._triage_extractor = None  # lazy AssetExtractor for audits
+        self._triage_auditor = None    # lazy audit-LLM client
 
     def resync_metagraph(self):
         super().resync_metagraph()
@@ -762,6 +763,27 @@ class Validator(BaseValidatorNeuron):
             canary_max_exposures=int(getattr(config, "TRIAGE_CANARY_MAX_EXPOSURES", 30)),
         )
 
+    def _get_triage_auditor(self):
+        """Lazy audit-LLM client, reusing the reference analyzer's connection.
+        Returns None when unavailable — the grader then raises no LLM events."""
+        if self._triage_auditor is None and self._article_intel_analyzer is not None:
+            try:
+                from alpharidge_ai.validator.triage_audit import TriageAuditor
+                self._triage_auditor = TriageAuditor(
+                    self._article_intel_analyzer.client,
+                    self._article_intel_analyzer.model,
+                    min_confidence=float(getattr(config, "TRIAGE_AUDIT_MIN_CONFIDENCE", 0.75)),
+                )
+            except Exception as e:
+                bt.logging.warning(f"[TRIAGE] auditor unavailable: {e}")
+        return self._triage_auditor
+
+    def _llm_relevant_item(self, item: dict):
+        auditor = self._get_triage_auditor()
+        if auditor is None or not getattr(config, "TRIAGE_AUDIT_LLM_ENABLED", False):
+            return None
+        return auditor.relevance_verdict(item.get("title") or "", item.get("body") or "")
+
     def _det_relevant_item(self, item: dict) -> bool:
         """Deterministic R1 audit — same helper the reference miner uses, so
         the two sides can never disagree on a gazetteer verdict."""
@@ -781,6 +803,19 @@ class Validator(BaseValidatorNeuron):
             if self._det_relevant_item(item):
                 self._canary_pool.add(int(article.id), "pos", deterministic=True)
                 self._canary_articles[int(article.id)] = article
+
+    def _refresh_canaries(self, articles):
+        """Top up the positive pool, expire stale entries, persist. Blocking
+        (gazetteer-bound) — callers must run it off the event loop."""
+        try:
+            self._feed_pos_canaries(articles)
+            self._canary_pool.prune()
+            live = self._canary_pool.ids()
+            self._canary_articles = {
+                k: v for k, v in self._canary_articles.items() if k in live}
+            self._canary_pool.save()
+        except Exception as e:
+            bt.logging.warning(f"[TRIAGE] canary refresh failed: {e}")
 
     def _inject_canaries(self, miner_batch, rng) -> dict:
         """Swap canaries into a dispatch batch (in place). Returns the injected
@@ -817,8 +852,7 @@ class Validator(BaseValidatorNeuron):
             if label is not None:
                 canary_labels[it["article_id"]] = label
         res = grade_batch(
-            items, canary_labels, self._det_relevant_item,
-            lambda item: None,   # audit-LLM stage lands separately; None = no event
+            items, canary_labels, self._det_relevant_item, self._llm_relevant_item,
             random.Random(), self._triage_cfg())
         if res.events:
             bt.logging.info(
@@ -830,17 +864,10 @@ class Validator(BaseValidatorNeuron):
         """Fold triage grades into the existing reputation observation stream —
         the emission gate then prices triage accuracy with no new machinery.
         Clean batches are keyed by the first article id (deterministic across
-        validators receiving the same broadcast)."""
-        cfg = self._triage_cfg()
-        obs = []
-        if not triage_res.events and not triage_res.proof_failures:
-            if article_batch:
-                obs.append((int(article_batch[0].id), 1.0, cfg.clean_weight))
-        else:
-            for e in triage_res.events:
-                w = cfg.hard_weight if e.kind == "hard" else cfg.soft_weight
-                obs.append((int(e.article_id), 0.0, w))
-        self._record_observations(miner_hotkey, obs)
+        validators grading the same batch)."""
+        clean_id = int(article_batch[0].id) if article_batch else None
+        self._record_observations(
+            miner_hotkey, triage_res.observations(self._triage_cfg(), clean_id))
 
     def _apply_triage_outcome(self, article_batch, miner_hotkey, triage_res, fp_ids):
         """Store + reward outcomes for a passing v3 batch.
@@ -869,6 +896,13 @@ class Validator(BaseValidatorNeuron):
         for article in article_batch:
             aid = int(article.id)
             if aid in canary_ids:
+                # Canaries are graded only: never stored from a canary response
+                # and never paid. Return them to the pool rather than leaving
+                # them leased until the lease TTL expires.
+                try:
+                    self._article_store.reset_to_unprocessed(article.id)
+                except Exception:
+                    pass
                 continue
             if aid in relevant_ids or aid in retire_ids:
                 try:
@@ -1005,7 +1039,7 @@ class Validator(BaseValidatorNeuron):
         else:
             is_valid, validation_result = await loop.run_in_executor(
                 self._validation_executor,
-                validate_miner_article_batch, article_batch, self._news_analyzer, 1,
+                validate_miner_article_batch, track_batch, self._news_analyzer, 1,
             )
 
         # Triage: the sampled deep validation's reference-relevance verdicts
@@ -1251,8 +1285,10 @@ class Validator(BaseValidatorNeuron):
 
         triage_on = getattr(config, "TRIAGE_ENABLED", False)
         if triage_on:
-            self._feed_pos_canaries(articles)
-            self._canary_pool.prune()
+            # The gazetteer costs ~250ms/article, so labeling runs in the
+            # validation executor — never inline on the dispatch event loop.
+            await asyncio.get_running_loop().run_in_executor(
+                self._validation_executor, self._refresh_canaries, articles)
         canary_rng = random.Random()
 
         adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)

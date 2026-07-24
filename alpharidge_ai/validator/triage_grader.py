@@ -62,17 +62,25 @@ class TriageGradeResult:
     canary_ids: List[int] = field(default_factory=list)
     v2_grace: bool = False
 
-    def observations(self, cfg: TriageConfig) -> List[Tuple[float, float]]:
-        """(score, weight) pairs for the triage reputation EMA."""
+    def observations(self, cfg: TriageConfig,
+                     clean_article_id: Optional[int] = None
+                     ) -> List[Tuple[int, float, float]]:
+        """(article_id, score, weight) triples for the reputation EMA.
+
+        A batch with no findings yields one positive observation keyed by
+        clean_article_id; every finding yields a zero-scored one keyed by the
+        article it was found on, so validators grading the same article agree.
+        """
         if self.v2_grace:
             return []
         if not self.events and not self.proof_failures:
-            return [(1.0, cfg.clean_weight)]
-        obs: List[Tuple[float, float]] = [
-            (0.0, cfg.hard_weight if e.kind == "hard" else cfg.soft_weight)
+            return ([] if clean_article_id is None
+                    else [(int(clean_article_id), 1.0, cfg.clean_weight)])
+        obs: List[Tuple[int, float, float]] = [
+            (e.article_id, 0.0, cfg.hard_weight if e.kind == "hard" else cfg.soft_weight)
             for e in self.events
         ]
-        obs.extend((0.0, cfg.hard_weight) for _ in self.proof_failures)
+        obs.extend((aid, 0.0, cfg.hard_weight) for aid in self.proof_failures)
         return obs
 
 
