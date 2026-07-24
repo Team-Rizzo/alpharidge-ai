@@ -784,6 +784,27 @@ class Validator(BaseValidatorNeuron):
             return None
         return auditor.relevance_verdict(item.get("title") or "", item.get("body") or "")
 
+    def _confirm_clearly_irrelevant(self, aid_flags, sent_by_id) -> set:
+        """Cross-check the reference LLM's 'clearly irrelevant' verdicts against
+        the deterministic gazetteer before they mint negative canaries or
+        false-positive charges. The reference model can miss an asset the
+        gazetteer resolves; without this check we mint a canary that contradicts
+        our own deterministic audit and then soft-punish every honest
+        gazetteer-based miner for disagreeing with it (observed live 2026-07-24:
+        market-report spam carrying a real ticker). Blocking (gazetteer-bound) —
+        run in the validation executor."""
+        confirmed = set()
+        for aid, flag in aid_flags:
+            if not flag:
+                continue
+            aid = int(aid)
+            art = sent_by_id.get(aid)
+            if art is not None and self._det_relevant_item(
+                    {"title": art.title, "body": art.content or ""}):
+                continue
+            confirmed.add(aid)
+        return confirmed
+
     def _det_relevant_item(self, item: dict) -> bool:
         """Deterministic R1 audit — same helper the reference miner uses, so
         the two sides can never disagree on a gazetteer verdict."""
@@ -1101,11 +1122,11 @@ class Validator(BaseValidatorNeuron):
         fp_ids = set()
         if triage_active:
             sent_by_id = {int(a.id): a for a in sent_batch}
-            for aid, clearly_irrelevant in (validation_result or {}).get(
-                    "reference_irrelevant", []):
-                aid = int(aid)
-                if not clearly_irrelevant:
-                    continue
+            confirmed_irrelevant = await loop.run_in_executor(
+                self._validation_executor, self._confirm_clearly_irrelevant,
+                (validation_result or {}).get("reference_irrelevant", []),
+                sent_by_id)
+            for aid in sorted(confirmed_irrelevant):
                 fp_ids.add(aid)
                 triage_res.events.append(fp_soft_event(aid))
                 if self._canary_pool.size("neg") < 50 and aid in sent_by_id:

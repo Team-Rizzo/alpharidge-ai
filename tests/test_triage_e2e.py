@@ -82,6 +82,7 @@ class HarnessValidator:
 
     _triage_cfg = validator_module.Validator._triage_cfg
     _det_relevant_item = validator_module.Validator._det_relevant_item
+    _confirm_clearly_irrelevant = validator_module.Validator._confirm_clearly_irrelevant
     _llm_relevant_item = validator_module.Validator._llm_relevant_item
     _get_triage_auditor = validator_module.Validator._get_triage_auditor
     _feed_pos_canaries = validator_module.Validator._feed_pos_canaries
@@ -283,6 +284,19 @@ class TestExploitResistance:
                                       graded_observations=[(2, 0.9, 2.0)])
         assert dict((aid, s) for aid, s, _ in v.observations)[2] == 0.0
         assert len([o for o in v.observations if o[0] == 2]) == 1
+
+    def test_gazetteer_overrides_reference_irrelevant_verdict(self, stage, triage_on):
+        # Live incident 2026-07-24: the reference LLM missed a ticker in
+        # market-report spam, minted it as a negative canary, and honest
+        # gazetteer-based miners were soft-punished for keeping it. The
+        # deterministic gazetteer must veto LLM 'clearly irrelevant' verdicts
+        # before they mint canaries or false-positive charges.
+        v = HarnessValidator()
+        asset_art, junk_art = article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE)
+        sent_by_id = {1: asset_art, 2: junk_art}
+        confirmed = v._confirm_clearly_irrelevant(
+            [(1, True), (2, True), (2, False)], sent_by_id)
+        assert confirmed == {2}   # asset article vetoed despite the LLM verdict
 
     def test_canary_readd_does_not_refresh_ttl_or_exposures(self):
         cfg = TriageConfig(canary_max_exposures=2)
