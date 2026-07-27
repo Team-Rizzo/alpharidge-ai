@@ -65,33 +65,78 @@ _LOAD_ATTEMPTS = 5
 _LOAD_BACKOFF_S = 1.0
 
 
-def install_meta_init_guard():
-    """Make accelerate's meta-device patch mutually exclusive across threads.
+# accelerate and transformers each ship their own init_on_device with the same flaw, and
+# transformers' from_pretrained uses ITS copy — guarding only accelerate's misses every
+# transformers/sentence-transformers load. Both are wrapped, sharing one lock, so the two
+# implementations are also mutually exclusive with each other.
+_GUARD_TARGETS = (
+    ("accelerate.big_modeling", "init_on_device"),
+    ("transformers.integrations.accelerate", "init_on_device"),
+)
 
-    ``accelerate.init_on_device`` swaps ``nn.Module.register_parameter`` process-wide
-    and restores it on exit — correct single-threaded, unsound with concurrent loaders:
-    a model built inside another thread's window lands on the meta device and is never
-    materialised, so the next ``.to(device)`` dies with "Cannot copy out of meta tensor"
-    and takes the whole article analysis down. ``init_empty_weights`` resolves
-    ``init_on_device`` from module globals at call time, so wrapping it here covers
-    transformers, sentence-transformers, spacy and flair alike. Model loads are
-    serialised as a result, which only costs start-up latency.
+
+def install_meta_init_guard():
+    """Make the meta-device init patch mutually exclusive across threads.
+
+    ``init_on_device`` swaps ``nn.Module.register_parameter`` process-wide and restores
+    it on exit — correct single-threaded, unsound with concurrent loaders: a model built
+    inside another thread's window lands on the meta device and is never materialised, so
+    the next ``.to(device)`` dies with "Cannot copy out of meta tensor" and takes the
+    whole article analysis down. ``init_empty_weights`` resolves ``init_on_device`` from
+    its module globals at call time, so wrapping the attribute covers transformers,
+    sentence-transformers, spacy and flair alike. Model loads serialise as a result,
+    which only costs start-up latency.
 
     Idempotent; safe to call from anywhere. Must run before any model is loaded.
     """
-    import accelerate.big_modeling as bm
+    import importlib
 
-    if getattr(bm.init_on_device, "_sn45_guarded", False):
+    for mod_name, attr in _GUARD_TARGETS:
+        try:
+            mod = importlib.import_module(mod_name)
+        except Exception:
+            continue  # optional dependency / renamed between versions
+        original = getattr(mod, attr, None)
+        if original is None or getattr(original, "_sn45_guarded", False):
+            continue
+
+        def guarded(*args, _original=original, **kwargs):
+            @contextmanager
+            def _cm():
+                with _LOAD_LOCK, _original(*args, **kwargs) as f:
+                    yield f
+            return _cm()
+
+        guarded._sn45_guarded = True
+        setattr(mod, attr, guarded)
+
+    _guard_from_pretrained()
+
+
+def _guard_from_pretrained():
+    """Hold the load lock across the WHOLE of ``PreTrainedModel.from_pretrained``.
+
+    Guarding init_on_device alone is not enough. transformers builds the skeleton on
+    meta *by design* and materialises the weights afterwards, outside that context — so
+    a foreign patch landing during materialisation sends parameters back to meta and the
+    model still comes out unusable. The lock has to span the entire load. This also
+    covers sentence-transformers, GLiNER and flair, which all load through transformers.
+    """
+    try:
+        import transformers.modeling_utils as mu
+    except Exception:
         return
-    original = bm.init_on_device
+    raw = mu.PreTrainedModel.__dict__.get("from_pretrained")
+    if raw is None or getattr(getattr(raw, "__func__", raw), "_sn45_guarded", False):
+        return
+    func = raw.__func__ if isinstance(raw, classmethod) else raw
 
-    @contextmanager
-    def guarded(*args, **kwargs):
-        with _LOAD_LOCK, original(*args, **kwargs) as f:
-            yield f
+    def wrapper(kls, *args, **kwargs):
+        with _LOAD_LOCK:
+            return func(kls, *args, **kwargs)
 
-    guarded._sn45_guarded = True
-    bm.init_on_device = guarded
+    wrapper._sn45_guarded = True
+    mu.PreTrainedModel.from_pretrained = classmethod(wrapper)
 
 # Below this confidence, a PRIMARY-subject asset's FinABSA direction is too weak to
 # trust (few mentions or near-even split), so it defers to the article-level
