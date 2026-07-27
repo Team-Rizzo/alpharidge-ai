@@ -39,6 +39,8 @@ from __future__ import annotations
 
 import re
 import threading
+import time
+from contextlib import contextmanager
 from typing import Iterable, List, Optional
 
 # Pinned for consensus. Winner of the FinEntity bake-off
@@ -48,6 +50,48 @@ ABSA_MODEL_ID = "amphora/FinABSA"
 # Bound CPU latency: an asset rarely needs more than a few mention sentences to
 # decide direction, and more mentions only slow the (bit-exact) CPU path.
 MAX_MENTIONS_PER_ASSET = 6
+
+# accelerate's init_empty_weights (used inside transformers' from_pretrained) swaps
+# nn.Module.register_parameter PROCESS-WIDE, not per-thread. A model built while any
+# other thread holds that patch lands on the meta device and is never materialized, so
+# the subsequent .to(device) dies with "Cannot copy out of meta tensor". The validator
+# runs ~1k threads loading several model families, so the window is hit constantly.
+# Neither retrying nor pinning the real register_parameter for the duration of our own
+# load survives sustained contention — a competing thread re-patches mid-load. The patch
+# window itself has to be serialised, which is what install_meta_init_guard does; the
+# retry below is only a safety net for loads that somehow still come back on meta.
+_LOAD_LOCK = threading.RLock()
+_LOAD_ATTEMPTS = 5
+_LOAD_BACKOFF_S = 1.0
+
+
+def install_meta_init_guard():
+    """Make accelerate's meta-device patch mutually exclusive across threads.
+
+    ``accelerate.init_on_device`` swaps ``nn.Module.register_parameter`` process-wide
+    and restores it on exit — correct single-threaded, unsound with concurrent loaders:
+    a model built inside another thread's window lands on the meta device and is never
+    materialised, so the next ``.to(device)`` dies with "Cannot copy out of meta tensor"
+    and takes the whole article analysis down. ``init_empty_weights`` resolves
+    ``init_on_device`` from module globals at call time, so wrapping it here covers
+    transformers, sentence-transformers, spacy and flair alike. Model loads are
+    serialised as a result, which only costs start-up latency.
+
+    Idempotent; safe to call from anywhere. Must run before any model is loaded.
+    """
+    import accelerate.big_modeling as bm
+
+    if getattr(bm.init_on_device, "_sn45_guarded", False):
+        return
+    original = bm.init_on_device
+
+    @contextmanager
+    def guarded(*args, **kwargs):
+        with _LOAD_LOCK, original(*args, **kwargs) as f:
+            yield f
+
+    guarded._sn45_guarded = True
+    bm.init_on_device = guarded
 
 # Below this confidence, a PRIMARY-subject asset's FinABSA direction is too weak to
 # trust (few mentions or near-even split), so it defers to the article-level
@@ -139,16 +183,30 @@ class AspectSentimentScorer:
     def _ensure(self):
         if self._model is not None:
             return
-        with self._lock:
+        with self._lock, _LOAD_LOCK:
             if self._model is not None:
                 return
             import torch
             from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
             dev = self._device or ("cuda" if torch.cuda.is_available() else "cpu")
             self._device = dev
-            self._tok = AutoTokenizer.from_pretrained(self.model_id)
-            self._model = (AutoModelForSeq2SeqLM
-                           .from_pretrained(self.model_id).to(dev).eval())
+            tok = AutoTokenizer.from_pretrained(self.model_id)
+            install_meta_init_guard()
+            for attempt in range(_LOAD_ATTEMPTS):
+                model = AutoModelForSeq2SeqLM.from_pretrained(self.model_id)
+                # Never hand a meta-device model to .to() — that raises and takes the
+                # whole article analysis down with it. Re-loading clears it once the
+                # thread that held accelerate's patch has left the context.
+                if not any(p.is_meta for p in model.parameters()):
+                    self._tok = tok
+                    self._model = model.to(dev).eval()
+                    return
+                del model
+                if attempt < _LOAD_ATTEMPTS - 1:
+                    time.sleep(_LOAD_BACKOFF_S)
+            raise RuntimeError(
+                f"{self.model_id} loaded on meta device {_LOAD_ATTEMPTS}x running "
+                f"(concurrent accelerate init_empty_weights); giving up")
 
     def _decode_vote(self, ids) -> int:
         gen = self._tok.decode(ids, skip_special_tokens=True).upper()

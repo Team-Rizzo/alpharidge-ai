@@ -30,6 +30,12 @@ from alpharidge_ai.analyzer import setup_news_analyzer
 from alpharidge_ai.analyzer import setup_article_intelligence_analyzer
 import alpharidge_ai.protocol
 from alpharidge_ai import config
+from alpharidge_ai.analyzer.aspect_sentiment import install_meta_init_guard
+
+# Must precede every model load: accelerate's meta-device patch is process-wide, so
+# concurrent loaders otherwise leave a model on meta and every analysis of that article
+# fails, which the batch verdict charges to the miner as a rejection.
+install_meta_init_guard()
 
 # Bound torch intra-op threads before any model runs: each validation worker otherwise spawns
 # torch's default (ncores) OpenMP threads, so the executor oversubscribes the box and validations

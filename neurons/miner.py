@@ -17,6 +17,7 @@ import alpharidge_ai
 
 # import base miner class which takes care of most of the boilerplate
 from alpharidge_ai.base.miner import BaseMinerNeuron
+from alpharidge_ai.analyzer.aspect_sentiment import install_meta_init_guard
 from alpharidge_ai.analyzer import setup_analyzer
 from alpharidge_ai.analyzer import setup_telegram_analyzer
 from alpharidge_ai.analyzer import setup_news_analyzer
@@ -24,6 +25,10 @@ from alpharidge_ai.analyzer import setup_article_intelligence_analyzer
 from alpharidge_ai.utils.api_models import TweetAnalysisBase, TelegramMessageAnalysis, NewsArticleAnalysisBase
 from alpharidge_ai.models.article_intelligence import SCHEMA_VERSION
 from alpharidge_ai.triage import TRIAGE_SCHEMA_VERSION
+
+# Must precede every model load — see install_meta_init_guard. A miner that loses the
+# race returns nothing for the affected articles and earns no points for them.
+install_meta_init_guard()
 
 
 class Miner(BaseMinerNeuron):
