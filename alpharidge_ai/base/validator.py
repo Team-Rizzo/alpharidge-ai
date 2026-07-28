@@ -23,6 +23,7 @@ import numpy as np
 import asyncio
 import argparse
 import threading
+import time
 import bittensor as bt
 
 from typing import List, Union
@@ -55,6 +56,11 @@ class BaseValidatorNeuron(BaseNeuron):
     # Burn modifier: portion of emissions to redirect to burn_uid (0.0-1.0)
     burn_modifier: float = 0.9
     burn_uid: int = 189
+
+    # Consecutive main-loop failures tolerated before the chain connection is rebuilt.
+    # Errors arrive roughly once per second, so this bounds a wedged socket to ~10s of
+    # lost dispatch instead of leaving it stuck indefinitely.
+    SUBTENSOR_RECONNECT_AFTER: int = 10
 
     @classmethod
     def add_args(cls, parser: argparse.ArgumentParser):
@@ -545,6 +551,14 @@ class BaseValidatorNeuron(BaseNeuron):
 
         bt.logging.info(f"Validator starting at block: {self.block}")
 
+        # Consecutive failures of the loop body. A wedged substrate websocket (e.g.
+        # ConcurrencyError left behind by a half-finished recv) raises on every chain
+        # call, and since `self.block` below is the first statement in the try, the
+        # loop never reaches concurrent_forward() — dispatch stops entirely while the
+        # retry spins. Retrying the same dead connection cannot clear that, so once a
+        # streak proves the socket is not healing on its own, rebuild it.
+        consecutive_errors = 0
+
         # This loop maintains the validator's operations until intentionally stopped.
         while True:
             try:
@@ -561,6 +575,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 self.sync()
 
                 self.step += 1
+                consecutive_errors = 0
 
             # If someone intentionally stops the validator, it'll safely terminate operations.
             except KeyboardInterrupt:
@@ -570,10 +585,49 @@ class BaseValidatorNeuron(BaseNeuron):
 
             # Handle transient errors (like ConcurrencyError) gracefully - continue the loop
             except Exception as err:
-                bt.logging.warning(f"Main loop error (will retry): {type(err).__name__}: {err}")
-                import time
+                consecutive_errors += 1
+                bt.logging.warning(
+                    f"Main loop error (will retry): {type(err).__name__}: {err} "
+                    f"(consecutive={consecutive_errors})"
+                )
+                # Retry the reconnect on every further streak of the same length, so a
+                # genuinely unreachable endpoint keeps being retried rather than giving up.
+                if consecutive_errors % self.SUBTENSOR_RECONNECT_AFTER == 0:
+                    self._reconnect_subtensor()
                 time.sleep(1)  # Brief pause before retry
                 continue
+
+    def _reconnect_subtensor(self):
+        """Rebuild the subtensor connection after repeated main-loop failures.
+
+        The metagraph object is kept and re-synced through the new connection rather
+        than replaced, because the validator and its helpers hold references to it.
+        """
+        if self.config.mock:
+            return
+
+        bt.logging.warning("[RECONNECT] Rebuilding subtensor connection after repeated main loop errors")
+        previous = getattr(self, "subtensor", None)
+        try:
+            self.subtensor = bt.Subtensor(config=self.config)
+        except Exception as err:
+            bt.logging.error(f"[RECONNECT] Failed to rebuild subtensor: {type(err).__name__}: {err}")
+            return
+
+        # Close the old connection only once its replacement exists, so a failed
+        # rebuild leaves the validator no worse off than before.
+        if previous is not None:
+            try:
+                previous.close()
+            except Exception as err:
+                bt.logging.debug(f"[RECONNECT] Closing previous subtensor failed: {err}")
+
+        try:
+            self.metagraph.sync(subtensor=self.subtensor)
+        except Exception as err:
+            bt.logging.warning(f"[RECONNECT] Metagraph resync failed: {type(err).__name__}: {err}")
+
+        bt.logging.success("[RECONNECT] Subtensor connection rebuilt")
 
     def run_in_background_thread(self):
         """
