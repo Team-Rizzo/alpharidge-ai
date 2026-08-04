@@ -25,6 +25,15 @@ def _default_path() -> Path:
                         str(Path(__file__).resolve().parent.parent / ".reputation_state.json")))
 
 
+def _prior() -> float:
+    """Cold-start reputation for an unseen hotkey. Read at the use-site (not bound at
+    import) so the hourly served-config refresh takes effect without a restart."""
+    try:
+        return float(getattr(config, "REPUTATION_PRIOR", rep.PRIOR))
+    except (TypeError, ValueError):
+        return rep.PRIOR
+
+
 # one observation: (article_id, graded, weight)
 Obs = Tuple[int, float, float]
 
@@ -108,7 +117,7 @@ class ReputationStore:
                     per_target.setdefault(target, []).append((aid, sender, g, w))
         for target, rows in per_target.items():
             rows.sort(key=lambda x: (x[0], x[1]))  # (article_id, sender) — deterministic
-            st = self.state.setdefault(target, {"r": rep.PRIOR, "n": 0})
+            st = self.state.setdefault(target, {"r": _prior(), "n": 0})
             for _aid, _sender, g, w in rows:
                 st["r"] = rep.update(st["r"], g, w, alpha)
                 st["n"] += 1
@@ -124,7 +133,7 @@ class ReputationStore:
 
     # ---- read ----
     def reputation(self, hotkey: str) -> float:
-        return self.state.get(hotkey, {}).get("r", rep.PRIOR)
+        return self.state.get(hotkey, {}).get("r", _prior())
 
     def samples(self, hotkey: str) -> int:
         return int(self.state.get(hotkey, {}).get("n", 0))

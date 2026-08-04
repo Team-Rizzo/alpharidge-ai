@@ -12,6 +12,7 @@ import math
 # defaults — override from served config
 ALPHA = 0.03           # EMA step; half-life ~ ln(2)/alpha samples
 PRIOR = 0.5            # cold-start value (below the floor => new state earns ~0 until proven)
+                       # fallback only — reputation_store reads REPUTATION_PRIOR from served config
 MIDPOINT = 0.59       # logistic centre; calibrate on the live distribution before gating
 GAIN = 100.0          # logistic steepness
 
