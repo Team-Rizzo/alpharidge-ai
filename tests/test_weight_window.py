@@ -271,6 +271,46 @@ def _client_with(monkeypatch, reward_store, reward_broadcasts, multiplier=0.5):
     return client
 
 
+# --- the §4.2 divisor ----------------------------------------------------
+
+def _window_blocks(present, k=7):
+    from alpharidge_ai.validator.validation_client import ValidationClient
+    return ValidationClient._window_blocks(present, k, 100, 100 + k - 1)
+
+
+def test_divisor_is_the_present_span_never_the_full_window():
+    """The failure with the largest blast radius in this change.
+
+    Dividing a partial point total by the full window span understates every
+    miner in proportion — tpn falls and burn rises. The divisor must shrink with
+    the sample.
+    """
+    assert _window_blocks(7) == 7 * config.BLOCK_LENGTH  # complete window
+    assert _window_blocks(3) == 3 * config.BLOCK_LENGTH  # NOT 7 * BLOCK_LENGTH
+    assert _window_blocks(1) == 1 * config.BLOCK_LENGTH
+
+
+def test_no_epochs_present_keeps_the_previous_vector():
+    """None means "do not recompute" — a near-empty vector must never be sent."""
+    assert _window_blocks(0) is None
+
+
+def test_a_short_window_pays_the_same_rate_as_a_full_one():
+    """The property the divisor exists to preserve.
+
+    A miner producing 3 points per epoch is paid the same whether the store held
+    all 7 epochs of the window or only 3 of them. Only the sample size differs.
+    """
+    mg = FakeMetagraph()
+    full = burn.calculate_weights(
+        [Reward(hotkey="hk0", reward=3 * 7, epoch=0)], mg, _window_blocks(7)
+    )
+    short = burn.calculate_weights(
+        [Reward(hotkey="hk0", reward=3 * 3, epoch=0)], mg, _window_blocks(3)
+    )
+    assert np.allclose(short, full, atol=1e-12)
+
+
 def test_reputation_gate_is_applied_once_to_the_window_not_per_epoch(monkeypatch):
     """GUARD 4, on the axis 5.7 names: sum the window, then gate. Never gate each epoch and add.
 

@@ -282,6 +282,30 @@ class ValidationClient:
 
         return rewards, present_epochs, uid_rekey_skipped
 
+    @staticmethod
+    def _window_blocks(present_epochs: int, window_k: int, window_start: int, window_end: int):
+        """Blocks to divide the window's points by, or None to keep the previous vector.
+
+        Always the span actually present, never the full window. Dividing a partial
+        point total by the full span understates every miner in proportion and
+        drives burn up; dividing by the present span keeps the rate correct and
+        costs only a smaller sample.
+        """
+        if present_epochs == 0:
+            # Recomputing from nothing would send a near-empty vector. Keep the
+            # previous one; the window is rebuilt at the next epoch anyway.
+            bt.logging.error(
+                f"[WEIGHT_WINDOW] No epochs present in [{window_start}..{window_end}]; "
+                f"keeping the previous weight vector"
+            )
+            return None
+        if present_epochs < window_k:
+            bt.logging.warning(
+                f"[WEIGHT_WINDOW] Only {present_epochs}/{window_k} epochs present in "
+                f"[{window_start}..{window_end}]; dividing by the present span"
+            )
+        return present_epochs * config.BLOCK_LENGTH
+
     def _log_shadow_window(self, target_epoch: int) -> None:
         """Log the vector a wider window would produce, without setting it.
 
@@ -734,23 +758,10 @@ class ValidationClient:
                         target_epoch, window_start, window_end
                     )
                     bt.logging.debug(f"[ValidationClient.run] Calculating weights from rewards list (len={len(rewards)})")
-                    if present_epochs == 0:
-                        # No epoch of the window survived in the local store. Recomputing
-                        # would send a near-empty vector, so keep the previous one; the
-                        # window is rebuilt at the next epoch anyway.
-                        bt.logging.error(
-                            f"[WEIGHT_WINDOW] No epochs present in [{window_start}..{window_end}]; "
-                            f"keeping the previous weight vector"
-                        )
-                    else:
-                        if present_epochs < window_k:
-                            # Divide by the span actually present, never the full span:
-                            # a short window is a smaller sample, not a lower rate.
-                            bt.logging.warning(
-                                f"[WEIGHT_WINDOW] Only {present_epochs}/{window_k} epochs present in "
-                                f"[{window_start}..{window_end}]; dividing by the present span"
-                            )
-                        window_blocks = present_epochs * config.BLOCK_LENGTH
+                    window_blocks = self._window_blocks(
+                        present_epochs, window_k, window_start, window_end
+                    )
+                    if window_blocks is not None:
                         context = (
                             f"epochs=[{window_start}..{window_end}] "
                             f"present={present_epochs}/{window_k} "
