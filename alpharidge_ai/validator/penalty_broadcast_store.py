@@ -36,9 +36,16 @@ def _default_path() -> Path:
 @dataclass
 class PenaltyBroadcastStore:
     path: Path = field(default_factory=_default_path)
-    keep_epochs: int = 3
+    # 0 follows the weight-window retention from config, so a config push widens
+    # it without a restart. A positive value pins it, for tests.
+    keep_epochs: int = 0
     last_seen_seq: Dict[str, int] = field(default_factory=dict)
     by_epoch_by_sender: Dict[int, Dict[str, Dict[int, int]]] = field(default_factory=dict)
+
+    @property
+    def retention_epochs(self) -> int:
+        """Epochs of broadcast data to keep (see keep_epochs)."""
+        return self.keep_epochs if self.keep_epochs > 0 else config.weight_window_retention()
 
     # -------------------------------------------------------------------------
     # Persistence
@@ -122,8 +129,8 @@ class PenaltyBroadcastStore:
         self.last_seen_seq[sender] = seq_i
 
         # Keep only the most recent N epochs.
-        if self.keep_epochs > 0 and len(self.by_epoch_by_sender) > self.keep_epochs:
-            for old_epoch in sorted(self.by_epoch_by_sender.keys())[:-self.keep_epochs]:
+        if len(self.by_epoch_by_sender) > self.retention_epochs:
+            for old_epoch in sorted(self.by_epoch_by_sender.keys())[:-self.retention_epochs]:
                 self.by_epoch_by_sender.pop(old_epoch, None)
 
         return True, "accepted"
@@ -143,6 +150,37 @@ class PenaltyBroadcastStore:
                 uid_i = int(uid)
                 agg[uid_i] = agg.get(uid_i, 0) + int(cnt)
         return agg
+
+    def aggregate_range(self, start_epoch: int, end_epoch: int, metagraph=None) -> Tuple[Dict[int, int], int]:
+        """
+        Aggregate uid->penalty_count over the inclusive epoch range.
+
+        Mirrors RewardBroadcastStore.aggregate_range so points and penalties are
+        compared over the same window, including the UID re-key filter.
+
+        Returns (uid -> count, count of UIDs dropped).
+        """
+        agg: Dict[int, int] = {}
+        for epoch in range(int(start_epoch), int(end_epoch) + 1):
+            senders = self.by_epoch_by_sender.get(epoch) or {}
+            for _sender, uid_penalties in senders.items():
+                for uid, cnt in uid_penalties.items():
+                    uid_i = int(uid)
+                    agg[uid_i] = agg.get(uid_i, 0) + int(cnt)
+
+        rekeyed = 0
+        if metagraph is not None:
+            start_block = int(start_epoch) * config.BLOCK_LENGTH
+            for uid in list(agg):
+                try:
+                    registered_at = int(metagraph.block_at_registration[uid])
+                except (IndexError, KeyError, TypeError, ValueError):
+                    continue
+                if registered_at >= start_block:
+                    del agg[uid]
+                    rekeyed += 1
+
+        return agg, rekeyed
 
     # -------------------------------------------------------------------------
     # Remote reset helpers

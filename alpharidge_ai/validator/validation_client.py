@@ -161,6 +161,152 @@ class ValidationClient:
         except Exception as e:
             bt.logging.debug(f"[MINER_EVENT] flush block error (ignored): {e}")
 
+    def _aggregate_window(self, target_epoch: int, window_start: int, window_end: int, quiet: bool = False):
+        """Pool local and broadcast points over the inclusive epoch window.
+
+        Returns (rewards, present_epochs, uid_rekey_skipped). present_epochs is the
+        reward store's count only — the broadcast stores are legitimately sparse and
+        must never shrink the window the caller divides by.
+
+        quiet demotes the per-UID lines to debug, for the shadow pass.
+        """
+        info = bt.logging.debug if quiet else bt.logging.info
+        combined_uid_rewards: Dict[int, int] = {}
+
+        # Local rewards to uid->points
+        present_epochs = 0
+        try:
+            local_rewards_map, present_epochs = self._validator._miner_reward.get_rewards_range(
+                window_start, window_end
+            )
+            bt.logging.debug(f"[ValidationClient] Retrieved local_rewards_map: {local_rewards_map}")
+            for hk, pts in local_rewards_map.items():
+                if hk in self._validator.metagraph.hotkeys:
+                    uid = self._validator.metagraph.hotkeys.index(hk)
+                    combined_uid_rewards[uid] = combined_uid_rewards.get(uid, 0) + int(pts)
+        except Exception as e:
+            bt.logging.debug(f"[ValidationClient] [REWARDS] Failed to get local rewards: {e}")
+
+        info(f"[REWARDS] Local rewards: {combined_uid_rewards}")
+
+        # Broadcasted rewards (filter blacklisted hotkeys)
+        broadcast_uid_rewards: Dict[int, int] = {}
+        uid_rekey_skipped = 0
+        try:
+            broadcast_uid_rewards, uid_rekey_skipped = self._validator._reward_broadcasts.aggregate_range(
+                window_start, window_end, self._validator.metagraph
+            )
+            bt.logging.debug(f"[ValidationClient] Aggregated broadcast_uid_rewards: {broadcast_uid_rewards}")
+            for uid, pts in broadcast_uid_rewards.items():
+                try:
+                    hk = self._validator.metagraph.hotkeys[int(uid)]
+                    if hk in config.BLACKLISTED_MINER_HOTKEYS:
+                        info(f"[REWARDS] Ignoring broadcast rewards for blacklisted UID={uid} hotkey={hk[:12]}..")
+                        continue
+                except Exception:
+                    pass
+                combined_uid_rewards[uid] = combined_uid_rewards.get(uid, 0) + int(pts)
+        except Exception as e:
+            bt.logging.debug(f"[ValidationClient] [BROADCAST] Failed to aggregate rewards: {e}")
+
+        info(f"[REWARDS] Broadcasted rewards: {broadcast_uid_rewards}")
+
+        # Pooled penalty MAGNITUDE per UID: sum of penalty counts from this validator
+        # (local) + every broadcasting validator. This mirrors how combined_uid_rewards
+        # pools points, so points and penalties are compared on the same pooled basis.
+        # Replaces the prior binary gate ("2+ validators recorded ANY penalty -> zero"),
+        # which zeroed every miner that took even one routine penalty -> 100% burn.
+        uid_penalty_totals: Dict[int, int] = {}
+
+        try:
+            local_penalties, _ = self._validator._miner_penalty.get_penalties_range(
+                window_start, window_end
+            )
+            bt.logging.debug(f"[ValidationClient] Retrieved local_penalties: {local_penalties}")
+            for hk, cnt in local_penalties.items():
+                if cnt > 0 and hk in self._validator.metagraph.hotkeys:
+                    uid = self._validator.metagraph.hotkeys.index(hk)
+                    uid_penalty_totals[uid] = uid_penalty_totals.get(uid, 0) + int(cnt)
+        except Exception as e:
+            bt.logging.debug(f"[ValidationClient] [PENALTIES] Failed to get local penalties: {e}")
+
+        try:
+            # Sum broadcast penalty COUNTS (magnitude) across senders — not the number
+            # of validators. aggregate_range() returns uid -> summed penalty count.
+            broadcast_penalty_totals, _ = self._validator._penalty_broadcasts.aggregate_range(
+                window_start, window_end, self._validator.metagraph
+            )
+            bt.logging.debug(f"[ValidationClient] Broadcast penalty totals: {broadcast_penalty_totals}")
+            for uid, cnt in broadcast_penalty_totals.items():
+                uid_penalty_totals[int(uid)] = uid_penalty_totals.get(int(uid), 0) + int(cnt)
+        except Exception as e:
+            bt.logging.debug(f"[ValidationClient] [PENALTY_BROADCAST] Failed to aggregate penalties: {e}")
+
+        # Build rewards list: keep the reward (weight is later scaled ∝ points) only when
+        # pooled points exceed pooled penalties; otherwise zero (net-negative miner ->
+        # its share goes to burn). This is the documented "zero only if penalties >= rewards".
+        #
+        # The reputation gate is applied once, to the window total, never per epoch:
+        # gating each epoch and then summing gives a different answer, and every
+        # validator has to pick the same one.
+        rewards = []
+        rep_gating = getattr(config, "REPUTATION_GATING_ENABLED", False)
+        bt.logging.debug(f"[ValidationClient] Building rewards list, penalty_totals: {uid_penalty_totals}")
+        for uid, pts in combined_uid_rewards.items():
+            try:
+                hk = self._validator.metagraph.hotkeys[int(uid)]
+            except Exception:
+                bt.logging.debug(f"[ValidationClient] Could not resolve hotkey for UID={uid}, skipping.")
+                continue
+            if rep_gating:
+                r = self._validator._reputation_store.reputation(hk)
+                g = reputation.emission(
+                    r,
+                    getattr(config, "EMISSION_MIDPOINT", 0.59),
+                    getattr(config, "EMISSION_GAIN", 100.0),
+                    getattr(config, "EMISSION_BONUS_CEILING", 0.0),
+                    getattr(config, "EMISSION_BONUS_START", 0.63),
+                    getattr(config, "EMISSION_BONUS_FULL", 0.75),
+                )
+                val = int(round(g * int(pts)))
+                info(f"[REWARDS] UID={uid} hk={hk[:12]}.. gated={val} (rep={r:.3f} mult={g:.3f} vol={pts})")
+                rewards.append(Reward(hotkey=hk, reward=val, epoch=target_epoch))
+                continue
+            pen = uid_penalty_totals.get(uid, 0)
+            if pts > pen:
+                info(f"[REWARDS] Applying reward for UID={uid} hotkey={hk[:12]}... (points={pts} > penalties={pen})")
+                rewards.append(Reward(hotkey=hk, reward=int(pts), epoch=target_epoch))
+            else:
+                info(f"[PENALTIES] Zeroing reward for UID={uid} hotkey={hk[:12]}... (points={pts} <= penalties={pen})")
+                rewards.append(Reward(hotkey=hk, reward=0, epoch=target_epoch))
+
+        return rewards, present_epochs, uid_rekey_skipped
+
+    def _log_shadow_window(self, target_epoch: int) -> None:
+        """Log the vector a wider window would produce, without setting it.
+
+        Diagnostic only: it never touches self.scores and never raises into the
+        live path. Off unless WEIGHT_WINDOW_SHADOW_EPOCHS is set.
+        """
+        shadow_k = getattr(config, "WEIGHT_WINDOW_SHADOW_EPOCHS", 0)
+        if shadow_k <= 0:
+            return
+        try:
+            start = target_epoch - shadow_k + 1
+            rewards, present, rekeyed = self._aggregate_window(target_epoch, start, target_epoch, quiet=True)
+            if present == 0:
+                bt.logging.warning(f"[SHADOW] No epochs present in [{start}..{target_epoch}]; skipped")
+                return
+            context = (
+                f"epochs=[{start}..{target_epoch}] present={present}/{shadow_k} "
+                f"uid_rekey_skipped={rekeyed} "
+            )
+            calculate_weights(
+                rewards, self._validator.metagraph, present * config.BLOCK_LENGTH, "[SHADOW] " + context
+            )
+        except Exception as e:
+            bt.logging.warning(f"[SHADOW] Shadow window failed (live path unaffected): {e}")
+
     async def run(
         self,
         on_tweets: Callable[[List[TweetWithAuthor]], Any],
@@ -570,111 +716,52 @@ class ValidationClient:
                             self._last_rep_snapshot_epoch = int(target_epoch)
                         except Exception as e:
                             bt.logging.debug(f"[REPUTATION] snapshot push failed: {e}")
-                combined_uid_rewards: Dict[int, int] = {}
+                # Weight window: the K epochs ending at target_epoch. K is taken from
+                # the block height so that every validator uses the same value at the
+                # same block, whenever each one last polled the config.
+                window_k = config.weight_window_epochs(self._validator.block)
+                window_start = target_epoch - window_k + 1
+                window_end = target_epoch
 
-                # Local rewards to uid->points
-                local_rewards_map: Dict[str, int] = {}
-                try:
-                    local_rewards_map = self._validator._miner_reward.get_rewards(epoch=target_epoch)
-                    bt.logging.debug(f"[ValidationClient.run] Retrieved local_rewards_map: {local_rewards_map}")
-                    for hk, pts in local_rewards_map.items():
-                        if hk in self._validator.metagraph.hotkeys:
-                            uid = self._validator.metagraph.hotkeys.index(hk)
-                            combined_uid_rewards[uid] = combined_uid_rewards.get(uid, 0) + int(pts)
-                except Exception as e:
-                    bt.logging.debug(f"[ValidationClient.run] [REWARDS] Failed to get local rewards: {e}")
-
-                bt.logging.info(f"[REWARDS] Local rewards: {combined_uid_rewards}")
-
-                # Broadcasted rewards (filter blacklisted hotkeys)
-                try:
-                    broadcast_uid_rewards = self._validator._reward_broadcasts.aggregate_epoch(target_epoch)
-                    bt.logging.debug(f"[ValidationClient.run] Aggregated broadcast_uid_rewards: {broadcast_uid_rewards}")
-                    for uid, pts in broadcast_uid_rewards.items():
-                        try:
-                            hk = self._validator.metagraph.hotkeys[int(uid)]
-                            if hk in config.BLACKLISTED_MINER_HOTKEYS:
-                                bt.logging.info(f"[REWARDS] Ignoring broadcast rewards for blacklisted UID={uid} hotkey={hk[:12]}..")
-                                continue
-                        except Exception:
-                            pass
-                        combined_uid_rewards[uid] = combined_uid_rewards.get(uid, 0) + int(pts)
-                except Exception as e:
-                    bt.logging.debug(f"[ValidationClient.run] [BROADCAST] Failed to aggregate rewards: {e}")
-
-                bt.logging.info(f"[REWARDS] Broadcasted rewards: {broadcast_uid_rewards}")
-
-                # Pooled penalty MAGNITUDE per UID: sum of penalty counts from this validator
-                # (local) + every broadcasting validator. This mirrors how combined_uid_rewards
-                # pools points, so points and penalties are compared on the same pooled basis.
-                # Replaces the prior binary gate ("2+ validators recorded ANY penalty -> zero"),
-                # which zeroed every miner that took even one routine penalty -> 100% burn.
-                uid_penalty_totals: Dict[int, int] = {}
-                local_penalties: Dict[str, int] = {}
-
-                try:
-                    local_penalties = self._validator._miner_penalty.get_penalties(epoch=target_epoch)
-                    bt.logging.debug(f"[ValidationClient.run] Retrieved local_penalties: {local_penalties}")
-                    for hk, cnt in local_penalties.items():
-                        if cnt > 0 and hk in self._validator.metagraph.hotkeys:
-                            uid = self._validator.metagraph.hotkeys.index(hk)
-                            uid_penalty_totals[uid] = uid_penalty_totals.get(uid, 0) + int(cnt)
-                except Exception as e:
-                    bt.logging.debug(f"[ValidationClient.run] [PENALTIES] Failed to get local penalties: {e}")
-
-                try:
-                    # Sum broadcast penalty COUNTS (magnitude) across senders — not the number
-                    # of validators. aggregate_epoch() returns uid -> summed penalty count.
-                    broadcast_penalty_totals = self._validator._penalty_broadcasts.aggregate_epoch(target_epoch)
-                    bt.logging.debug(f"[ValidationClient.run] Broadcast penalty totals: {broadcast_penalty_totals}")
-                    for uid, cnt in broadcast_penalty_totals.items():
-                        uid_penalty_totals[int(uid)] = uid_penalty_totals.get(int(uid), 0) + int(cnt)
-                except Exception as e:
-                    bt.logging.debug(f"[ValidationClient.run] [PENALTY_BROADCAST] Failed to aggregate penalties: {e}")
-
-                # Build rewards list: keep the reward (weight is later scaled ∝ points) only when
-                # pooled points exceed pooled penalties; otherwise zero (net-negative miner ->
-                # its share goes to burn). This is the documented "zero only if penalties >= rewards".
-                rewards = []
-                rep_gating = getattr(config, "REPUTATION_GATING_ENABLED", False)
-                bt.logging.debug(f"[ValidationClient.run] Building rewards list, penalty_totals: {uid_penalty_totals}")
-                for uid, pts in combined_uid_rewards.items():
-                    try:
-                        hk = self._validator.metagraph.hotkeys[int(uid)]
-                    except Exception:
-                        bt.logging.debug(f"[ValidationClient.run] Could not resolve hotkey for UID={uid}, skipping.")
-                        continue
-                    if rep_gating:
-                        r = self._validator._reputation_store.reputation(hk)
-                        g = reputation.emission(
-                            r,
-                            getattr(config, "EMISSION_MIDPOINT", 0.59),
-                            getattr(config, "EMISSION_GAIN", 100.0),
-                            getattr(config, "EMISSION_BONUS_CEILING", 0.0),
-                            getattr(config, "EMISSION_BONUS_START", 0.63),
-                            getattr(config, "EMISSION_BONUS_FULL", 0.75),
-                        )
-                        val = int(round(g * int(pts)))
-                        bt.logging.info(f"[REWARDS] UID={uid} hk={hk[:12]}.. gated={val} (rep={r:.3f} mult={g:.3f} vol={pts})")
-                        rewards.append(Reward(hotkey=hk, reward=val, epoch=target_epoch))
-                        continue
-                    pen = uid_penalty_totals.get(uid, 0)
-                    if pts > pen:
-                        bt.logging.info(f"[REWARDS] Applying reward for UID={uid} hotkey={hk[:12]}... (points={pts} > penalties={pen})")
-                        rewards.append(Reward(hotkey=hk, reward=int(pts), epoch=target_epoch))
-                    else:
-                        bt.logging.info(f"[PENALTIES] Zeroing reward for UID={uid} hotkey={hk[:12]}... (points={pts} <= penalties={pen})")
-                        rewards.append(Reward(hotkey=hk, reward=0, epoch=target_epoch))
                 # Recompute weights/scores once per target epoch so the snapshot the
                 # base neuron loop commits on-chain is deterministic (not whatever
                 # mid-aggregation state happens to be live every poll iteration).
+                # The aggregation sits inside the guard because nothing downstream
+                # reads it; running it every poll only repeated the work and the logs.
                 if self._last_weight_epoch != target_epoch:
+                    rewards, present_epochs, uid_rekey_skipped = self._aggregate_window(
+                        target_epoch, window_start, window_end
+                    )
                     bt.logging.debug(f"[ValidationClient.run] Calculating weights from rewards list (len={len(rewards)})")
-                    weights = calculate_weights(rewards, self._validator.metagraph)
-                    # bt.logging.info(f"[REWARDS] Weights: {weights}")
-                    bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
-                    self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())
-                    self._last_weight_epoch = target_epoch
+                    if present_epochs == 0:
+                        # No epoch of the window survived in the local store. Recomputing
+                        # would send a near-empty vector, so keep the previous one; the
+                        # window is rebuilt at the next epoch anyway.
+                        bt.logging.error(
+                            f"[WEIGHT_WINDOW] No epochs present in [{window_start}..{window_end}]; "
+                            f"keeping the previous weight vector"
+                        )
+                    else:
+                        if present_epochs < window_k:
+                            # Divide by the span actually present, never the full span:
+                            # a short window is a smaller sample, not a lower rate.
+                            bt.logging.warning(
+                                f"[WEIGHT_WINDOW] Only {present_epochs}/{window_k} epochs present in "
+                                f"[{window_start}..{window_end}]; dividing by the present span"
+                            )
+                        window_blocks = present_epochs * config.BLOCK_LENGTH
+                        context = (
+                            f"epochs=[{window_start}..{window_end}] "
+                            f"present={present_epochs}/{window_k} "
+                            f"uid_rekey_skipped={uid_rekey_skipped} "
+                        )
+                        weights = calculate_weights(
+                            rewards, self._validator.metagraph, window_blocks, context
+                        )
+                        bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
+                        self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())
+                        self._last_weight_epoch = target_epoch
+                        self._log_shadow_window(target_epoch)
 
                 # ---- Sampled deep-verify of received attestations (once per epoch) ----
                 if self._last_deep_verify_epoch != target_epoch:

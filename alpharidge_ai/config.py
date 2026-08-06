@@ -186,7 +186,92 @@ def _log_warning(msg: str) -> None:
     except Exception:
         print(msg)
 
+def _log_error(msg: str) -> None:
+    try:
+        import bittensor as bt
+        bt.logging.error(msg)
+    except Exception:
+        print(msg)
+
 MIN_PERCENT_PER_POINT = float(os.getenv("MIN_PERCENT_PER_POINT", "0.003"))
+
+# ---------------------------------------------------------------------------
+# Weight-window aggregation
+# ---------------------------------------------------------------------------
+# K is how many BLOCK_LENGTH epochs the weight calculation sums over. K=1 is the
+# prior behaviour. _PREV holds the value in force before _ACTIVE_BLOCK so that K
+# is a pure function of block height and every validator switches together
+# rather than whenever it last polled the API.
+WEIGHT_WINDOW_EPOCHS_MAX = 24
+
+
+def _clamp_window(value, default: int, minimum: int = 1) -> int:
+    """Bound K at ingestion so no consumer has to re-test it.
+
+    Store retention is sized from the raw values (it must cover K before the
+    activation block), so an out-of-range K would grow the store even though
+    weight_window_epochs() would refuse to use it.
+    """
+    try:
+        k = int(value)
+    except (TypeError, ValueError):
+        _log_warning(f"[WEIGHT_WINDOW] K={value!r} is not an integer; using {default}")
+        return default
+    if not minimum <= k <= WEIGHT_WINDOW_EPOCHS_MAX:
+        _log_warning(f"[WEIGHT_WINDOW] K={k} outside {minimum}..{WEIGHT_WINDOW_EPOCHS_MAX}; using {default}")
+        return default
+    return k
+
+
+WEIGHT_WINDOW_EPOCHS = _clamp_window(os.getenv("WEIGHT_WINDOW_EPOCHS", "1"), 1)
+WEIGHT_WINDOW_EPOCHS_PREV = _clamp_window(os.getenv("WEIGHT_WINDOW_EPOCHS_PREV", "1"), 1)
+WEIGHT_WINDOW_ACTIVE_BLOCK = int(os.getenv("WEIGHT_WINDOW_ACTIVE_BLOCK", "0"))
+# Local only, never served: shadow mode logs a second vector without setting it.
+# 0 is off. Feeds retention sizing, so it is clamped like the others.
+WEIGHT_WINDOW_SHADOW_EPOCHS = _clamp_window(os.getenv("WEIGHT_WINDOW_SHADOW_EPOCHS", "0"), 0, minimum=0)
+
+
+if BLOCK_LENGTH != EPOCH_LENGTH:
+    # The reward store buckets points by BLOCK_LENGTH, but the burn calculation
+    # historically divided by the EPOCH_LENGTH constant. The window divisor is
+    # derived from BLOCK_LENGTH, so where the two disagree the calculated percent
+    # shifts by their ratio and landing at K=1 is not a no-op.
+    _log_warning(
+        f"[WEIGHT_WINDOW] BLOCK_LENGTH={BLOCK_LENGTH} != EPOCH_LENGTH={EPOCH_LENGTH}; "
+        f"weight percents shift by {EPOCH_LENGTH / BLOCK_LENGTH:.3g}x versus the previous release"
+    )
+
+
+def _cast_window_epochs(v) -> int:
+    """Remote-config cast for the window keys.
+
+    Raises on an out-of-range value; refresh_remote_config's except-clause then
+    keeps the previous value rather than applying a bad one.
+    """
+    k = int(v)
+    if not 1 <= k <= WEIGHT_WINDOW_EPOCHS_MAX:
+        _log_error(f"[REMOTE_CONFIG] rejected weight window K={k}; keeping previous")
+        raise ValueError(k)
+    return k
+
+
+def weight_window_epochs(block: int) -> int:
+    """K in force at a given block. Read this, never the raw keys, at a call site."""
+    if int(block) >= WEIGHT_WINDOW_ACTIVE_BLOCK:
+        return WEIGHT_WINDOW_EPOCHS
+    return WEIGHT_WINDOW_EPOCHS_PREV
+
+
+def weight_window_retention() -> int:
+    """Epochs the reward/penalty stores must keep.
+
+    Sized from the raw keys, not weight_window_epochs(): the epochs a window
+    needs after the activation block were recorded before it. The floor keeps
+    retention at or above its historical value for any configuration.
+    """
+    k_max = max(WEIGHT_WINDOW_EPOCHS, WEIGHT_WINDOW_EPOCHS_PREV, WEIGHT_WINDOW_SHADOW_EPOCHS)
+    return max(10, k_max + 5)
+
 
 BLACKLISTED_MINER_HOTKEYS: set = set()
 
@@ -385,6 +470,20 @@ _REMOTE_CONFIG_KEYS = {
     "TRIAGE_SOFT_WEIGHT":         (float, "TRIAGE_SOFT_WEIGHT"),
     "TRIAGE_CANARY_TTL_S":        (float, "TRIAGE_CANARY_TTL_S"),
     "TRIAGE_CANARY_MAX_EXPOSURES":(int,   "TRIAGE_CANARY_MAX_EXPOSURES"),
+    # Weight window. Must also be present in the API's SUBNET_CONFIG or the
+    # served value never reaches the elif below and the rollout does nothing.
+    "WEIGHT_WINDOW_EPOCHS":       (_cast_window_epochs, "WEIGHT_WINDOW_EPOCHS"),
+    "WEIGHT_WINDOW_EPOCHS_PREV":  (_cast_window_epochs, "WEIGHT_WINDOW_EPOCHS_PREV"),
+    "WEIGHT_WINDOW_ACTIVE_BLOCK": (int,   "WEIGHT_WINDOW_ACTIVE_BLOCK"),
+}
+
+# Keys that must be identical on every validator. A local OVERRIDE_ on one of
+# these is a weight difference that no config push can correct, so it is
+# ignored and reported rather than applied.
+_CONSENSUS_KEYS = {
+    "WEIGHT_WINDOW_EPOCHS",
+    "WEIGHT_WINDOW_EPOCHS_PREV",
+    "WEIGHT_WINDOW_ACTIVE_BLOCK",
 }
 
 REMOTE_CONFIG_REFRESH_SECONDS = int(os.getenv("REMOTE_CONFIG_REFRESH_SECONDS", "3600"))
@@ -453,6 +552,12 @@ def refresh_remote_config(force: bool = False) -> dict:
         cfg = data.get("config", {})
         for key, (cast, attr) in _REMOTE_CONFIG_KEYS.items():
             override_val = os.getenv(f"OVERRIDE_{key}")
+            if override_val is not None and key in _CONSENSUS_KEYS:
+                _log_error(
+                    f"[REMOTE_CONFIG] OVERRIDE_{key} is set and IGNORED: "
+                    f"consensus key, the served value applies. Unset it."
+                )
+                override_val = None
             if override_val is not None:
                 try:
                     globals()[attr] = cast(override_val)

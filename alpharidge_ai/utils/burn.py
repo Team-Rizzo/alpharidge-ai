@@ -171,52 +171,79 @@ def get_miner_alpha_per_block() -> float:
     # Returns alpha/block; caller multiplies by EPOCH_LENGTH (blocks) for the per-epoch total.
     return (get_subnet_alpha_out_emission(45) * (1 - .18) * 0.5) / 10**9
 
-def get_percent_needed_to_equal_points(points: int) -> float:
+def get_percent_needed_to_equal_points(points: int, window_blocks: int) -> float:
     """
-    Returns the percentage of the total miner alpha needed to equal the given points over the epoch length.
+    Returns the percentage of the total miner alpha needed to equal the given points
+    over window_blocks blocks.
+
+    window_blocks is required: the points passed in span the whole window, so the
+    divisor must span it too. A default here would silently under-divide.
     """
     alpha_per_point = get_alpha_per_point()
     if alpha_per_point == 0:
         return 0
-    
+
     # Convert points to equivalent alpha needed
     alpha_needed = points / alpha_per_point
-    
-    total_alpha_over_epoch = get_miner_alpha_per_block() * config.EPOCH_LENGTH
-    if total_alpha_over_epoch == 0:
+
+    total_alpha_over_window = get_miner_alpha_per_block() * window_blocks
+    if total_alpha_over_window == 0:
         return 0
-    
-    return (alpha_needed / total_alpha_over_epoch) * 100
+
+    return (alpha_needed / total_alpha_over_window) * 100
 
 
-def calculate_weights(rewards: list[Reward], metagraph) -> np.ndarray:
+def calculate_weights(rewards: list[Reward], metagraph, window_blocks: int, context: str = "") -> np.ndarray:
     """
     Calculates the weights for a given list of points and hotkeys.
+
+    window_blocks is the block span the points cover; it is required so that an
+    un-updated caller fails loudly instead of under-dividing.
+    context is free-form text from the caller for the summary log line.
+
     Returns: np.ndarray of shape (metagraph.n,)
     """
+    if window_blocks <= 0:
+        raise ValueError(f"[calculate_weights] window_blocks must be positive, got {window_blocks}")
+
     MIN_PERCENT_PER_POINT = config.MIN_PERCENT_PER_POINT
-    
+
     weights = np.zeros(metagraph.n if hasattr(metagraph, 'n') else len(metagraph), dtype=np.float64)
 
     percent_needed_for_each_hotkey = {}
     total_percent_needed = 0.0
+    total_min_percent = 0.0
+    min_percent_hits = 0
     for reward in rewards:
         try:
-            percent_needed = get_percent_needed_to_equal_points(reward.reward)
+            percent_needed = get_percent_needed_to_equal_points(reward.reward, window_blocks)
         except Exception as e:
             bt.logging.warning(f"[calculate_weights] Failed to get percent for reward={reward.reward}: {e}")
             percent_needed = 0
-        
-        # Apply minimum floor: each point gets at least MIN_PERCENT_PER_POINT
-        min_percent_for_reward = reward.reward * MIN_PERCENT_PER_POINT
+
+        # Apply minimum floor: each point gets at least MIN_PERCENT_PER_POINT.
+        # The floor is a rate, expressed per BLOCK_LENGTH blocks, so it stays level
+        # as the window grows — the points scale with the window and the divisor
+        # cancels that back out. Without this the floor would overtake the
+        # calculated percent at a large enough window and pin the burn.
+        points_per_epoch = reward.reward * config.BLOCK_LENGTH / window_blocks
+        min_percent_for_reward = points_per_epoch * MIN_PERCENT_PER_POINT
+        total_min_percent += min_percent_for_reward
         if percent_needed < min_percent_for_reward:
+            min_percent_hits += 1
             bt.logging.debug(f"[calculate_weights] Scaling up percent for {reward.reward} points: {percent_needed:.6f}% -> {min_percent_for_reward:.6f}%")
             percent_needed = min_percent_for_reward
-        
+
         percent_needed_for_each_hotkey[reward.hotkey] = percent_needed
         total_percent_needed += percent_needed
-    
-    bt.logging.info(f"[calculate_weights] total_percent_needed={total_percent_needed:.4f}%, rewards_count={len(rewards)}")
+
+    # max_possible_burn: what burn would be if every miner sat exactly on the floor.
+    max_possible_burn = 1 - (min(total_min_percent, 100) / 100)
+    bt.logging.info(
+        f"[calculate_weights] window_blocks={window_blocks} {context}"
+        f"total_percent_needed={total_percent_needed:.4f}% rewards_count={len(rewards)} "
+        f"min_percent_hits={min_percent_hits} max_possible_burn={max_possible_burn:.4f}"
+    )
 
     if total_percent_needed > 0:
         # If over 100%, scale all values down so the total sums to 100% or less

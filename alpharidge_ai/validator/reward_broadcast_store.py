@@ -38,10 +38,17 @@ def _default_path() -> Path:
 @dataclass
 class RewardBroadcastStore:
     path: Path = field(default_factory=_default_path)
-    keep_epochs: int = 3
+    # 0 follows the weight-window retention from config, so a config push widens
+    # it without a restart. A positive value pins it, for tests.
+    keep_epochs: int = 0
     last_seen_seq: Dict[str, int] = field(default_factory=dict)
     by_epoch_by_sender: Dict[int, Dict[str, Dict[int, int]]] = field(default_factory=dict)
     merkle_by_epoch_by_sender: Dict[int, Dict[str, str]] = field(default_factory=dict)
+
+    @property
+    def retention_epochs(self) -> int:
+        """Epochs of broadcast data to keep (see keep_epochs)."""
+        return self.keep_epochs if self.keep_epochs > 0 else config.weight_window_retention()
 
     # ---------------------------------------------------------------------
     # Persistence
@@ -143,8 +150,8 @@ class RewardBroadcastStore:
             bt.logging.info(f"[BROADCAST] Flushed {len(stale_epochs)} stale epochs from old scheme")
 
         # Keep only the most recent N epochs.
-        if self.keep_epochs > 0 and len(self.by_epoch_by_sender) > self.keep_epochs:
-            for old_epoch in sorted(self.by_epoch_by_sender.keys())[:-self.keep_epochs]:
+        if len(self.by_epoch_by_sender) > self.retention_epochs:
+            for old_epoch in sorted(self.by_epoch_by_sender.keys())[:-self.retention_epochs]:
                 self.by_epoch_by_sender.pop(old_epoch, None)
 
         return True, "accepted"
@@ -217,8 +224,8 @@ class RewardBroadcastStore:
         self.merkle_by_epoch_by_sender.setdefault(epoch_i, {})[sender] = merkle_root
         self.last_seen_seq[sender] = seq_i
 
-        if self.keep_epochs > 0 and len(self.by_epoch_by_sender) > self.keep_epochs:
-            for old_epoch in sorted(self.by_epoch_by_sender.keys())[:-self.keep_epochs]:
+        if len(self.by_epoch_by_sender) > self.retention_epochs:
+            for old_epoch in sorted(self.by_epoch_by_sender.keys())[:-self.retention_epochs]:
                 self.by_epoch_by_sender.pop(old_epoch, None)
                 self.merkle_by_epoch_by_sender.pop(old_epoch, None)
 
@@ -242,6 +249,41 @@ class RewardBroadcastStore:
                 uid_i = int(uid)
                 agg[uid_i] = agg.get(uid_i, 0) + int(pts)
         return agg
+
+    def aggregate_range(self, start_epoch: int, end_epoch: int, metagraph=None) -> Tuple[Dict[int, int], int]:
+        """
+        Aggregate uid->points over the inclusive epoch range, summing across senders.
+
+        Broadcast points are keyed by UID rather than hotkey, so a UID that changed
+        holder inside the range would credit the previous holder's points to the new
+        one. When a metagraph is supplied, those UIDs are dropped.
+
+        Returns (uid -> points, count of UIDs dropped). Deliberately does not report
+        how many epochs were present: these stores are sparse whenever another
+        validator did not broadcast, which is normal and must never be mistaken for
+        missing local data.
+        """
+        agg: Dict[int, int] = {}
+        for epoch in range(int(start_epoch), int(end_epoch) + 1):
+            senders = self.by_epoch_by_sender.get(epoch) or {}
+            for _sender, uid_points in senders.items():
+                for uid, pts in uid_points.items():
+                    uid_i = int(uid)
+                    agg[uid_i] = agg.get(uid_i, 0) + int(pts)
+
+        rekeyed = 0
+        if metagraph is not None:
+            start_block = int(start_epoch) * config.BLOCK_LENGTH
+            for uid in list(agg):
+                try:
+                    registered_at = int(metagraph.block_at_registration[uid])
+                except (IndexError, KeyError, TypeError, ValueError):
+                    continue
+                if registered_at >= start_block:
+                    del agg[uid]
+                    rekeyed += 1
+
+        return agg, rekeyed
 
     # ---------------------------------------------------------------------
     # Remote reset helpers

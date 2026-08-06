@@ -47,8 +47,10 @@ class MinerReward:
             self.epoch_rewards[epoch] = {}
             self.current_epoch_old = self.current_epoch
             self.current_epoch = epoch
-            # Keep only the last 10 epochs to bound memory usage.
-            max_epochs = 10
+            # Bound memory usage. Retention has to cover the widest configured
+            # weight window plus the settle lag, so it is read from config rather
+            # than fixed here.
+            max_epochs = config.weight_window_retention()
             while len(self.epoch_rewards) > max_epochs:
                 self.delete_oldest_epoch()
     
@@ -75,6 +77,25 @@ class MinerReward:
         self.update_current_epoch()
         resolved_epoch = self._resolve_epoch(epoch)
         return dict(self.epoch_rewards.get(resolved_epoch, {}))
+
+    def get_rewards_range(self, start_epoch: int, end_epoch: int):
+        """Sum rewards over the inclusive epoch range [start_epoch, end_epoch].
+
+        Returns (hotkey -> points, number of epochs in the range this store holds).
+        An absent epoch is skipped rather than counted as zero, so the caller can
+        divide by the span actually present and keep the rate correct.
+        """
+        self.update_current_epoch()
+        totals = {}
+        present = 0
+        for epoch in range(int(start_epoch), int(end_epoch) + 1):
+            rewards = self.epoch_rewards.get(epoch)
+            if rewards is None:
+                continue
+            present += 1
+            for hotkey, points in rewards.items():
+                totals[hotkey] = totals.get(hotkey, 0) + int(points)
+        return totals, present
 
     def get_past_epochs(self) -> list:
         """Return a list of all stored epoch numbers, most recent last."""

@@ -45,8 +45,10 @@ class MinerPenalty:
             self.epoch_penalties[epoch] = {}
             self.current_epoch_old = self.current_epoch
             self.current_epoch = epoch
-            # Keep only the last 10 epochs to bound memory usage.
-            max_epochs = 10
+            # Bound memory usage. Retention has to cover the widest configured
+            # weight window plus the settle lag, so it is read from config rather
+            # than fixed here.
+            max_epochs = config.weight_window_retention()
             while len(self.epoch_penalties) > max_epochs:
                 self.delete_oldest_epoch()
     
@@ -73,6 +75,25 @@ class MinerPenalty:
         self.update_current_epoch()
         resolved_epoch = self._resolve_epoch(epoch)
         return dict(self.epoch_penalties.get(resolved_epoch, {}))
+
+    def get_penalties_range(self, start_epoch: int, end_epoch: int):
+        """Sum penalty counts over the inclusive epoch range [start_epoch, end_epoch].
+
+        Returns (hotkey -> count, number of epochs in the range this store holds).
+        The present count is for logging only; window_blocks is sized from the
+        reward store so that points and their divisor always come from one source.
+        """
+        self.update_current_epoch()
+        totals = {}
+        present = 0
+        for epoch in range(int(start_epoch), int(end_epoch) + 1):
+            penalties = self.epoch_penalties.get(epoch)
+            if penalties is None:
+                continue
+            present += 1
+            for hotkey, count in penalties.items():
+                totals[hotkey] = totals.get(hotkey, 0) + int(count)
+        return totals, present
 
     def get_past_epochs(self) -> list:
         """Return a list of all stored epoch numbers, most recent last."""
