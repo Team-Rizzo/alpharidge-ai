@@ -302,7 +302,8 @@ class ValidationClient:
                 f"uid_rekey_skipped={rekeyed} "
             )
             calculate_weights(
-                rewards, self._validator.metagraph, present * config.BLOCK_LENGTH, "[SHADOW] " + context
+                rewards, self._validator.metagraph, present * config.BLOCK_LENGTH,
+                context="[SHADOW] " + context,
             )
         except Exception as e:
             bt.logging.warning(f"[SHADOW] Shadow window failed (live path unaffected): {e}")
@@ -756,7 +757,7 @@ class ValidationClient:
                             f"uid_rekey_skipped={uid_rekey_skipped} "
                         )
                         weights = calculate_weights(
-                            rewards, self._validator.metagraph, window_blocks, context
+                            rewards, self._validator.metagraph, window_blocks, context=context
                         )
                         bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
                         self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())

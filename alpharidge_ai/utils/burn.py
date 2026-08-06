@@ -193,13 +193,14 @@ def get_percent_needed_to_equal_points(points: int, window_blocks: int) -> float
     return (alpha_needed / total_alpha_over_window) * 100
 
 
-def calculate_weights(rewards: list[Reward], metagraph, window_blocks: int, context: str = "") -> np.ndarray:
+def calculate_weights(rewards: list[Reward], metagraph, window_blocks: int, *, context: str = "") -> np.ndarray:
     """
     Calculates the weights for a given list of points and hotkeys.
 
     window_blocks is the block span the points cover; it is required so that an
     un-updated caller fails loudly instead of under-dividing.
-    context is free-form text from the caller for the summary log line.
+    context is free-form text from the caller for the summary log line. It is
+    keyword-only so it can never be transposed with window_blocks.
 
     Returns: np.ndarray of shape (metagraph.n,)
     """

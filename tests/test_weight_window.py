@@ -182,3 +182,97 @@ def test_window_keys_are_marked_as_consensus_keys():
     }
     for key in config._CONSENSUS_KEYS:
         assert key in config._REMOTE_CONFIG_KEYS
+
+
+def _serve(monkeypatch, payload):
+    """Point refresh_remote_config at a fixed payload instead of the API."""
+    class Response:
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {"config": payload}
+
+    monkeypatch.setattr(config, "MINER_API_URL", "http://test.invalid")
+    monkeypatch.setattr(config.requests, "get", lambda *a, **kw: Response())
+    monkeypatch.setattr(config, "_remote_config_last_fetch", 0.0)
+
+
+def test_override_is_ignored_for_the_window_keys(monkeypatch, caplog):
+    """GUARD 5. The whole failure mode is silence, so assert the behaviour, not the constant.
+
+    A stale OVERRIDE_ on one validator is a permanent weight difference that no
+    config push can correct, and section 4.5 cannot detect it.
+    """
+    monkeypatch.setattr(config, "WEIGHT_WINDOW_EPOCHS", 1)
+    monkeypatch.setenv("OVERRIDE_WEIGHT_WINDOW_EPOCHS", "9")
+    _serve(monkeypatch, {"WEIGHT_WINDOW_EPOCHS": 7})
+
+    config.refresh_remote_config(force=True)
+
+    assert config.WEIGHT_WINDOW_EPOCHS == 7, "the served value must win over a local override"
+
+
+def test_override_is_still_honoured_for_a_non_consensus_key(monkeypatch):
+    """Control for the test above: the override path itself still works."""
+    monkeypatch.setattr(config, "MIN_PERCENT_PER_POINT", 0.003)
+    monkeypatch.setenv("OVERRIDE_MIN_PERCENT_PER_POINT", "0.001")
+    _serve(monkeypatch, {"MIN_PERCENT_PER_POINT": 0.005})
+
+    config.refresh_remote_config(force=True)
+
+    assert config.MIN_PERCENT_PER_POINT == 0.001, "tuning keys still take the local override"
+
+
+# --- reputation gate order ----------------------------------------------
+
+def test_reputation_gate_is_applied_once_to_the_window_total(monkeypatch):
+    """GUARD 4. Order 1: sum the window, then gate. Never gate per epoch and sum.
+
+    With a multiplier of 0.5 over two epochs of 3 points, the two orders give
+    different integers — 3 if the sum is gated once, 4 if each epoch is gated
+    and the results added. Every validator has to pick the same one.
+    """
+    from alpharidge_ai.validator import validation_client as vc
+
+    monkeypatch.setattr(config, "REPUTATION_GATING_ENABLED", True)
+    monkeypatch.setattr(vc.reputation, "emission", lambda *a, **kw: 0.5)
+
+    class Store:
+        # 3 points locally, 3 more from broadcasts: the gate must see the pooled 6.
+        def get_rewards_range(self, start, end):
+            return {"hk0": 3}, 2
+
+        def get_penalties_range(self, start, end):
+            return {}, 2
+
+    class Broadcasts:
+        def aggregate_range(self, start, end, metagraph=None):
+            return {0: 3}, 0
+
+    class NoBroadcasts:
+        def aggregate_range(self, start, end, metagraph=None):
+            return {}, 0
+
+    class Reputation:
+        def reputation(self, hotkey):
+            return 0.9
+
+    validator = type("V", (), {})()
+    validator.metagraph = FakeMetagraph()
+    validator._miner_reward = Store()
+    validator._miner_penalty = Store()
+    validator._reward_broadcasts = Broadcasts()
+    validator._penalty_broadcasts = NoBroadcasts()
+    validator._reputation_store = Reputation()
+
+    client = object.__new__(vc.ValidationClient)
+    client._validator = validator
+
+    rewards, present, _ = client._aggregate_window(10, 9, 10)
+
+    assert present == 2
+    assert len(rewards) == 1
+    assert rewards[0].reward == 3, "gate must be applied once to the window total, not per epoch"
