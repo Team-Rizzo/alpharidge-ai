@@ -173,6 +173,40 @@ def test_active_block_selects_between_current_and_previous_k(monkeypatch):
     assert config.weight_window_epochs(1_000_001) == 7
 
 
+def test_a_transition_with_no_activation_block_is_refused(monkeypatch):
+    """The likeliest operator slip once the API env is the only lever.
+
+    Serving a new K without an activation block would switch every validator
+    whenever it next polled — spread over the refresh interval, which is the
+    divergence the activation block exists to prevent. Hold the previous value
+    and say so, rather than switch on an unscheduled block.
+    """
+    monkeypatch.setattr(config, "WEIGHT_WINDOW_EPOCHS", 7)
+    monkeypatch.setattr(config, "WEIGHT_WINDOW_EPOCHS_PREV", 1)
+    monkeypatch.setattr(config, "WEIGHT_WINDOW_ACTIVE_BLOCK", 0)
+
+    assert config.weight_window_epochs(9_000_000) == 1
+    assert config.weight_window_epochs(0) == 1
+
+
+def test_defaults_need_no_activation_block(monkeypatch):
+    """Pull-and-restart with nothing served must not trip the guard above."""
+    monkeypatch.setattr(config, "WEIGHT_WINDOW_EPOCHS", 1)
+    monkeypatch.setattr(config, "WEIGHT_WINDOW_EPOCHS_PREV", 1)
+    monkeypatch.setattr(config, "WEIGHT_WINDOW_ACTIVE_BLOCK", 0)
+
+    assert config.weight_window_epochs(9_000_000) == 1
+
+
+def test_activation_block_in_the_past_still_applies(monkeypatch):
+    """A validator that polled late sees the block behind it and must still switch."""
+    monkeypatch.setattr(config, "WEIGHT_WINDOW_EPOCHS", 7)
+    monkeypatch.setattr(config, "WEIGHT_WINDOW_EPOCHS_PREV", 1)
+    monkeypatch.setattr(config, "WEIGHT_WINDOW_ACTIVE_BLOCK", 8_900_000)
+
+    assert config.weight_window_epochs(9_000_000) == 7
+
+
 def test_window_keys_are_marked_as_consensus_keys():
     """A local OVERRIDE_ on these is a weight split no config push can correct."""
     assert config._CONSENSUS_KEYS == {

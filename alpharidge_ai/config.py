@@ -257,6 +257,18 @@ def _cast_window_epochs(v) -> int:
 
 def weight_window_epochs(block: int) -> int:
     """K in force at a given block. Read this, never the raw keys, at a call site."""
+    if WEIGHT_WINDOW_EPOCHS != WEIGHT_WINDOW_EPOCHS_PREV and WEIGHT_WINDOW_ACTIVE_BLOCK <= 0:
+        # A transition is configured with no block to make it at. Every validator
+        # would switch whenever it happened to poll, spread over the refresh
+        # interval — the divergence the activation block exists to prevent. Hold
+        # the previous value; the served config is incomplete, not the schedule.
+        _log_error(
+            f"[WEIGHT_WINDOW] K={WEIGHT_WINDOW_EPOCHS} differs from previous "
+            f"{WEIGHT_WINDOW_EPOCHS_PREV} but WEIGHT_WINDOW_ACTIVE_BLOCK is "
+            f"{WEIGHT_WINDOW_ACTIVE_BLOCK}; holding {WEIGHT_WINDOW_EPOCHS_PREV}. "
+            f"Set the activation block on the API and re-serve."
+        )
+        return WEIGHT_WINDOW_EPOCHS_PREV
     if int(block) >= WEIGHT_WINDOW_ACTIVE_BLOCK:
         return WEIGHT_WINDOW_EPOCHS
     return WEIGHT_WINDOW_EPOCHS_PREV
