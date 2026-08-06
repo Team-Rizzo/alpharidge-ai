@@ -228,51 +228,75 @@ def test_override_is_still_honoured_for_a_non_consensus_key(monkeypatch):
 
 # --- reputation gate order ----------------------------------------------
 
-def test_reputation_gate_is_applied_once_to_the_window_total(monkeypatch):
-    """GUARD 4. Order 1: sum the window, then gate. Never gate per epoch and sum.
+class EpochStore:
+    """Reward store yielding POINTS_PER_EPOCH per epoch, proportional to the range.
 
-    With a multiplier of 0.5 over two epochs of 3 points, the two orders give
-    different integers — 3 if the sum is gated once, 4 if each epoch is gated
-    and the results added. Every validator has to pick the same one.
+    Deliberately range-aware: a fixture that returns a flat total regardless of
+    the span cannot tell a per-epoch gate from a pooled one.
     """
+    POINTS_PER_EPOCH = 3
+
+    def get_rewards_range(self, start, end):
+        epochs = end - start + 1
+        return {"hk0": self.POINTS_PER_EPOCH * epochs}, epochs
+
+    def get_penalties_range(self, start, end):
+        return {}, end - start + 1
+
+
+class FixedBroadcasts:
+    def __init__(self, points=None):
+        self.points = points or {}
+
+    def aggregate_range(self, start, end, metagraph=None):
+        return dict(self.points), 0
+
+
+def _client_with(monkeypatch, reward_store, reward_broadcasts, multiplier=0.5):
     from alpharidge_ai.validator import validation_client as vc
 
     monkeypatch.setattr(config, "REPUTATION_GATING_ENABLED", True)
-    monkeypatch.setattr(vc.reputation, "emission", lambda *a, **kw: 0.5)
-
-    class Store:
-        # 3 points locally, 3 more from broadcasts: the gate must see the pooled 6.
-        def get_rewards_range(self, start, end):
-            return {"hk0": 3}, 2
-
-        def get_penalties_range(self, start, end):
-            return {}, 2
-
-    class Broadcasts:
-        def aggregate_range(self, start, end, metagraph=None):
-            return {0: 3}, 0
-
-    class NoBroadcasts:
-        def aggregate_range(self, start, end, metagraph=None):
-            return {}, 0
-
-    class Reputation:
-        def reputation(self, hotkey):
-            return 0.9
+    monkeypatch.setattr(vc.reputation, "emission", lambda *a, **kw: multiplier)
 
     validator = type("V", (), {})()
     validator.metagraph = FakeMetagraph()
-    validator._miner_reward = Store()
-    validator._miner_penalty = Store()
-    validator._reward_broadcasts = Broadcasts()
-    validator._penalty_broadcasts = NoBroadcasts()
-    validator._reputation_store = Reputation()
+    validator._miner_reward = reward_store
+    validator._miner_penalty = reward_store
+    validator._reward_broadcasts = reward_broadcasts
+    validator._penalty_broadcasts = FixedBroadcasts()
+    validator._reputation_store = type("R", (), {"reputation": lambda self, hk: 0.9})()
 
     client = object.__new__(vc.ValidationClient)
     client._validator = validator
+    return client
+
+
+def test_reputation_gate_is_applied_once_to_the_window_not_per_epoch(monkeypatch):
+    """GUARD 4, on the axis 5.7 names: sum the window, then gate. Never gate each epoch and add.
+
+    Two epochs of 3 points at a multiplier of 0.5. Gating the pooled 6 gives
+    round(3.0) = 3; gating each epoch gives round(1.5) + round(1.5) = 4. The
+    store is range-aware, so the two orders are genuinely distinguishable here.
+    """
+    client = _client_with(monkeypatch, EpochStore(), FixedBroadcasts())
 
     rewards, present, _ = client._aggregate_window(10, 9, 10)
 
-    assert present == 2
+    assert present == 2, "the fixture must span two epochs or this proves nothing"
     assert len(rewards) == 1
-    assert rewards[0].reward == 3, "gate must be applied once to the window total, not per epoch"
+    assert rewards[0].reward == 3, "gate the window total once, never each epoch then add"
+
+
+def test_reputation_gate_sees_local_and_broadcast_pooled(monkeypatch):
+    """GUARD 4 on the other axis: both point sources are pooled before the gate.
+
+    One epoch of 3 local points plus 3 broadcast points. Gating the pooled 6
+    gives 3; gating each source gives round(1.5) + round(1.5) = 4.
+    """
+    client = _client_with(monkeypatch, EpochStore(), FixedBroadcasts({0: 3}))
+
+    rewards, present, _ = client._aggregate_window(10, 10, 10)
+
+    assert present == 1
+    assert len(rewards) == 1
+    assert rewards[0].reward == 3, "pool local and broadcast points before gating"
