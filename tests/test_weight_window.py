@@ -119,6 +119,78 @@ def test_retention_follows_the_widest_configured_window(monkeypatch):
     assert config.weight_window_retention() == 12
 
 
+# --- restart -------------------------------------------------------------
+
+def _populated_store(tmp_path, epochs, points=3):
+    """A reward store holding `points` for hk0 in each of `epochs`, saved to disk."""
+    block = [0]
+    store = MinerReward(config.BLOCK_LENGTH, lambda: block[0])
+    for epoch in epochs:
+        block[0] = epoch * config.BLOCK_LENGTH
+        store.add_reward("hk0", points)
+    path = tmp_path / "reward_store.json"
+    store.save_to_file(path)
+    return store, path
+
+
+def _reloaded_at(path, epoch):
+    """A fresh store loaded from disk, as if the process had just restarted."""
+    block = [epoch * config.BLOCK_LENGTH]
+    store = MinerReward(config.BLOCK_LENGTH, lambda: block[0])
+    store.load_from_file(block=lambda: block[0], file_path=path)
+    return store
+
+
+def test_clean_restart_preserves_the_whole_window(tmp_path):
+    """A restart must not shorten the window or lose its points.
+
+    The store is written every poll loop, so a clean restart should come back
+    holding every epoch it held before.
+    """
+    store, path = _populated_store(tmp_path, range(100, 107))
+    before = store.get_rewards_range(100, 106)
+
+    after = _reloaded_at(path, 108).get_rewards_range(100, 106)
+
+    assert after == before == ({"hk0": 21}, 7)
+
+
+def test_downtime_costs_sample_size_not_rate(tmp_path):
+    """The point of the 4.2 divisor: epochs missed while down shrink the divisor too.
+
+    Down for 107-109, back at 110. The window holds 4 of 7 epochs, so it divides
+    by 4 epochs' worth of blocks — the miner's points-per-block is unchanged and
+    its weight is unchanged. Dividing by the full span instead would understate
+    every miner by 43% and spike burn for the rest of the window.
+    """
+    _, path = _populated_store(tmp_path, range(100, 107))
+    store = _reloaded_at(path, 110)
+    store.add_reward("hk0", 3)  # only epoch 110 is recorded after coming back
+
+    totals, present = store.get_rewards_range(104, 110)
+
+    assert present == 4  # 104, 105, 106 and 110
+    assert totals == {"hk0": 12}
+    full_rate = 21 / (7 * config.BLOCK_LENGTH)
+    gap_rate = totals["hk0"] / (present * config.BLOCK_LENGTH)
+    assert full_rate == gap_rate
+
+
+def test_broadcast_points_survive_a_restart(tmp_path):
+    """Other validators' points are cached on disk precisely so a restart keeps them."""
+    path = tmp_path / "broadcast.json"
+    store = RewardBroadcastStore(path=path, keep_epochs=99)
+    for epoch in range(100, 107):
+        store.ingest(sender_hotkey="v1", epoch=epoch, seq=epoch, uid_points={0: 2})
+    before, _ = store.aggregate_range(100, 106)
+    store.save()
+
+    reloaded = RewardBroadcastStore(path=path, keep_epochs=99)
+    reloaded.load()
+
+    assert reloaded.aggregate_range(100, 106)[0] == before == {0: 14}
+
+
 # --- broadcast store -----------------------------------------------------
 
 def test_uid_that_changed_holder_inside_the_window_is_dropped(tmp_path):
