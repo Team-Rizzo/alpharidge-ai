@@ -1,16 +1,7 @@
-"""Audit-LLM relevance verdict for triage false-negative adjudication.
+"""Audit-LLM relevance verdict for triage adjudication.
 
-One cheap tool call over the headline plus a short body slice — orders of
-magnitude cheaper than the full ArticleIntelligence reference analysis, which
-is what makes it affordable to run on claimed-irrelevant articles.
-
-Deliberately asymmetric. A `True` verdict costs a miner reputation, so it is
-returned only when the model is both confident and explicit; anything else —
-low confidence, a malformed reply, a transport error — returns None, which the
-grader treats as "no event". Mistakes by this model therefore cost us recall
-in auditing, never a wrongly punished miner. Combined with the grader keeping
-LLM verdicts on the soft path by default, an audit model that is merely decent
-cannot meaningfully harm an honest miner.
+Returns a verdict only when the model is confident; low confidence, malformed
+replies, and transport errors all return None (no event).
 """
 from __future__ import annotations
 
@@ -51,7 +42,9 @@ _TOOL = {
     },
 }
 
-_PROMPT = """Judge whether this news article is market-relevant for a financial \
+# Two framings of the same question.
+_PROMPTS = {
+    "strict": """Judge whether this news article is market-relevant for a financial \
 intelligence feed.
 
 TITLE: {title}
@@ -60,7 +53,19 @@ BODY: {body}
 
 Answer with the judge_market_relevance tool. Be strict: most general news is \
 NOT market-relevant. Only say relevant when a tradeable asset or a named-economy \
-macro/policy event is genuinely the subject of the article."""
+macro/policy event is genuinely the subject of the article.""",
+    "editorial": """You are the desk editor of a trading floor's news terminal. \
+A story only makes the terminal if a portfolio manager could act on it: it moves \
+a listed company, a currency, a commodity, rates, or follows from economic data \
+or government economic policy of a named economy.
+
+STORY HEADLINE: {title}
+
+STORY TEXT: {body}
+
+Would this story make the terminal? Answer with the judge_market_relevance tool \
+— `relevant` means it makes the terminal.""",
+}
 
 
 class TriageAuditor:
@@ -73,12 +78,13 @@ class TriageAuditor:
         self._min_confidence = min_confidence
         self._body_chars = body_chars
 
-    def relevance_verdict(self, title: str, body: str) -> Optional[bool]:
+    def relevance_verdict(self, title: str, body: str,
+                          framing: str = "strict") -> Optional[bool]:
         """True = confidently relevant, False = confidently not, None = no verdict."""
         try:
             response = self._client.chat.completions.create(
                 model=self._model,
-                messages=[{"role": "user", "content": _PROMPT.format(
+                messages=[{"role": "user", "content": _PROMPTS[framing].format(
                     title=(title or "")[:300],
                     body=(body or "")[:self._body_chars])}],
                 tools=[_TOOL],

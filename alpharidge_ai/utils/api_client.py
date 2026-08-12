@@ -508,6 +508,19 @@ class AlpharidgeAPIClient:
         )
         return SubmissionResponse(**data)
 
+    async def submit_analysis_variants(
+        self,
+        variants: List[Dict[str, Any]],
+    ) -> SubmissionResponse:
+        """Submit verifier analyses from overlap dispatch to /articles/variants.
+        Append-only companion data; best-effort, failures are non-fatal."""
+        data = await self._request(
+            "POST",
+            "/articles/variants",
+            json={"variants": variants},
+        )
+        return SubmissionResponse(**data)
+
     async def submit_dispatch_status(
         self,
         miners: List[Dict[str, Any]],

@@ -24,7 +24,8 @@ from alpharidge_ai.analyzer import setup_news_analyzer
 from alpharidge_ai.analyzer import setup_article_intelligence_analyzer
 from alpharidge_ai.utils.api_models import TweetAnalysisBase, TelegramMessageAnalysis, NewsArticleAnalysisBase
 from alpharidge_ai.models.article_intelligence import SCHEMA_VERSION
-from alpharidge_ai.triage import TRIAGE_SCHEMA_VERSION
+from alpharidge_ai.triage import (
+    FLAG_DISCARD, FLAG_VALUABLE, TRIAGE_SCHEMA_VERSION, analysis_indicates_value)
 
 # Must precede every model load — see install_meta_init_guard. A miner that loses the
 # race returns nothing for the affected articles and earns no points for them.
@@ -49,29 +50,27 @@ class Miner(BaseMinerNeuron):
         self.news_analyzer = setup_news_analyzer()
         bt.logging.info("[Miner] News analyzer initialized")
 
+        # The V2 analyzer and the triage stage are required; fail startup
+        # rather than fall back silently.
         try:
             self.article_intel_analyzer = setup_article_intelligence_analyzer()
             bt.logging.info("[Miner] ArticleIntelligence analyzer initialized")
         except Exception as e:
-            bt.logging.warning(f"[Miner] ArticleIntelligence analyzer init failed, falling back to V1: {e}")
-            self.article_intel_analyzer = None
+            raise RuntimeError(
+                "[Miner] ArticleIntelligence (V2) analyzer failed to initialize; "
+                "the subnet requires triage and triage requires V2. "
+                f"Fix the analyzer setup and restart: {e}") from e
 
-        # Article triage (schema v3): cheap relevance pass before deep analysis.
-        # Keep OFF until validators run a triage-aware release — triage-only
-        # responses fail v2 validation as incomplete on older validators.
-        # Requires the V2 analyzer: the V1 fallback emits no analysis_data, so a
-        # triage claim could not ride along and the batch would look malformed.
-        self.triage_stage = None
-        from alpharidge_ai import config as ar_config
-        if (getattr(ar_config, "MINER_TRIAGE_ENABLED", False)
-                and self.article_intel_analyzer is not None):
-            try:
-                from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
-                from alpharidge_ai.analyzer.triage_stage import TriageStage
-                self.triage_stage = TriageStage(AssetExtractor())
-                bt.logging.info("[Miner] Article triage stage enabled")
-            except Exception as e:
-                bt.logging.warning(f"[Miner] Triage stage init failed, triage disabled: {e}")
+        try:
+            from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
+            from alpharidge_ai.analyzer.triage_stage import TriageStage
+            self.triage_stage = TriageStage(AssetExtractor())
+            bt.logging.info("[Miner] Article triage stage initialized")
+        except Exception as e:
+            raise RuntimeError(
+                "[Miner] Triage stage failed to initialize (asset gazetteer or "
+                "language detector). The subnet requires triage; fix the named "
+                f"component and restart: {e}") from e
         bt.logging.info("[Miner] Analyzer initialized")
         # NOTE: we intentionally do NOT reuse a single bt.Dendrite across threads/event-loops.
         # Miner responses are sent back to validators from a background thread with its own event loop.
@@ -456,28 +455,35 @@ class Miner(BaseMinerNeuron):
 
             for article in synapse.article_batch:
                 if not article.title:
-                    bt.logging.warning(f"[Miner] Skipping article {article.id} - no title")
+                    # Never skip: an absent response fails the size check. A
+                    # titleless article still gets a claim and a proof.
+                    rec, proof, _ = self.triage_stage.evaluate("", article.content or "")
+                    article.analysis = NewsArticleAnalysisBase(
+                        sentiment="neutral",
+                        analysisData={
+                            "schema_version": SCHEMA_VERSION,
+                            "triage_schema_version": TRIAGE_SCHEMA_VERSION,
+                            "triage": rec,
+                            "proof_of_read": proof,
+                        },
+                    )
                     continue
 
-                # Triage: label every article; deep-analyze only relevant ones.
-                # Irrelevant/borderline articles return just the triage claim +
-                # proof-of-read, both auditable by the validator. The absence of
-                # event_fingerprint is what marks a blob as triage-only.
-                triage_rec = proof = None
-                if self.triage_stage is not None:
-                    triage_rec, proof, _ = self.triage_stage.evaluate(
-                        article.title, article.content or "")
-                    if triage_rec["label"] != "relevant":
-                        article.analysis = NewsArticleAnalysisBase(
-                            sentiment="neutral",
-                            analysisData={
-                                "schema_version": SCHEMA_VERSION,
-                                "triage_schema_version": TRIAGE_SCHEMA_VERSION,
-                                "triage": triage_rec,
-                                "proof_of_read": proof,
-                            },
-                        )
-                        continue
+                # Label every article. Relevant and borderline get the full
+                # analysis; borderline is then flagged from the analysis result.
+                triage_rec, proof, _ = self.triage_stage.evaluate(
+                    article.title, article.content or "")
+                if triage_rec["label"] == "irrelevant":
+                    article.analysis = NewsArticleAnalysisBase(
+                        sentiment="neutral",
+                        analysisData={
+                            "schema_version": SCHEMA_VERSION,
+                            "triage_schema_version": TRIAGE_SCHEMA_VERSION,
+                            "triage": triage_rec,
+                            "proof_of_read": proof,
+                        },
+                    )
+                    continue
 
                 # V2: Full ArticleIntelligence analysis
                 if self.article_intel_analyzer is not None:
@@ -492,12 +498,28 @@ class Miner(BaseMinerNeuron):
                         raw_html=getattr(article, "raw_html", None),
                         miner_hotkey=self.wallet.hotkey.ss58_address if self.wallet else None,
                     )
+                    if intel is None:
+                        # Analysis unavailable: send the claim + proof so
+                        # the batch stays complete.
+                        article.analysis = NewsArticleAnalysisBase(
+                            sentiment="neutral",
+                            analysisData={
+                                "schema_version": SCHEMA_VERSION,
+                                "triage_schema_version": TRIAGE_SCHEMA_VERSION,
+                                "triage": triage_rec,
+                                "proof_of_read": proof,
+                            },
+                        )
+                        continue
                     if intel is not None:
                         analysis_blob = intel.model_dump()
-                        if triage_rec is not None:
-                            analysis_blob["triage_schema_version"] = TRIAGE_SCHEMA_VERSION
-                            analysis_blob["triage"] = triage_rec
-                            analysis_blob["proof_of_read"] = proof
+                        if triage_rec["label"] == "borderline":
+                            triage_rec["flag"] = (
+                                FLAG_VALUABLE if analysis_indicates_value(analysis_blob)
+                                else FLAG_DISCARD)
+                        analysis_blob["triage_schema_version"] = TRIAGE_SCHEMA_VERSION
+                        analysis_blob["triage"] = triage_rec
+                        analysis_blob["proof_of_read"] = proof
                         article.analysis = NewsArticleAnalysisBase(
                             sentiment=intel.overall_sentiment.value,
                             sectorId=intel.topic_signature.primary_sector_id,

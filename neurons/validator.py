@@ -65,9 +65,14 @@ from alpharidge_ai.protocol import ValidatorReputationObs
 from alpharidge_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch, classify_article_batch_failure
 from alpharidge_ai.validator.reputation_store import ReputationStore
 from alpharidge_ai.validator.reputation import emission as _rep_emission
-from alpharidge_ai.triage import gazetteer_assets
+from alpharidge_ai.triage import TRIAGE_SCHEMA_VERSION, gazetteer_assets
+from alpharidge_ai.models.article_intelligence import SCHEMA_VERSION
+from alpharidge_ai.utils.api_models import NewsArticleAnalysisBase
 from alpharidge_ai.validator.triage_grader import (
     CanaryPool, TriageConfig, fp_soft_event, grade_batch)
+
+# Triage design constants — one instance, no env var or served key behind it.
+TRIAGE_CFG = TriageConfig()
 from alpharidge_ai.analyzer import setup_telegram_analyzer
 from alpharidge_ai.utils.cooldown import MinerCooldownTracker
 from alpharidge_ai.validator.verdict_payload import build_verdict_fields, collect_verdict_meta  # T5: verdict payload
@@ -173,14 +178,17 @@ class Validator(BaseValidatorNeuron):
         # Per-cycle pilot metrics (adaptive dispatch).
         self._adaptive_metrics = AdaptiveDispatchMetrics()
 
-        # Article triage (schema v3): canary pool + cached canary article
-        # objects for re-dispatch. Inert until TRIAGE_ENABLED is served on.
-        self._canary_pool = CanaryPool(
-            self._triage_cfg(), state_path=".canary_state.json")
+        # Article triage: in-memory canary pool + cached article objects.
+        self._canary_pool = CanaryPool(self._triage_cfg())
         self._canary_articles: dict = {}
-        self._triage_extractor = None  # lazy AssetExtractor for audits
-        self._triage_auditor = None    # lazy audit-LLM client
-        self._triage_stage = None      # lazy reference TriageStage (canary/FP veto)
+        self._triage_extractor = None
+        self._triage_auditor = None
+        self._triage_stage = None
+        # Overlap: pending verification assignments (hotkey -> {aid: (article, ts)})
+        # and analyses awaiting submission to the variants endpoint.
+        self._verification_pending: dict = {}
+        self._article_k: dict = {}     # aid -> (assignment count, ts)
+        self._variant_buffer: list = []
 
     def resync_metagraph(self):
         super().resync_metagraph()
@@ -359,32 +367,44 @@ class Validator(BaseValidatorNeuron):
         # size-mismatch penalty in _handle_article_miner_batch_response cannot misfire.
         sent_batch: List[NewsArticleForScoring] = []
         accepted: List = []
+        v_sent: List[NewsArticleForScoring] = []
+        v_accepted: List = []
         skipped = 0
         for returned in synapse.article_batch:
             aid = str(getattr(returned, "id", ""))
             if not aid:
                 continue
-            if aid in self._validating_article_ids:
-                skipped += 1
-                continue
+            # A held lease outranks a verification assignment.
+            is_primary = False
             try:
-                if self._article_store.get_status(aid).value != "Processing":
-                    skipped += 1
-                    continue
-                if self._article_store.get_hotkey(aid) != miner_hotkey:
+                is_primary = (self._article_store.get_status(aid).value == "Processing"
+                              and self._article_store.get_hotkey(aid) == miner_hotkey)
+            except Exception:
+                is_primary = False
+            if is_primary:
+                if aid in self._validating_article_ids:
                     skipped += 1
                     continue
                 sent_batch.append(self._article_store.get_article(aid))
                 accepted.append(returned)
-            except Exception:
-                skipped += 1
                 continue
+            v_copy = self._pop_verification(miner_hotkey, aid)
+            if v_copy is not None:
+                v_sent.append(v_copy)
+                v_accepted.append(returned)
+            else:
+                skipped += 1
 
         if skipped:
             bt.logging.info(
                 f"[VALIDATION] {miner_hotkey[:12]}.. skipped {skipped}/{len(synapse.article_batch)} "
                 f"article(s), validating {len(sent_batch)}"
             )
+        if v_accepted:
+            vb, vs = copy.deepcopy(v_accepted), copy.deepcopy(v_sent)
+            vtask = asyncio.create_task(self._handle_article_miner_batch_response(
+                vb, miner_hotkey, vs, verification=True))
+            self._track_task(vtask)
         if not sent_batch:
             return synapse
 
@@ -760,26 +780,17 @@ class Validator(BaseValidatorNeuron):
     # Article triage (schema v3)
 
     def _triage_cfg(self) -> TriageConfig:
-        return TriageConfig(
-            audit_irrelevant_n=int(getattr(config, "TRIAGE_AUDIT_IRRELEVANT_N", 1)),
-            borderline_cap=int(getattr(config, "TRIAGE_BORDERLINE_CAP", 3)),
-            hard_weight=float(getattr(config, "TRIAGE_HARD_WEIGHT", 2.0)),
-            soft_weight=float(getattr(config, "TRIAGE_SOFT_WEIGHT", 0.4)),
-            hard_llm_verdicts=bool(getattr(config, "TRIAGE_HARD_LLM_VERDICTS", False)),
-            canary_ttl_s=float(getattr(config, "TRIAGE_CANARY_TTL_S", 6 * 3600)),
-            canary_max_exposures=int(getattr(config, "TRIAGE_CANARY_MAX_EXPOSURES", 30)),
-        )
+        return TRIAGE_CFG
 
     def _get_triage_auditor(self):
-        """Lazy audit-LLM client, reusing the reference analyzer's connection.
-        Returns None when unavailable — the grader then raises no LLM events."""
+        """Lazy audit-LLM client. None when unavailable (no events raised)."""
         if self._triage_auditor is None and self._article_intel_analyzer is not None:
             try:
                 from alpharidge_ai.validator.triage_audit import TriageAuditor
                 self._triage_auditor = TriageAuditor(
                     self._article_intel_analyzer.client,
                     self._article_intel_analyzer.model,
-                    min_confidence=float(getattr(config, "TRIAGE_AUDIT_MIN_CONFIDENCE", 0.75)),
+                    min_confidence=TRIAGE_CFG.audit_min_confidence,
                 )
             except Exception as e:
                 bt.logging.warning(f"[TRIAGE] auditor unavailable: {e}")
@@ -787,25 +798,13 @@ class Validator(BaseValidatorNeuron):
 
     def _llm_relevant_item(self, item: dict):
         auditor = self._get_triage_auditor()
-        if auditor is None or not getattr(config, "TRIAGE_AUDIT_LLM_ENABLED", False):
+        if auditor is None:
             return None
         return auditor.relevance_verdict(item.get("title") or "", item.get("body") or "")
 
     def _confirm_clearly_irrelevant(self, aid_flags, sent_by_id) -> set:
-        """Confirm the reference LLM's 'clearly irrelevant' verdicts before they
-        mint negative canaries or false-positive charges: the article must ALSO
-        be labeled irrelevant by our own published reference TriageStage.
-
-        Two live incidents (2026-07-24) drove this shape. First the reference
-        model missed a ticker the gazetteer resolves; a gazetteer veto fixed
-        that. Then it missed foreign-listed equities the gazetteer doesn't
-        cover either, and honest miners were soft-punished again for being
-        right. Requiring agreement from the shipped TriageStage (which contains
-        the gazetteer as its R1 branch) makes it structurally impossible to
-        punish a miner for agreeing with our own reference implementation —
-        ground truth is only minted where two independent systems concur.
-        Blocking (gazetteer + regex over content) — run in the validation
-        executor."""
+        """Keep only 'clearly irrelevant' verdicts the reference TriageStage
+        agrees with. Blocking — run in the validation executor."""
         confirmed = set()
         for aid, flag in aid_flags:
             if not flag:
@@ -829,9 +828,55 @@ class Validator(BaseValidatorNeuron):
             self._triage_stage = TriageStage(self._triage_extractor)
         return self._triage_stage
 
+    def _register_verification(self, hotkey: str, articles) -> None:
+        now = time.time()
+        slot = self._verification_pending.setdefault(hotkey, {})
+        for a in articles:
+            slot[str(a.id)] = (a, now)
+
+    def _pop_verification(self, hotkey: str, aid: str):
+        entry = self._verification_pending.get(hotkey, {}).pop(aid, None)
+        return entry[0] if entry else None
+
+    def _prune_verification(self) -> None:
+        cutoff = time.time() - TRIAGE_CFG.verification_ttl_s
+        for hk in list(self._verification_pending):
+            slot = {k: v for k, v in self._verification_pending[hk].items()
+                    if v[1] >= cutoff}
+            if slot:
+                self._verification_pending[hk] = slot
+            else:
+                del self._verification_pending[hk]
+        self._article_k = {a: v for a, v in self._article_k.items()
+                           if v[1] >= cutoff}
+
+    def _k_for(self, article_id) -> int:
+        entry = self._article_k.get(str(article_id))
+        if entry:
+            return max(1, entry[0])
+        return (TRIAGE_CFG.overlap_k
+                if getattr(config, "TRIAGE_ENFORCED", False) else 1)
+
+    def _buffer_variants(self, miner_hotkey: str, articles) -> None:
+        for a in articles:
+            data = getattr(getattr(a, "analysis", None), "analysis_data", None)
+            if isinstance(data, dict) and data.get("event_fingerprint"):
+                if len(str(data)) > 300_000:
+                    continue
+                if len(self._variant_buffer) < 5000:
+                    self._variant_buffer.append({
+                        "article_id": int(a.id),
+                        "miner_hotkey": miner_hotkey,
+                        "analysis_data": data,
+                    })
+
+    def _stage_label_item(self, item: dict) -> str:
+        rec, _, _ = self._get_triage_stage().evaluate(
+            item.get("title") or "", item.get("body") or "")
+        return rec["label"]
+
     def _det_relevant_item(self, item: dict) -> bool:
-        """Deterministic R1 audit — same helper the reference miner uses, so
-        the two sides can never disagree on a gazetteer verdict."""
+        """Deterministic R1 gazetteer check (shared with the miner path)."""
         if self._triage_extractor is None:
             from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
             self._triage_extractor = AssetExtractor()
@@ -839,8 +884,7 @@ class Validator(BaseValidatorNeuron):
             self._triage_extractor, item.get("title") or "", item.get("body") or ""))
 
     def _feed_pos_canaries(self, articles, budget: int = 8, target: int = 50):
-        """Label a few incoming articles as positive canaries via the gazetteer
-        (free, deterministic). Bounded per tick; only runs while the pool is low."""
+        """Top up positive canaries from the gazetteer. Bounded per tick."""
         if self._canary_pool.size("pos") >= target:
             return
         for article in articles[:budget]:
@@ -850,33 +894,61 @@ class Validator(BaseValidatorNeuron):
                 self._canary_articles[int(article.id)] = article
 
     def _refresh_canaries(self, articles):
-        """Top up the positive pool, expire stale entries, persist. Blocking
-        (gazetteer-bound) — callers must run it off the event loop."""
+        """Top up both canary pools and expire stale entries. Blocking —
+        run off the event loop."""
         try:
             self._feed_pos_canaries(articles)
+            self._mint_neg_canaries(articles)
             self._canary_pool.prune()
             live = self._canary_pool.ids()
             self._canary_articles = {
                 k: v for k, v in self._canary_articles.items() if k in live}
-            self._canary_pool.save()
         except Exception as e:
             bt.logging.warning(f"[TRIAGE] canary refresh failed: {e}")
 
-    def _inject_canaries(self, miner_batch, rng) -> dict:
+    def _mint_neg_canaries(self, articles):
+        """Mint negative canaries: the TriageStage and two audit-LLM passes
+        must all concur. Bounded per tick."""
+        budget, target = TRIAGE_CFG.neg_mint_budget, TRIAGE_CFG.neg_pool_target
+        if self._canary_pool.size("neg") >= target:
+            return
+        auditor = self._get_triage_auditor()
+        if auditor is None:
+            return
+        checked = 0
+        for article in articles:
+            if checked >= budget or self._canary_pool.size("neg") >= target:
+                break
+            aid = int(article.id)
+            if aid in self._canary_pool.ids():
+                continue
+            rec, _, _ = self._get_triage_stage().evaluate(
+                article.title or "", article.content or "")
+            if rec["label"] != "irrelevant":
+                continue
+            checked += 1
+            if (auditor.relevance_verdict(article.title, article.content or "",
+                                          framing="strict") is False
+                    and auditor.relevance_verdict(article.title, article.content or "",
+                                                  framing="editorial") is False):
+                self._canary_pool.add(aid, "neg", deterministic=False)
+                self._canary_articles[aid] = article.model_copy(
+                    update={"analysis": None})
+                bt.logging.info(f"[TRIAGE] minted negative canary {aid}")
+
+    def _inject_canaries(self, miner_batch, rng, charge: int = 1) -> dict:
         """Swap canaries into a dispatch batch (in place). Returns the injected
         {article_id: (kind, deterministic)} labels for later grading."""
         injected = {}
         batch_ids = {int(a.id) for a in miner_batch}
-        for kind, rate in (("pos", float(getattr(config, "TRIAGE_CANARY_POS_RATE", 0.7))),
-                           ("neg", float(getattr(config, "TRIAGE_CANARY_NEG_RATE", 0.7)))):
+        for kind, rate in (("pos", TRIAGE_CFG.canary_pos_rate),
+                           ("neg", TRIAGE_CFG.canary_neg_rate)):
             if len(miner_batch) < 3 or rng.random() >= rate:
                 continue
-            aid = self._canary_pool.draw(kind, rng)
-            if aid is None or aid in batch_ids or aid not in self._canary_articles:
+            available = set(self._canary_articles) - batch_ids
+            aid = self._canary_pool.draw(kind, rng, available=available, charge=charge)
+            if aid is None:
                 continue
-            # Random slot: fixed placement (e.g. always the tail) would let a
-            # miner spend its evasion budget on exactly the positions canaries
-            # can occupy.
             free = [i for i, a in enumerate(miner_batch) if int(a.id) not in injected]
             slot = rng.choice(free)
             miner_batch[slot] = self._canary_articles[aid]
@@ -885,17 +957,8 @@ class Validator(BaseValidatorNeuron):
         return injected
 
     def _grade_triage(self, article_batch, sent_batch, miner_hotkey):
-        """Run triage grading for a returned batch. Returns None when triage is
-        disabled; a TriageGradeResult otherwise (v2_grace when miner is pre-v3).
-
-        Article text comes from OUR copies in sent_batch, never from the miner's
-        echoed response — auditing miner-supplied text would let a miner rewrite
-        an article into junk and have both the proof-of-read and the gazetteer
-        audit confirm its own forgery. Only analysis_data is taken from the
-        response, because that is the claim being graded.
-        """
-        if not getattr(config, "TRIAGE_ENABLED", False):
-            return None
+        """Grade a returned batch. Article text comes from our sent_batch
+        copies; only analysis_data is taken from the response."""
         reference_by_id = {int(a.id): a for a in sent_batch}
         items = []
         for a in article_batch:
@@ -915,7 +978,9 @@ class Validator(BaseValidatorNeuron):
                 canary_labels[it["article_id"]] = label
         res = grade_batch(
             items, canary_labels, self._det_relevant_item, self._llm_relevant_item,
-            random.Random(), self._triage_cfg())
+            self._stage_label_item,
+            random.Random(), self._triage_cfg(),
+            enforced=bool(getattr(config, "TRIAGE_ENFORCED", False)))
         if res.events:
             bt.logging.info(
                 f"[TRIAGE] hk={miner_hotkey} events="
@@ -923,19 +988,11 @@ class Validator(BaseValidatorNeuron):
         return res
 
     def _record_triage_observations(self, miner_hotkey, triage_res, article_batch,
-                                    graded_observations=()):
-        """Fold triage grades into the existing reputation observation stream —
-        the emission gate then prices triage accuracy with no new machinery.
-        Clean batches are keyed by the first article id (deterministic across
-        validators grading the same batch).
-
-        Triage and quality observations are merged here rather than recorded
-        separately: the reputation store keeps only the first observation per
-        (article_id, sender), so a sampled article carrying both would lose one
-        of them. Merging keeps the worse score and the larger weight, so no
-        adverse finding can be masked by a favourable one on the same article.
-        """
-        clean_id = int(article_batch[0].id) if article_batch else None
+                                    graded_observations=(), allow_clean=True):
+        """Merge triage and quality observations before recording (the store
+        keeps one observation per (article_id, sender); worst score wins)."""
+        clean_id = (int(article_batch[0].id)
+                    if article_batch and allow_clean else None)
         merged = {}
         for aid, score, weight in (list(graded_observations)
                                    + triage_res.observations(self._triage_cfg(), clean_id)):
@@ -946,50 +1003,68 @@ class Validator(BaseValidatorNeuron):
         self._record_observations(
             miner_hotkey, [(aid, s, w) for aid, (s, w) in sorted(merged.items())])
 
+    @staticmethod
+    def _has_full_analysis(article) -> bool:
+        """True when the response carries an analysis payload."""
+        data = getattr(getattr(article, "analysis", None), "analysis_data", None)
+        return isinstance(data, dict) and bool(data.get("event_fingerprint"))
+
+    @staticmethod
+    def _triage_only_analysis(article):
+        """Minimal stored analysis for a retired article: the miner's triage
+        record and proof-of-read only."""
+        data = getattr(getattr(article, "analysis", None), "analysis_data", None)
+        data = data if isinstance(data, dict) else {}
+        return NewsArticleAnalysisBase(
+            sentiment="neutral",
+            analysisData={
+                "schema_version": SCHEMA_VERSION,
+                "triage_schema_version": TRIAGE_SCHEMA_VERSION,
+                "triage": data.get("triage"),
+                "proof_of_read": data.get("proof_of_read"),
+            },
+        )
+
     def _apply_triage_outcome(self, article_batch, miner_hotkey, triage_res, fp_ids,
-                              sent_by_id=None):
-        """Store + reward outcomes for a passing v3 batch.
-
-        Pay: flat triage fee for the proven-read batch, plus per-article points
-        (TRIAGE_REL_POINT_MULT x length weight) for claimed-relevant articles the
-        reference didn't refute. The emission gate then scales all of it by the
-        merged reputation, which triage events feed — so triage accuracy prices
-        the whole batch.
-
-        Store: relevant -> processed; uncontradicted irrelevant -> processed with
-        the triage-only analysis (every one already passed the deterministic
-        gazetteer audit in grade_batch, so no asset-bearing article can retire
-        this way); borderline/contradicted -> back to the pool; canaries ->
-        untouched (graded only, never re-stored or re-paid).
-        """
+                              sent_by_id=None, full_push=True):
+        """Store + reward outcomes for a passing v3 batch. Relevant ->
+        processed; uncontradicted irrelevant -> processed with a rebuilt
+        triage-only analysis; borderline/contradicted -> back to the pool;
+        canaries -> graded only, never stored."""
         relevant_ids = set(triage_res.relevant_ids)
-        retire_ids = set(triage_res.retire_candidate_ids)
+        # Flagged-valuable borderline is kept and paid like relevant;
+        # flagged-discard is stored triage-only and unpaid.
+        keep_ids = relevant_ids | set(triage_res.borderline_valuable_ids)
+        discard_ids = set(triage_res.borderline_discard_ids)
+        retire_ids = set(triage_res.retire_candidate_ids) | discard_ids
         canary_ids = set(triage_res.canary_ids)
-        fee = int(round(float(getattr(config, "TRIAGE_FEE_POINTS", 0.2))
-                        * len(article_batch)))
-        if fee > 0:
-            self._miner_reward.add_reward(miner_hotkey, fee)
-        rel_mult = int(getattr(config, "TRIAGE_REL_POINT_MULT", 5))
+        # Each article's pot is split across the assignees recorded at
+        # dispatch.
+        total_pay = sum(TRIAGE_CFG.fee_points / self._k_for(a.id)
+                        for a in article_batch)
+        rel_mult = TRIAGE_CFG.rel_point_mult
 
         for article in article_batch:
             aid = int(article.id)
             if aid in canary_ids:
-                # Canaries are graded only: never stored from a canary response
-                # and never paid. Return them to the pool rather than leaving
-                # them leased until the lease TTL expires.
+                # Graded, never stored; analysed positives pay per miner.
+                if (aid in relevant_ids and aid not in fp_ids
+                        and self._has_full_analysis(article)):
+                    content_len = len(article.content or "")
+                    weight = 3 if content_len >= 2000 else (2 if content_len >= 500 else 1)
+                    total_pay += rel_mult * weight / self._k_for(aid)
                 try:
                     self._article_store.reset_to_unprocessed(article.id)
                 except Exception:
                     pass
                 continue
-            if aid in relevant_ids or aid in retire_ids:
+            if aid in keep_ids or aid in retire_ids:
                 stored = article
-                if aid in retire_ids and (sent_by_id or {}).get(aid) is not None:
-                    # Filtered articles are stored from OUR copy carrying the
-                    # miner's triage claim, so a retired article can never
-                    # persist miner-supplied text upstream.
-                    stored = sent_by_id[aid].model_copy(
-                        update={"analysis": article.analysis})
+                if aid in retire_ids:
+                    # Store our copy with a rebuilt triage-only analysis.
+                    base = (sent_by_id or {}).get(aid) or article
+                    stored = base.model_copy(
+                        update={"analysis": self._triage_only_analysis(article)})
                 try:
                     self._article_store.update_article(article.id, stored)
                 except Exception:
@@ -1000,11 +1075,11 @@ class Validator(BaseValidatorNeuron):
                     self._article_store.set_processed(article.id)
                 except Exception:
                     pass
-                if (aid in relevant_ids and aid not in fp_ids
+                if (aid in keep_ids and aid not in fp_ids
                         and not self._article_store.is_rewarded(article.id)):
                     content_len = len(article.content or "")
                     weight = 3 if content_len >= 2000 else (2 if content_len >= 500 else 1)
-                    self._miner_reward.add_reward(miner_hotkey, rel_mult * weight)
+                    total_pay += rel_mult * weight / self._k_for(aid)
                     try:
                         self._article_store.mark_rewarded(article.id)
                     except Exception:
@@ -1015,6 +1090,37 @@ class Validator(BaseValidatorNeuron):
                     self._article_store.reset_to_unprocessed(article.id)
                 except Exception:
                     pass
+        # Fee floor applies only to a push covering the full lease.
+        payout = int(round(total_pay))
+        if full_push and article_batch:
+            payout = max(1, payout)
+        if payout > 0:
+            self._miner_reward.add_reward(miner_hotkey, payout)
+
+    def _apply_verification_outcome(self, article_batch, miner_hotkey, triage_res, fp_ids):
+        """Pay a verification response at the split rate and keep its analyses
+        as variants. No store interaction — the primary owns the article."""
+        keep_ids = set(triage_res.relevant_ids) | set(triage_res.borderline_valuable_ids)
+        discard_ids = set(triage_res.borderline_discard_ids)
+        canary_ids = set(triage_res.canary_ids)
+        # No fee floor in this lane.
+        total_pay = sum(TRIAGE_CFG.fee_points / self._k_for(a.id)
+                        for a in article_batch)
+        variants = []
+        for article in article_batch:
+            aid = int(article.id)
+            if aid in canary_ids or aid in fp_ids:
+                continue
+            k = self._k_for(aid)
+            content_len = len(article.content or "")
+            weight = 3 if content_len >= 2000 else (2 if content_len >= 500 else 1)
+            if aid in keep_ids and self._has_full_analysis(article):
+                total_pay += TRIAGE_CFG.rel_point_mult * weight / k
+                variants.append(article)
+        payout = int(round(total_pay))
+        if payout > 0:
+            self._miner_reward.add_reward(miner_hotkey, payout)
+        self._buffer_variants(miner_hotkey, variants)
 
     def _record_observations(self, target_hotkey, observations):
         if not observations:
@@ -1036,8 +1142,12 @@ class Validator(BaseValidatorNeuron):
         miner_signatures=None,
         nonces=None,
         latency_s: float = None,
+        verification: bool = False,
     ) -> bool:
-        adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
+        # Verification copies are graded and paid but hold no lease: never
+        # reset/store articles and never touch dispatch windows for them.
+        adaptive = (getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
+                    and not verification)
         if latency_s is not None:
             bt.logging.info(f"[LATPROBE] hotkey={miner_hotkey} latency_s={latency_s:.2f} n={len(sent_batch)}")
             self._article_cooldown.record_latency(miner_hotkey, latency_s)  # display-only telemetry
@@ -1052,30 +1162,47 @@ class Validator(BaseValidatorNeuron):
                 self._article_cooldown.record_validation_fail(miner_hotkey, "size_mismatch")
                 self._adaptive_metrics.incr("invalid")
             self._article_cooldown.record_batch_shrink(miner_hotkey)
-            for article in sent_batch:
-                try:
-                    self._article_store.reset_to_unprocessed(article.id)
-                except Exception:
-                    pass
+            if not verification:
+                for article in sent_batch:
+                    try:
+                        self._article_store.reset_to_unprocessed(article.id)
+                    except Exception:
+                        pass
             return False
 
         loop = asyncio.get_running_loop()
 
-        # Triage grading (schema v3): proof-of-read, canaries, deterministic
-        # audits of irrelevant claims. v2_grace = pre-v3 miner, legacy path.
+        # A partial push (fewer articles than the lease was dispatched at)
+        # is graded and paid per-article but earns no fee floor, no clean
+        # observation, and no window growth.
+        full_push = True
+        if not verification:
+            try:
+                item = self._article_store._articles.get(str(article_batch[0].id))
+                ds = getattr(item, "dispatch_batch_size", None)
+                if ds:
+                    full_push = len(article_batch) >= int(ds)
+            except Exception:
+                pass
+
+        # Triage grading (schema v3). Always on.
         try:
             triage_res = await loop.run_in_executor(
                 self._validation_executor, self._grade_triage,
                 article_batch, sent_batch, miner_hotkey)
         except Exception as e:
-            # Never strand a batch on a grading fault: fall back to the legacy
-            # path rather than leaving the articles leased until TTL expiry.
+            # Never strand a batch on a grading fault.
             bt.logging.warning(f"[TRIAGE] grading failed for {miner_hotkey}: {e}")
             triage_res = None
-        triage_active = triage_res is not None and not triage_res.v2_grace
+        # None = grading threw; grace = pre-triage batch before the cutover.
+        # Both fall back to legacy grading and pay.
+        triage_active = (triage_res is not None
+                         and not getattr(triage_res, "grace", False))
+        if verification and not triage_active:
+            # A verification response is graded or dropped — never the
+            # legacy path.
+            return False
         if triage_active and triage_res.proof_failures:
-            # Deterministic proof-of-read mismatch: the article text was never
-            # read. Same consequences as an integrity failure.
             bt.logging.warning(
                 f"[TRIAGE] proof-of-read FAILED for miner {miner_hotkey} "
                 f"articles={triage_res.proof_failures}")
@@ -1085,20 +1212,22 @@ class Validator(BaseValidatorNeuron):
                 self._article_cooldown.record_invalid(miner_hotkey)
                 self._article_cooldown.record_validation_fail(miner_hotkey, "triage_proof")
                 self._adaptive_metrics.incr("invalid")
-            self._article_cooldown.record_batch_shrink(miner_hotkey)
-            for article in sent_batch:
-                try:
-                    self._article_store.reset_to_unprocessed(article.id)
-                except Exception:
-                    pass
+            if not verification:
+                self._article_cooldown.record_batch_shrink(miner_hotkey)
+            if not verification:
+                for article in sent_batch:
+                    try:
+                        self._article_store.reset_to_unprocessed(article.id)
+                    except Exception:
+                        pass
             return False
 
-        # Deep validation only covers claimed-relevant articles once triage is
-        # active — irrelevant claims carry no analysis and are audited above.
+        # Deep validation covers claimed-relevant articles only.
         track_batch = article_batch
         if triage_active:
-            relevant_ids = set(triage_res.relevant_ids)
-            track_batch = [a for a in article_batch if int(a.id) in relevant_ids]
+            deep_ids = set(triage_res.relevant_ids) | set(
+                triage_res.borderline_valuable_ids)
+            track_batch = [a for a in article_batch if int(a.id) in deep_ids]
 
         # Try V2 validation if miner submitted analysis_data
         has_v2 = any(
@@ -1119,10 +1248,8 @@ class Validator(BaseValidatorNeuron):
                 reference_by_id, miner_hotkey,
             )
             if gscorer is not None:
-                # When triage is active these are merged with the triage grades
-                # below and recorded once — the reputation store keeps only the
-                # FIRST observation per (article_id, sender), so recording both
-                # separately would silently drop whichever came second.
+                # Merged with triage grades below when grading succeeded
+                # (first-obs-wins dedup in the reputation store).
                 if not triage_active:
                     self._record_observations(
                         miner_hotkey, (validation_result or {}).get("observations") or [])
@@ -1133,16 +1260,15 @@ class Validator(BaseValidatorNeuron):
                     bt.logging.info(
                         f"[FAITHFULNESS] hk={miner_hotkey} min={min_faith:.3f} "
                         f"scores={[round(f, 3) for f in faiths]} passed={is_valid}")
-                    self._article_cooldown.record_faithfulness(miner_hotkey, min_faith)
+                    if not verification:
+                        self._article_cooldown.record_faithfulness(miner_hotkey, min_faith)
         else:
             is_valid, validation_result = await loop.run_in_executor(
                 self._validation_executor,
                 validate_miner_article_batch, track_batch, self._news_analyzer, 1,
             )
 
-        # Triage: the sampled deep validation's reference-relevance verdicts
-        # feed false-positive events and the negative-canary pool, then all
-        # triage grades enter the shared reputation observation stream.
+        # Reference-relevance verdicts feed FP events and the negative pool.
         fp_ids = set()
         if triage_active:
             sent_by_id = {int(a.id): a for a in sent_batch}
@@ -1153,13 +1279,15 @@ class Validator(BaseValidatorNeuron):
             for aid in sorted(confirmed_irrelevant):
                 fp_ids.add(aid)
                 triage_res.events.append(fp_soft_event(aid))
-                if self._canary_pool.size("neg") < 50 and aid in sent_by_id:
+                if (self._canary_pool.size("neg") < TRIAGE_CFG.neg_pool_target
+                        and aid in sent_by_id):
                     self._canary_pool.add(aid, "neg", deterministic=False)
                     self._canary_articles[aid] = sent_by_id[aid].model_copy(
                         update={"analysis": None})
             self._record_triage_observations(
                 miner_hotkey, triage_res, article_batch,
-                (validation_result or {}).get("observations") or [])
+                (validation_result or {}).get("observations") or [],
+                allow_clean=full_push)
 
         if not is_valid:
             discrepancies = validation_result.get("discrepancies", [])
@@ -1190,6 +1318,12 @@ class Validator(BaseValidatorNeuron):
             current_epoch = self._miner_reward._get_current_epoch()
             missing_split = adaptive and getattr(config, "ADAPTIVE_MISSING_ANALYSIS_SPLIT_ENABLED", False)
             failure_class = classify_article_batch_failure(discrepancies)
+            if verification:
+                # Verification lane: penalty only on integrity failures;
+                # no dispatch-window state moves.
+                if failure_class == "integrity":
+                    self._miner_penalty.add_penalty(miner_hotkey, 1)
+                return False
             # Consecutive validation-fail park — skip validator-side (our analyzer's fault).
             if adaptive and failure_class != "validator_side":
                 self._article_cooldown.record_validation_fail(miner_hotkey, failure_class)
@@ -1220,16 +1354,18 @@ class Validator(BaseValidatorNeuron):
                     self._adaptive_metrics.incr("invalid")
                 self._article_cooldown.record_batch_shrink(miner_hotkey)
 
-            for article in article_batch:
-                try:
-                    self._article_store.reset_to_unprocessed(article.id)
-                except Exception:
-                    pass
+            if not verification:
+                for article in article_batch:
+                    try:
+                        self._article_store.reset_to_unprocessed(article.id)
+                    except Exception:
+                        pass
             return False
 
         bt.logging.info(f"[VALIDATION] Article batch validation PASSED for miner {miner_hotkey}")
-        self._article_cooldown.record_success(miner_hotkey)
-        self._article_cooldown.record_validation_pass(miner_hotkey)  # clears the fail streak
+        if not verification:
+            self._article_cooldown.record_success(miner_hotkey)
+            self._article_cooldown.record_validation_pass(miner_hotkey)  # clears the fail streak
         # Adaptive: grow the window if the round-trip was comfortably on-time, else
         # freeze (objective 8 — find capacity without ramping into a timeout).
         # A batch where nothing was claimed relevant proves triage throughput,
@@ -1241,11 +1377,21 @@ class Validator(BaseValidatorNeuron):
             self._adaptive_metrics.incr("valid")
             self._adaptive_metrics.mark_scored(miner_hotkey)
         self._article_cooldown.record_batch_valid(miner_hotkey, latency_s)
-        if triage_active:
+        if triage_active and verification:
+            self._apply_verification_outcome(article_batch, miner_hotkey, triage_res, fp_ids)
+        elif triage_active:
             self._apply_triage_outcome(article_batch, miner_hotkey, triage_res, fp_ids,
-                                       {int(a.id): a for a in sent_batch})
+                                       {int(a.id): a for a in sent_batch},
+                                       full_push=full_push)
         else:
             for article in article_batch:
+                if self._canary_pool.label_of(int(article.id)) is not None:
+                    # Canaries are graded only, in every lane and era.
+                    try:
+                        self._article_store.reset_to_unprocessed(article.id)
+                    except Exception:
+                        pass
+                    continue
                 try:
                     self._article_store.update_article(article.id, article)
                 except Exception:
@@ -1270,9 +1416,10 @@ class Validator(BaseValidatorNeuron):
                     except Exception:
                         pass
 
-        current_epoch = self._miner_reward._get_current_epoch()
-        self._verdict_meta.update(
-            collect_verdict_meta(article_batch, miner_signatures, nonces, "valid", current_epoch))
+        if not verification:
+            current_epoch = self._miner_reward._get_current_epoch()
+            self._verdict_meta.update(
+                collect_verdict_meta(article_batch, miner_signatures, nonces, "valid", current_epoch))
         return True
 
     async def _on_tweets(self, tweets: List[TweetWithAuthor]):
@@ -1389,16 +1536,34 @@ class Validator(BaseValidatorNeuron):
                 miner_batches.append(articles[i:i + config.MINER_BATCH_SIZE])
             targets = self._select_article_targets(miner_batches, exclude)
 
-        triage_on = getattr(config, "TRIAGE_ENABLED", False)
-        if triage_on:
-            # The gazetteer costs ~250ms/article, so labeling runs in the
-            # validation executor — never inline on the dispatch event loop.
-            await asyncio.get_running_loop().run_in_executor(
-                self._validation_executor, self._refresh_canaries, articles)
+        # Blocking (gazetteer-bound): run in the validation executor.
+        await asyncio.get_running_loop().run_in_executor(
+            self._validation_executor, self._refresh_canaries, articles)
         canary_rng = random.Random()
 
         adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
         epoch = self._current_epoch() if adaptive else 0
+        # Overlap activates with enforcement: each batch also goes to k-1
+        # verifier miners, graded and paid at the split rate, never stored.
+        overlap_k = (TRIAGE_CFG.overlap_k
+                     if getattr(config, "TRIAGE_ENFORCED", False) else 1)
+        self._prune_verification()
+        exclude_set = set(exclude)
+        # Verifiers must be alive (push-back seen recently) and not
+        # blacklisted.
+        eligible = []
+        for u in range(self.metagraph.n.item()):
+            if u in exclude_set:
+                continue
+            try:
+                hk = self.metagraph.hotkeys[u]
+            except Exception:
+                continue
+            if hk in config.BLACKLISTED_MINER_HOTKEYS:
+                continue
+            if not self._liveness.is_alive(hk):
+                continue
+            eligible.append(u)
         for uid, miner_batch in targets:
             if len(self._pending_miner_tasks) >= self._max_pending_miner_tasks:
                 bt.logging.warning(
@@ -1406,11 +1571,22 @@ class Validator(BaseValidatorNeuron):
                     f"skipping scheduling remaining article batches this tick."
                 )
                 break
-            if triage_on:
-                miner_batch = list(miner_batch)
-                self._inject_canaries(miner_batch, canary_rng)
+            miner_batch = list(miner_batch)
+            self._inject_canaries(miner_batch, canary_rng, charge=overlap_k)
+            pool = [u for u in eligible if u != int(uid)]
+            n_verify = min(overlap_k - 1, len(pool)) if overlap_k > 1 else 0
+            # Record each article's actual assignment count for pay.
+            k_actual = 1 + n_verify
+            now = time.time()
+            for a in miner_batch:
+                self._article_k[str(a.id)] = (k_actual, now)
             task = asyncio.create_task(self._dispatch_article_miner_batch(miner_batch, int(uid)))
             self._track_task(task)
+            for vuid in (canary_rng.sample(pool, n_verify) if n_verify else []):
+                vbatch = [a.model_copy(update={"analysis": None}) for a in miner_batch]
+                vtask = asyncio.create_task(
+                    self._dispatch_verification_batch(vbatch, int(vuid)))
+                self._track_task(vtask)
             # Mark covered on actual dispatch (not at allocation time): if the pending-cap
             # break above drops a coverage assignment, the miner must NOT be recorded as
             # covered for this epoch without having been sent work.
@@ -1577,6 +1753,29 @@ class Validator(BaseValidatorNeuron):
         finally:
             if hotkey:
                 self._telegram_cooldown.release(hotkey)
+
+    async def _dispatch_verification_batch(self, miner_batch, uid: int) -> None:
+        """Send a verification copy. No lease is held and nothing is reset on
+        failure — the primary assignment owns the article lifecycle. The
+        assignment is registered only after the miner acks the send."""
+        try:
+            try:
+                hotkey = self.metagraph.hotkeys[int(uid)]
+            except Exception:
+                return
+            async with self._miner_dispatch_semaphore:
+                resp = await self._process_article_miner_batch(
+                    miner_batch, uid, verification=True)
+            if resp is not None:
+                self._register_verification(hotkey, miner_batch)
+            else:
+                # No ack: shrink the article's pot divisor.
+                for a in miner_batch:
+                    entry = self._article_k.get(str(a.id))
+                    if entry and entry[0] > 1:
+                        self._article_k[str(a.id)] = (entry[0] - 1, entry[1])
+        except Exception as e:
+            bt.logging.debug(f"[OVERLAP] verification dispatch failed uid={uid}: {e}")
 
     async def _dispatch_article_miner_batch(self, miner_batch: List[NewsArticleForScoring], uid: int) -> None:
         hotkey = None
@@ -1747,7 +1946,8 @@ class Validator(BaseValidatorNeuron):
     async def _process_article_miner_batch(
         self,
         miner_batch: List[NewsArticleForScoring],
-        uid: int
+        uid: int,
+        verification: bool = False,
     ) -> ArticleBatch:
         try:
             miner_hotkey = None
@@ -1761,12 +1961,13 @@ class Validator(BaseValidatorNeuron):
                 return None
 
             dispatch_size = len(miner_batch)  # record the ACTUAL dispatched size on the lease
-            for article in miner_batch:
-                self._article_store.add_article(article, article_id=article.id, hotkey=miner_hotkey, set_as_processing=False, overwrite=False)
-                try:
-                    self._article_store.set_processing(article.id, hotkey=miner_hotkey, batch_size=dispatch_size)
-                except Exception:
-                    pass
+            if not verification:
+                for article in miner_batch:
+                    self._article_store.add_article(article, article_id=article.id, hotkey=miner_hotkey, set_as_processing=False, overwrite=False)
+                    try:
+                        self._article_store.set_processing(article.id, hotkey=miner_hotkey, batch_size=dispatch_size)
+                    except Exception:
+                        pass
 
             article_batch = ArticleBatch(
                 article_batch=miner_batch
@@ -1795,13 +1996,14 @@ class Validator(BaseValidatorNeuron):
                 # No integrity penalty. The static path keeps the legacy cooldown behaviour.
                 if adaptive:
                     self._adaptive_metrics.incr("ack_fail")
-                if miner_hotkey and not adaptive:
+                if miner_hotkey and not adaptive and not verification:
                     self._article_cooldown.record_failure(miner_hotkey)
-                for article in miner_batch:
-                    try:
-                        self._article_store.reset_to_unprocessed(article.id)
-                    except Exception:
-                        pass
+                if not verification:
+                    for article in miner_batch:
+                        try:
+                            self._article_store.reset_to_unprocessed(article.id)
+                        except Exception:
+                            pass
                 return None
 
             if adaptive:
@@ -1814,20 +2016,22 @@ class Validator(BaseValidatorNeuron):
                         self._adaptive_metrics.record_ack(float(_pt))
                 except Exception:
                     pass
-            if miner_hotkey:
+            if miner_hotkey and not verification:
                 self._article_cooldown.record_success(miner_hotkey)
             return responses[0]
         except Exception as e:
             bt.logging.error(f"[VALIDATION] Failed to process article miner batch: {e}", exc_info=True)
             # See above: under adaptive dispatch a send-path failure is not an integrity
             # penalty; the miner ages out of the liveness roster instead.
-            if miner_hotkey and not getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False):
+            if (miner_hotkey and not verification
+                    and not getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)):
                 self._article_cooldown.record_failure(miner_hotkey)
-            for article in miner_batch:
-                try:
-                    self._article_store.reset_to_unprocessed(article.id)
-                except Exception:
-                    pass
+            if not verification:
+                for article in miner_batch:
+                    try:
+                        self._article_store.reset_to_unprocessed(article.id)
+                    except Exception:
+                        pass
             return None
 
     async def _submit_tweet_batch(self, tweet_batch: List[TweetWithAuthor]):

@@ -7,11 +7,8 @@ Reference implementation, deterministic and LLM-free:
   macro language without a named economy                     -> borderline
   otherwise                                                  -> irrelevant
 
-Deliberately conservative on the irrelevant side: the profitable failure mode
-under audit is a false negative, so anything with a plausible market hook is
-kept or marked borderline. Miners are free to substitute a smarter classifier;
-this one clears the deterministic audits by construction (it can never label a
-gazetteer-positive article irrelevant).
+Conservative on the irrelevant side: anything with a plausible market hook is
+kept or marked borderline. Miners are free to substitute a smarter classifier.
 """
 from __future__ import annotations
 

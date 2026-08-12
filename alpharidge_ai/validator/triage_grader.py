@@ -1,33 +1,22 @@
 """Validator-side grading of miner triage claims (schema v3).
 
-Design rule (load-bearing): HARD penalties attach only to deterministic
-evidence — proof-of-read mismatches, gazetteer-backed false negatives, and
-gazetteer-backed positive canaries. Verdicts that rest only on an LLM opinion
-are always SOFT (small EMA weight, never a single-shot park), so audit-model
-mistakes degrade a miner's reputation slowly enough for the clean-batch signal
-to dominate. Cheat strategies are still caught fast because every profitable
-cheat necessarily trips deterministic evidence.
-
-Grading order per batch (cheap -> expensive):
-  1. proof-of-read on every article (deterministic; failures -> integrity path)
-  2. canary checks (known-positive / known-negative plants)
-  3. random audit of claimed-irrelevant articles (gazetteer first, LLM second)
-Step 4 — the full reference analysis of sampled claimed-relevant articles —
-stays in the existing validation pipeline; its false-positive verdicts are fed
-back through `fp_soft_event()`.
+Hard events come from deterministic checks; LLM-adjudicated events are soft.
+Grading order per batch: proof-of-read, canary checks, audits of not-relevant
+claims. Sampled claimed-relevant articles are validated by the existing deep
+pipeline, which reports false positives via `fp_soft_event()`.
 """
 from __future__ import annotations
 
-import json
-import os
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
 from alpharidge_ai.triage import (
+    FLAG_VALUABLE,
     LABEL_BORDERLINE,
     LABEL_IRRELEVANT,
     LABEL_RELEVANT,
+    analysis_indicates_value,
     extract_triage,
     verify_proof_of_read,
 )
@@ -35,14 +24,24 @@ from alpharidge_ai.triage import (
 
 @dataclass
 class TriageConfig:
+    """Design constants — not runtime configuration. Changing one is a
+    released code change."""
     audit_irrelevant_n: int = 1
     borderline_cap: int = 3
     hard_weight: float = 2.0
     soft_weight: float = 0.4
     clean_weight: float = 1.0
-    hard_llm_verdicts: bool = False   # served-config tightening lever; default LLM = soft
     canary_ttl_s: float = 6 * 3600.0
     canary_max_exposures: int = 30
+    canary_pos_rate: float = 0.7
+    canary_neg_rate: float = 0.7
+    fee_points: float = 0.2
+    rel_point_mult: int = 6
+    audit_min_confidence: float = 0.75
+    neg_pool_target: int = 12
+    neg_mint_budget: int = 3
+    overlap_k: int = 3                # assignees per article once enforced
+    verification_ttl_s: float = 900.0
 
 
 @dataclass
@@ -60,18 +59,16 @@ class TriageGradeResult:
     borderline_ids: List[int] = field(default_factory=list)
     retire_candidate_ids: List[int] = field(default_factory=list)
     canary_ids: List[int] = field(default_factory=list)
-    v2_grace: bool = False
+    # Borderline resolved by the analyze-then-flag lane:
+    borderline_valuable_ids: List[int] = field(default_factory=list)
+    borderline_discard_ids: List[int] = field(default_factory=list)
+    grace: bool = False   # pre-triage batch before enforcement; legacy grading applies
 
     def observations(self, cfg: TriageConfig,
                      clean_article_id: Optional[int] = None
                      ) -> List[Tuple[int, float, float]]:
-        """(article_id, score, weight) triples for the reputation EMA.
-
-        A batch with no findings yields one positive observation keyed by
-        clean_article_id; every finding yields a zero-scored one keyed by the
-        article it was found on, so validators grading the same article agree.
-        """
-        if self.v2_grace:
+        """(article_id, score, weight) triples for the reputation EMA."""
+        if self.grace:
             return []
         if not self.events and not self.proof_failures:
             return ([] if clean_article_id is None
@@ -85,8 +82,7 @@ class TriageGradeResult:
 
 
 def fp_soft_event(article_id: int) -> TriageEvent:
-    """A sampled claimed-relevant article whose reference analysis showed it to
-    be non-relevant junk (spam-flagging). Reference-adjudicated -> soft."""
+    """Sampled claimed-relevant article the reference analysis found non-relevant."""
     return TriageEvent("soft", "triage_false_positive", article_id)
 
 
@@ -95,32 +91,34 @@ def grade_batch(
     canary_labels: Dict[int, Tuple[str, bool]],
     det_relevant: Callable[[dict], bool],
     llm_relevant: Callable[[dict], Optional[bool]],
+    stage_label: Callable[[dict], str],
     rng,
     cfg: TriageConfig,
+    enforced: bool,
 ) -> TriageGradeResult:
     """Grade the triage layer of one returned miner batch.
 
-    items: [{"article_id", "title", "body", "analysis_data"}] — every article
-      the validator dispatched, in the miner's returned form.
-    canary_labels: article_id -> ("pos"|"neg", deterministic) for planted canaries.
-    det_relevant(item): deterministic gazetteer check (R1) on the validator's copy.
-    llm_relevant(item): audit-LLM relevance verdict; None = unavailable (no event).
+    items: [{"article_id", "title", "body", "analysis_data"}] per dispatched article.
+    canary_labels: article_id -> ("pos"|"neg", deterministic).
+    det_relevant(item): gazetteer check on the validator's copy.
+    llm_relevant(item): audit-LLM verdict; None = no verdict.
+    stage_label(item): reference TriageStage label on the validator's copy.
     """
     res = TriageGradeResult(canary_ids=list(canary_labels))
 
     records: Dict[int, Optional[dict]] = {}
-    errors: Dict[int, Optional[str]] = {}
+    errors = False
     for it in items:
         rec, err = extract_triage(it.get("analysis_data"))
         records[it["article_id"]] = rec
-        errors[it["article_id"]] = err
+        errors = errors or err is not None
 
-    if not any(rec for rec in records.values()) and not any(errors.values()):
-        # Pre-v3 miner: no triage anywhere. Grace path — existing v2 grading only.
-        res.v2_grace = True
+    if not enforced and not errors and not any(records.values()):
+        # Pre-triage batch before the cutover: legacy grading applies.
+        res.grace = True
         return res
 
-    # 1. proof-of-read: required on every article once the miner speaks v3.
+    # 1. proof-of-read: required on every article.
     for it in items:
         aid = it["article_id"]
         proof = (it.get("analysis_data") or {}).get("proof_of_read") \
@@ -128,8 +126,7 @@ def grade_batch(
         if not verify_proof_of_read(proof, it.get("title") or "", it.get("body") or ""):
             res.proof_failures.append(aid)
 
-    # Labels; malformed/missing records on a v3 miner are soft protocol
-    # violations and are treated as irrelevant claims so they stay auditable.
+    # Malformed/missing records are soft violations, treated as irrelevant claims.
     labels: Dict[int, str] = {}
     n_border = 0
     for it in items:
@@ -146,16 +143,45 @@ def grade_batch(
                 label = LABEL_IRRELEVANT   # excess borderline is an irrelevant claim
         labels[aid] = label
 
+    analysed: Dict[int, bool] = {
+        it["article_id"]: (isinstance(it.get("analysis_data"), dict)
+                           and bool(it["analysis_data"].get("event_fingerprint")))
+        for it in items}
+
     for it in items:
         aid = it["article_id"]
+        rec = records[aid]
         if labels[aid] == LABEL_RELEVANT:
             res.relevant_ids.append(aid)
         elif labels[aid] == LABEL_BORDERLINE:
-            res.borderline_ids.append(aid)
+            flag = (rec or {}).get("flag")
+            if analysed[aid] and flag:
+                # Analyze-then-flag lane. The flag must match the miner's own
+                # submitted analysis.
+                if (flag == FLAG_VALUABLE) != analysis_indicates_value(it.get("analysis_data")):
+                    res.events.append(TriageEvent("soft", "borderline_flag_mismatch", aid))
+                elif flag == FLAG_VALUABLE:
+                    res.borderline_valuable_ids.append(aid)
+                elif stage_label(it) == LABEL_IRRELEVANT:
+                    # Discarded as junk, and the reference stage saw no
+                    # ambiguity either: the borderline claim was unwarranted.
+                    res.events.append(TriageEvent("soft", "borderline_unwarranted", aid))
+                else:
+                    res.borderline_discard_ids.append(aid)
+            else:
+                res.borderline_ids.append(aid)
 
-    # 2. canary checks. "Not relevant" covers borderline as well as irrelevant:
-    # borderline exists to excuse genuinely ambiguous judgement calls, not to
-    # provide a label that no audit can ever touch.
+    # A non-relevant label must not carry an analysis payload, except a
+    # flagged borderline (the analyze-then-flag lane).
+    for it in items:
+        aid = it["article_id"]
+        flagged_borderline = (labels[aid] == LABEL_BORDERLINE
+                              and (records[aid] or {}).get("flag"))
+        if (labels[aid] != LABEL_RELEVANT and aid not in canary_labels
+                and not flagged_borderline and analysed[aid]):
+            res.events.append(TriageEvent("soft", "analysis_on_nonrelevant", aid))
+
+    # 2. canary checks (borderline does not exempt a canary).
     for it in items:
         aid = it["article_id"]
         if aid not in canary_labels or aid in res.proof_failures:
@@ -167,15 +193,13 @@ def grade_batch(
         elif kind == "neg" and labels[aid] == LABEL_RELEVANT:
             res.events.append(TriageEvent("soft", "canary_neg_flagged", aid))
 
-    # 3. audit every not-relevant claim. The gazetteer check is pure CPU, so it
-    # runs on ALL of them (borderline included) — hiding an asset-bearing
-    # article behind either label is impossible, not merely risky. Only the
-    # audit-LLM, which costs a model call and can be wrong, is sampled, and it
-    # judges outright irrelevant claims only: an honest borderline call should
-    # never be punished on an LLM opinion alone.
+    # 3. gazetteer audit on every not-relevant claim; LLM audit on a sample
+    # of irrelevant claims only. Flagged-valuable borderline is exempt (its
+    # analysis is kept and deep-validated like a relevant claim).
     not_relevant = [
         it for it in items
         if labels[it["article_id"]] in (LABEL_IRRELEVANT, LABEL_BORDERLINE)
+        and it["article_id"] not in res.borderline_valuable_ids
         and it["article_id"] not in canary_labels
         and it["article_id"] not in res.proof_failures
     ]
@@ -188,11 +212,14 @@ def grade_batch(
             det_clean.append(it)
     for it in rng.sample(det_clean, min(cfg.audit_irrelevant_n, len(det_clean))):
         if llm_relevant(it) is True:
-            severity = "hard" if cfg.hard_llm_verdicts else "soft"
-            res.events.append(TriageEvent(severity, "false_negative_llm",
+            res.events.append(TriageEvent("soft", "false_negative_llm",
                                           it["article_id"]))
 
     contradicted = {e.article_id for e in res.events}
+    res.borderline_valuable_ids = [
+        a for a in res.borderline_valuable_ids if a not in contradicted]
+    res.borderline_discard_ids = [
+        a for a in res.borderline_discard_ids if a not in contradicted]
     res.retire_candidate_ids = [
         it["article_id"] for it in not_relevant
         if it["article_id"] not in contradicted
@@ -208,35 +235,19 @@ def grade_batch(
 
 
 class CanaryPool:
-    """Validator-local pool of pre-labeled canary articles.
+    """In-memory pool of pre-labeled canary articles. Entries expire after
+    ttl seconds or max_exposures uses. Deliberately not persisted — the pool
+    refills within a dispatch tick, and disk state can desync from the
+    in-memory article payloads."""
 
-    Positives: articles with a deterministic gazetteer hit (free, unambiguous).
-    Negatives: no gazetteer hit AND two self-consistent audit-LLM passes said
-    non-economic (caller enforces the double-pass before add()).
-    Entries expire after ttl seconds or max_exposures uses.
-    """
-
-    def __init__(self, cfg: TriageConfig, state_path: Optional[str] = None,
-                 now: Callable[[], float] = time.time):
+    def __init__(self, cfg: TriageConfig, now: Callable[[], float] = time.time):
         self._cfg = cfg
         self._now = now
-        self._state_path = state_path
         # article_id -> {kind, deterministic, born, exposures}
         self._entries: Dict[int, dict] = {}
-        if state_path and os.path.exists(state_path):
-            try:
-                with open(state_path) as f:
-                    raw = json.load(f)
-                self._entries = {int(k): v for k, v in raw.items()}
-            except (ValueError, OSError):
-                self._entries = {}
 
     def add(self, article_id: int, kind: str, deterministic: bool) -> None:
-        """Register a canary. Re-adding a known id is a no-op: graded canaries
-        are returned to the article pool and will be seen again, and refreshing
-        their birth time or exposure count would make the TTL and exposure caps
-        unreachable — a fixed set of ids would stay canaries forever and become
-        learnable."""
+        """Register a canary. Re-adding a known id is a no-op."""
         assert kind in ("pos", "neg")
         if article_id in self._entries:
             return
@@ -258,14 +269,16 @@ class CanaryPool:
     def size(self, kind: str) -> int:
         return sum(1 for e in self._entries.values() if e["kind"] == kind and self._alive(e))
 
-    def draw(self, kind: str, rng) -> Optional[int]:
-        """Pick a live canary of the given kind and count the exposure."""
+    def draw(self, kind: str, rng, available=None, charge: int = 1) -> Optional[int]:
+        """Pick a live canary and count the exposure. `available` restricts
+        the draw to injectable ids; `charge` is how many miners will see it."""
         alive = [aid for aid, e in self._entries.items()
-                 if e["kind"] == kind and self._alive(e)]
+                 if e["kind"] == kind and self._alive(e)
+                 and (available is None or aid in available)]
         if not alive:
             return None
         aid = rng.choice(alive)
-        self._entries[aid]["exposures"] += 1
+        self._entries[aid]["exposures"] += max(1, int(charge))
         return aid
 
     def label_of(self, article_id: int) -> Optional[Tuple[str, bool]]:
@@ -273,11 +286,3 @@ class CanaryPool:
         if e is None:
             return None
         return e["kind"], e["deterministic"]
-
-    def save(self) -> None:
-        if not self._state_path:
-            return
-        tmp = self._state_path + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump({str(k): v for k, v in self._entries.items()}, f)
-        os.replace(tmp, self._state_path)

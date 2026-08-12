@@ -44,6 +44,29 @@ REASON_CODES = frozenset({
     "other",
 })
 
+# Post-analysis flag for borderline articles (set after the full analysis).
+FLAG_VALUABLE = "valuable"
+FLAG_DISCARD = "not_valuable"
+FLAGS = frozenset({FLAG_VALUABLE, FLAG_DISCARD})
+
+# Sectors that count as market-adjacent when judging an analysis payload.
+MARKET_ADJACENT_SECTORS = frozenset({
+    "MACRO", "MONETARY", "MARKET", "EQUITIES", "COMMODITIES", "CRYPTO",
+    "GEOPOLITICS", "TECH", "ENERGY", "RATES",
+})
+
+
+def analysis_indicates_value(analysis_data: Optional[dict]) -> bool:
+    """Whether an analysis payload shows market relevance: any asset, any
+    economic datum, or a market-adjacent sector. Shared by the miner's
+    post-analysis flag and the validator's flag-consistency check."""
+    if not isinstance(analysis_data, dict):
+        return False
+    if analysis_data.get("assets") or analysis_data.get("economic_data"):
+        return True
+    sector = (analysis_data.get("topic_signature") or {}).get("primary_sector_symbol")
+    return sector in MARKET_ADJACENT_SECTORS
+
 # Deterministic R1 evidence: asset entries resolved by the keyword gazetteer.
 DETERMINISTIC_ASSET_SOURCES = frozenset({"keyword"})
 
@@ -105,6 +128,8 @@ def extract_triage(analysis_data: Optional[dict]) -> Tuple[Optional[dict], Optio
         return None, "triage_bad_label"
     if label == LABEL_IRRELEVANT and rec.get("reason_code") not in REASON_CODES:
         return None, "triage_missing_reason"
+    if "flag" in rec and rec.get("flag") not in FLAGS:
+        return None, "triage_bad_flag"
     return rec, None
 
 

@@ -32,11 +32,20 @@ JUNK_ARTICLE = (
     "delighting a crowd of hundreds with a program of traditional folk songs "
     "and a well-received encore.",
 )
+AMBIGUOUS_ARTICLE = (
+    "Officials debate inflation outlook",
+    "Rising inflation remains a concern for households, officials said, "
+    "though no specific policy response was announced.",
+)
 MACRO_ARTICLE = (
     "Brazil central bank cuts rates",
     "The central bank of Brazil announced a surprise interest rate cut on "
     "Thursday, citing slowing inflation. Economists expect further easing.",
 )
+
+
+def stage_junk(_item):
+    return "irrelevant"
 
 
 def article(aid, pair):
@@ -82,6 +91,7 @@ class HarnessValidator:
 
     _triage_cfg = validator_module.Validator._triage_cfg
     _det_relevant_item = validator_module.Validator._det_relevant_item
+    _stage_label_item = validator_module.Validator._stage_label_item
     _confirm_clearly_irrelevant = validator_module.Validator._confirm_clearly_irrelevant
     _get_triage_stage = validator_module.Validator._get_triage_stage
     _llm_relevant_item = validator_module.Validator._llm_relevant_item
@@ -91,10 +101,15 @@ class HarnessValidator:
     _grade_triage = validator_module.Validator._grade_triage
     _record_triage_observations = validator_module.Validator._record_triage_observations
     _apply_triage_outcome = validator_module.Validator._apply_triage_outcome
+    _mint_neg_canaries = validator_module.Validator._mint_neg_canaries
+    _has_full_analysis = staticmethod(validator_module.Validator._has_full_analysis)
+    _triage_only_analysis = staticmethod(validator_module.Validator._triage_only_analysis)
+    _k_for = validator_module.Validator._k_for
 
     def __init__(self):
         self._canary_pool = CanaryPool(TriageConfig())
         self._canary_articles = {}
+        self._article_k = {}
         self._triage_extractor = None
         self._triage_auditor = None
         self._triage_stage = None
@@ -115,11 +130,10 @@ def stage():
 
 
 @pytest.fixture
-def triage_on(monkeypatch):
-    monkeypatch.setattr(config, "TRIAGE_ENABLED", True, raising=False)
-    monkeypatch.setattr(config, "TRIAGE_AUDIT_LLM_ENABLED", False, raising=False)
-    monkeypatch.setattr(config, "TRIAGE_FEE_POINTS", 0.2, raising=False)
-    monkeypatch.setattr(config, "TRIAGE_REL_POINT_MULT", 5, raising=False)
+def triage_on():
+    """Historical name: triage has no off switch anymore. Kept so the test
+    signatures read naturally ('with triage on...')."""
+    yield
 
 
 def mine(stage, articles, strategy="honest"):
@@ -148,7 +162,7 @@ class TestEndToEnd:
         returned = mine(stage, batch)
 
         res = v._grade_triage(returned, batch, "hk1")
-        assert res is not None and not res.v2_grace
+        assert res is not None
         assert not res.events and not res.proof_failures
         assert set(res.relevant_ids) == {1, 3}
         assert set(res.retire_candidate_ids) == {2, 4}
@@ -157,8 +171,8 @@ class TestEndToEnd:
         assert v.observations == [(1, 1.0, 1.0)]   # one clean-batch observation
 
         v._apply_triage_outcome(returned, "hk1", res, fp_ids=set())
-        # fee round(0.2*4)=1, plus 5x length-weight(1, short fixtures) per relevant
-        assert v._miner_reward.points == 1 + 5 * 2
+        # fee round(0.2*4)=1, plus 6x length-weight(1, short fixtures) per relevant
+        assert v._miner_reward.points == 1 + 6 * 2
         assert v._article_store.processed == {1, 2, 3, 4}
         assert v._article_store.rewarded == {1, 3}
         assert not v._article_store.reset
@@ -200,21 +214,24 @@ class TestEndToEnd:
         assert set(res.relevant_ids) == {1, 2, 3}
         # Reference analysis refutes the two junk articles.
         v._apply_triage_outcome(returned, "hk4", res, fp_ids={2, 3})
-        assert v._miner_reward.points == 1 + 5   # fee + only the real one
+        assert v._miner_reward.points == 1 + 6   # fee + only the real one
 
-    def test_v2_miner_takes_grace_path(self, stage, triage_on):
+    def test_pre_triage_miner_grace_then_enforced(self, stage, triage_on, monkeypatch):
         v = HarnessValidator()
         batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE)]
         legacy = [a.model_copy(update={"analysis": types.SimpleNamespace(
             analysis_data={"schema_version": 2, "title": a.title})}) for a in batch]
+        monkeypatch.setattr(config, "TRIAGE_ENFORCED", False, raising=False)
         res = v._grade_triage(legacy, batch, "hk5")
-        assert res.v2_grace and not res.events
+        assert res.grace and not res.proof_failures
+        monkeypatch.setattr(config, "TRIAGE_ENFORCED", True, raising=False)
+        res2 = v._grade_triage(legacy, batch, "hk5")
+        assert set(res2.proof_failures) == {1, 2}
 
-    def test_triage_disabled_is_inert(self, stage, monkeypatch):
-        monkeypatch.setattr(config, "TRIAGE_ENABLED", False, raising=False)
+    def test_triage_has_no_off_switch(self, stage):
         v = HarnessValidator()
         returned = mine(stage, [article(1, ASSET_ARTICLE)])
-        assert v._grade_triage(returned, [article(1, ASSET_ARTICLE)], "hk6") is None
+        assert v._grade_triage(returned, [article(1, ASSET_ARTICLE)], "hk6") is not None
 
 
 class TestExploitResistance:
@@ -326,8 +343,8 @@ class TestExploitResistance:
 @pytest.fixture
 def canaries_certain(monkeypatch, triage_on):
     """Make injection deterministic so canary tests aren't RNG-flaky."""
-    monkeypatch.setattr(config, "TRIAGE_CANARY_POS_RATE", 1.0, raising=False)
-    monkeypatch.setattr(config, "TRIAGE_CANARY_NEG_RATE", 0.0, raising=False)
+    monkeypatch.setattr(validator_module.TRIAGE_CFG, "canary_pos_rate", 1.0)
+    monkeypatch.setattr(validator_module.TRIAGE_CFG, "canary_neg_rate", 0.0)
 
 
 class TestCanaryFlow:
@@ -369,3 +386,280 @@ class TestCanaryFlow:
         v._inject_canaries(batch, random.Random(0))
         res = v._grade_triage(mine(stage, batch), batch, "hk8")
         assert not res.events
+
+
+class TestDefectFixes:
+    """Regressions for the 2026-08-11 defect plan (D1-D5)."""
+
+    def test_d1_retired_article_stores_triage_only(self, stage, triage_on):
+        # Stored retire records carry only the triage record and proof.
+        from alpharidge_ai.triage import build_proof_of_read, build_triage_record
+        v = HarnessValidator()
+        junk = article(2, JUNK_ARTICLE)
+        smuggled = junk.model_copy(update={"analysis": types.SimpleNamespace(
+            analysis_data={
+                "triage": build_triage_record("irrelevant", "non_economic"),
+                "proof_of_read": build_proof_of_read(*JUNK_ARTICLE),
+                "event_fingerprint": {"content_hash": "x", "event_type": "other"},
+                "topic_signature": {"primary_sector_id": 13},
+                "title_embedding": [0.1] * 384,
+            })})
+        res = v._grade_triage([smuggled], [junk], "hk")
+        # A payload beside a non-relevant label is an event; article resets.
+        assert ("soft", "analysis_on_nonrelevant") in [(e.kind, e.code) for e in res.events]
+        assert 2 not in res.retire_candidate_ids
+        v._apply_triage_outcome([smuggled], "hk", res, fp_ids=set(),
+                                sent_by_id={2: junk})
+        assert 2 not in v._article_store.updated
+        assert 2 in v._article_store.reset
+
+        # A clean irrelevant claim retires with the rebuilt triage-only record.
+        clean = mine(stage, [junk])
+        res2 = v._grade_triage(clean, [junk], "hk")
+        assert 2 in res2.retire_candidate_ids
+        v._apply_triage_outcome(clean, "hk", res2, fp_ids=set(), sent_by_id={2: junk})
+        data = v._article_store.updated[2].analysis.analysis_data
+        assert data["triage"]["label"] == "irrelevant"
+        assert data["proof_of_read"]
+        assert "event_fingerprint" not in data and "topic_signature" not in data
+
+    def test_d4_fee_floor_small_batch(self, stage, triage_on):
+        v = HarnessValidator()
+        batch = [article(2, JUNK_ARTICLE)]
+        returned = mine(stage, batch)
+        res = v._grade_triage(returned, batch, "hk")
+        v._apply_triage_outcome(returned, "hk", res, fp_ids=set(),
+                                sent_by_id={2: batch[0]})
+        assert v._miner_reward.points == 1   # int(round(0.2*1)) == 0 before
+
+    def test_d4_analyzed_pos_canary_is_paid(self, stage, triage_on):
+        from alpharidge_ai.triage import build_proof_of_read, build_triage_record
+        v = HarnessValidator()
+        canary = article(10, ASSET_ARTICLE)
+        v._canary_pool.add(10, "pos", deterministic=True)
+        v._canary_articles[10] = canary
+        analysed = canary.model_copy(update={"analysis": types.SimpleNamespace(
+            analysis_data={
+                "triage": build_triage_record("relevant"),
+                "proof_of_read": build_proof_of_read(*ASSET_ARTICLE),
+                "event_fingerprint": {"content_hash": "y"},
+            })})
+        res = v._grade_triage([analysed], [canary], "hk")
+        v._apply_triage_outcome([analysed], "hk", res, fp_ids=set())
+        assert 10 not in v._article_store.processed   # graded, never stored
+        assert v._miner_reward.points == 6             # round(0.2 fee + 6)
+
+    def test_d5_declining_triage_is_an_integrity_failure(self):
+        # No triage data -> no proofs -> integrity failures.
+        from alpharidge_ai.validator.triage_grader import grade_batch
+        items = [{"article_id": 7, "title": "t", "body": "b",
+                  "analysis_data": {"assets": []}},
+                 {"article_id": 8, "title": "t", "body": "b",
+                  "analysis_data": {"assets": []}}]
+        cfg = TriageConfig()
+        res = grade_batch(items, {}, lambda i: False, lambda i: None, stage_junk,
+                          random.Random(0), cfg, enforced=True)
+        assert set(res.proof_failures) == {7, 8}
+        obs = res.observations(cfg, clean_article_id=7)
+        assert all(s == 0.0 for _, s, _ in obs)
+        hard_ids = {aid for aid, _, w in obs if w == cfg.hard_weight}
+        assert hard_ids == {7, 8}
+
+    def test_d5_analysis_on_nonrelevant_label_costs_something(self):
+        from alpharidge_ai.triage import build_proof_of_read, build_triage_record
+        from alpharidge_ai.validator.triage_grader import grade_batch
+        item = {"article_id": 3, "title": "t", "body": "some body text here",
+                "analysis_data": {
+                    "triage": build_triage_record("irrelevant", "non_economic"),
+                    "proof_of_read": build_proof_of_read("t", "some body text here"),
+                    "event_fingerprint": {"content_hash": "z"},
+                }}
+        rng = random.Random(0)
+        res = grade_batch([item], {}, lambda i: False, lambda i: None, stage_junk, rng,
+                          TriageConfig(), enforced=False)
+        assert ("soft", "analysis_on_nonrelevant") in [(e.kind, e.code) for e in res.events]
+
+    def test_d2_neg_mint_requires_both_framings(self, stage, triage_on):
+        class FakeAuditor:
+            def __init__(self, verdicts):
+                self.verdicts = verdicts
+                self.calls = []
+            def relevance_verdict(self, title, body, framing="strict"):
+                self.calls.append(framing)
+                return self.verdicts.get(framing)
+        junk = article(20, JUNK_ARTICLE)
+
+        v = HarnessValidator()
+        v._triage_auditor = FakeAuditor({"strict": False, "editorial": False})
+        v._mint_neg_canaries([junk])
+        assert v._canary_pool.size("neg") == 1   # both framings concur
+        assert set(v._triage_auditor.calls) == {"strict", "editorial"}
+
+        v2 = HarnessValidator()
+        v2._triage_auditor = FakeAuditor({"strict": False, "editorial": None})
+        v2._mint_neg_canaries([junk])
+        assert v2._canary_pool.size("neg") == 0  # one framing unsure: no mint
+
+        v3 = HarnessValidator()
+        v3._triage_auditor = FakeAuditor({"strict": False, "editorial": False})
+        asset = article(21, ASSET_ARTICLE)
+        v3._mint_neg_canaries([asset])
+        assert v3._canary_pool.size("neg") == 0  # stage says relevant: never a neg
+        assert v3._triage_auditor.calls == []    # LLM not even consulted
+
+
+class TestBorderlineLane:
+    """Borderline articles: analyze, then flag valuable/not_valuable."""
+
+    def _flagged(self, art, pair, flag, extra=None):
+        from alpharidge_ai.triage import build_proof_of_read, build_triage_record
+        rec = build_triage_record("borderline")
+        rec["flag"] = flag
+        data = {"triage": rec, "proof_of_read": build_proof_of_read(*pair)}
+        data.update(extra or {})
+        return art.model_copy(update={"analysis": types.SimpleNamespace(
+            analysis_data=data)})
+
+    def test_valuable_flag_is_kept_and_paid(self, stage, triage_on):
+        v = HarnessValidator()
+        art = article(1, MACRO_ARTICLE)
+        returned = [self._flagged(art, MACRO_ARTICLE, "valuable", {
+            "event_fingerprint": {"content_hash": "x"},
+            "economic_data": [{"event_name": "rate decision"}],
+        })]
+        res = v._grade_triage(returned, [art], "hk")
+        assert res.borderline_valuable_ids == [1] and not res.events
+        v._apply_triage_outcome(returned, "hk", res, fp_ids=set(), sent_by_id={1: art})
+        assert 1 in v._article_store.processed
+        assert v._article_store.updated[1].analysis.analysis_data.get("economic_data")
+        assert v._miner_reward.points == 6            # round(0.2 fee + 6)
+
+    def test_discard_flag_stores_triage_only_unpaid(self, stage, triage_on):
+        # Genuinely ambiguous article (the reference stage also says borderline).
+        v = HarnessValidator()
+        art = article(2, AMBIGUOUS_ARTICLE)
+        returned = [self._flagged(art, AMBIGUOUS_ARTICLE, "not_valuable", {
+            "event_fingerprint": {"content_hash": "y"},
+            "topic_signature": {"primary_sector_symbol": "OTHER"},
+        })]
+        res = v._grade_triage(returned, [art], "hk")
+        assert res.borderline_discard_ids == [2] and not res.events
+        v._apply_triage_outcome(returned, "hk", res, fp_ids=set(), sent_by_id={2: art})
+        assert 2 in v._article_store.processed
+        data = v._article_store.updated[2].analysis.analysis_data
+        assert "event_fingerprint" not in data          # stored triage-only
+        assert v._miner_reward.points == 1               # fee floor only: discards are unpaid
+
+    def test_borderline_on_plain_junk_is_unwarranted_and_unpaid(self, stage, triage_on):
+        # Farming shape: junk labeled borderline, analyzed, honestly discarded.
+        # The reference stage saw no ambiguity, so the claim costs reputation
+        # and earns nothing beyond the fee.
+        v = HarnessValidator()
+        art = article(5, JUNK_ARTICLE)
+        returned = [self._flagged(art, JUNK_ARTICLE, "not_valuable", {
+            "event_fingerprint": {"content_hash": "q"},
+            "topic_signature": {"primary_sector_symbol": "OTHER"},
+        })]
+        res = v._grade_triage(returned, [art], "hk")
+        assert ("soft", "borderline_unwarranted") in [(e.kind, e.code) for e in res.events]
+        assert not res.borderline_discard_ids
+        v._apply_triage_outcome(returned, "hk", res, fp_ids=set(), sent_by_id={5: art})
+        assert v._miner_reward.points == 1              # fee only
+        assert 5 in v._article_store.reset
+
+    def test_flag_contradicting_own_analysis_is_flagged_and_resets(self, stage, triage_on):
+        v = HarnessValidator()
+        art = article(3, JUNK_ARTICLE)
+        # Claims not_valuable while the analysis shows economic data.
+        returned = [self._flagged(art, JUNK_ARTICLE, "not_valuable", {
+            "event_fingerprint": {"content_hash": "z"},
+            "economic_data": [{"event_name": "cpi"}],
+        })]
+        res = v._grade_triage(returned, [art], "hk")
+        assert ("soft", "borderline_flag_mismatch") in [(e.kind, e.code) for e in res.events]
+        assert not res.borderline_discard_ids
+        v._apply_triage_outcome(returned, "hk", res, fp_ids=set(), sent_by_id={3: art})
+        assert 3 in v._article_store.reset and 3 not in v._article_store.processed
+
+    def test_unflagged_borderline_still_bounces(self, stage, triage_on):
+        v = HarnessValidator()
+        art = article(4, JUNK_ARTICLE)
+        returned = mine(stage, [art], strategy="honest")
+        from alpharidge_ai.triage import build_triage_record
+        rec = build_triage_record("borderline")
+        returned[0].analysis.analysis_data["triage"] = rec
+        res = v._grade_triage(returned, [art], "hk")
+        assert res.borderline_ids == [4]
+        v._apply_triage_outcome(returned, "hk", res, fp_ids=set(), sent_by_id={4: art})
+        assert 4 in v._article_store.reset
+
+    def test_valuable_borderline_joins_deep_validation(self, stage, triage_on):
+        from alpharidge_ai.triage import analysis_indicates_value
+        assert analysis_indicates_value({"economic_data": [{"event_name": "gdp"}]})
+        assert analysis_indicates_value({"topic_signature": {"primary_sector_symbol": "MACRO"}})
+        assert not analysis_indicates_value({"topic_signature": {"primary_sector_symbol": "OTHER"}})
+        assert not analysis_indicates_value(None)
+
+
+class TestOverlap:
+    """Overlap: split-pot pay, verification registry, variant capture."""
+
+    def _bind(self, v):
+        for name in ("_register_verification", "_pop_verification",
+                     "_prune_verification", "_buffer_variants",
+                     "_apply_verification_outcome"):
+            setattr(v, name, getattr(validator_module.Validator, name).__get__(v))
+        v._verification_pending = {}
+        v._variant_buffer = []
+        return v
+
+    def test_enforced_primary_pay_is_split(self, stage, triage_on, monkeypatch):
+        v = HarnessValidator()
+        batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE),
+                 article(3, MACRO_ARTICLE), article(4, JUNK_ARTICLE)]
+        returned = mine(stage, batch)
+        res = v._grade_triage(returned, batch, "hk")
+        monkeypatch.setattr(config, "TRIAGE_ENFORCED", True, raising=False)
+        v._apply_triage_outcome(returned, "hk", res, fp_ids=set(),
+                                sent_by_id={int(a.id): a for a in batch})
+        # k=3: fee 1/3 + two relevant at 6*1/3 each -> round(4.33) = 4
+        assert v._miner_reward.points == 4
+
+    def test_unenforced_pay_unchanged(self, stage, triage_on, monkeypatch):
+        v = HarnessValidator()
+        batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE),
+                 article(3, MACRO_ARTICLE), article(4, JUNK_ARTICLE)]
+        returned = mine(stage, batch)
+        res = v._grade_triage(returned, batch, "hk")
+        monkeypatch.setattr(config, "TRIAGE_ENFORCED", False, raising=False)
+        v._apply_triage_outcome(returned, "hk", res, fp_ids=set(),
+                                sent_by_id={int(a.id): a for a in batch})
+        assert v._miner_reward.points == 1 + 6 * 2   # k=1: original rates
+
+    def test_verification_outcome_pays_split_and_buffers_variants(self, stage, triage_on):
+        from alpharidge_ai.triage import build_proof_of_read, build_triage_record
+        v = self._bind(HarnessValidator())
+        art = article(1, ASSET_ARTICLE)
+        analysed = art.model_copy(update={"analysis": types.SimpleNamespace(
+            analysis_data={"triage": build_triage_record("relevant"),
+                           "proof_of_read": build_proof_of_read(*ASSET_ARTICLE),
+                           "event_fingerprint": {"content_hash": "v"}})})
+        res = v._grade_triage([analysed], [art], "hk")
+        import time as _t
+        v._article_k["1"] = (3, _t.time())            # dispatched to 3 assignees
+        v._apply_verification_outcome([analysed], "hk", res, fp_ids=set())
+        assert v._miner_reward.points == 2            # round(0.2/3 + 6/3)
+        assert len(v._variant_buffer) == 1
+        assert v._variant_buffer[0]["miner_hotkey"] == "hk"
+        assert not v._article_store.processed and not v._article_store.reset
+
+    def test_verification_registry_roundtrip_and_ttl(self, stage, triage_on, monkeypatch):
+        v = self._bind(HarnessValidator())
+        art = article(9, JUNK_ARTICLE)
+        v._register_verification("hkv", [art])
+        assert v._pop_verification("hkv", "9").id == 9
+        assert v._pop_verification("hkv", "9") is None   # single use
+        v._register_verification("hkv", [art])
+        monkeypatch.setattr(validator_module.TRIAGE_CFG, "verification_ttl_s", -1)
+        v._prune_verification()
+        assert v._pop_verification("hkv", "9") is None   # expired

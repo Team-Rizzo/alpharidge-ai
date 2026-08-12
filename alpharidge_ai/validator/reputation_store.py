@@ -108,13 +108,16 @@ class ReputationStore:
         per_target: Dict[str, List[Tuple[int, str, float, float]]] = {}
         for sender, targets in self.obs[epoch].items():
             for target, lst in targets.items():
-                seen = set()
+                # One observation per (article, sender): keep the worst
+                # score (ties: larger weight).
+                best: Dict[Tuple[int, str], Tuple[float, float]] = {}
                 for aid, g, w in lst:
                     key = (aid, sender)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    per_target.setdefault(target, []).append((aid, sender, g, w))
+                    cur = best.get(key)
+                    if cur is None or g < cur[0] or (g == cur[0] and w > cur[1]):
+                        best[key] = (float(g), float(w))
+                for (aid, sender_), (g, w) in best.items():
+                    per_target.setdefault(target, []).append((aid, sender_, g, w))
         for target, rows in per_target.items():
             rows.sort(key=lambda x: (x[0], x[1]))  # (article_id, sender) — deterministic
             st = self.state.setdefault(target, {"r": _prior(), "n": 0})

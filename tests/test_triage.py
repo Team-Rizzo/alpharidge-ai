@@ -48,6 +48,14 @@ def never_relevant(_item):
     return False
 
 
+def stage_junk(_item):
+    return "irrelevant"
+
+
+def stage_ambiguous(_item):
+    return "borderline"
+
+
 def llm_says(mapping, default=False):
     return lambda item: mapping.get(item["article_id"], default)
 
@@ -101,18 +109,38 @@ class TestSchema:
 # ---------------------------------------------------------------- grading ----
 
 class TestGradeBatch:
-    def test_v2_grace_when_no_triage_anywhere(self):
+    def test_no_triage_data_grace_before_enforcement(self):
         items = [{"article_id": i, "title": TITLE, "body": BODY,
                   "analysis_data": {"assets": []}} for i in range(3)]
-        res = grade_batch(items, {}, never_relevant, lambda i: None, RNG(0), CFG)
-        assert res.v2_grace and not res.events
+        res = grade_batch(items, {}, never_relevant, lambda i: None, stage_junk, RNG(0), CFG,
+                          enforced=False)
+        assert res.grace and not res.events and not res.proof_failures
         assert res.observations(CFG, clean_article_id=0) == []
+
+    def test_no_triage_data_fails_proof_when_enforced(self):
+        items = [{"article_id": i, "title": TITLE, "body": BODY,
+                  "analysis_data": {"assets": []}} for i in range(3)]
+        res = grade_batch(items, {}, never_relevant, lambda i: None, stage_junk, RNG(0), CFG,
+                          enforced=True)
+        assert set(res.proof_failures) == {0, 1, 2}
+        obs = res.observations(CFG, clean_article_id=0)
+        assert all(s == 0.0 for _, s, _ in obs)
+        assert {aid for aid, _, w in obs if w == CFG.hard_weight} == {0, 1, 2}
+
+    def test_malformed_triage_never_gets_grace(self):
+        # A present-but-broken record is not "pre-triage": graded even unenforced.
+        items = [{"article_id": 1, "title": TITLE, "body": BODY,
+                  "analysis_data": {"triage": {"label": "spam"}}}]
+        res = grade_batch(items, {}, never_relevant, lambda i: None, stage_junk, RNG(0), CFG,
+                          enforced=False)
+        assert not res.grace
+        assert ("soft", "triage_malformed") in [(e.kind, e.code) for e in res.events]
 
     def test_clean_batch_single_positive_observation(self):
         items = [make_item(1, LABEL_RELEVANT),
                  make_item(2, LABEL_IRRELEVANT, "non_economic"),
                  make_item(3, LABEL_IRRELEVANT, "non_economic")]
-        res = grade_batch(items, {}, never_relevant, lambda i: False, RNG(0), CFG)
+        res = grade_batch(items, {}, never_relevant, lambda i: False, stage_junk, RNG(0), CFG, enforced=True)
         assert not res.events and not res.proof_failures
         assert res.relevant_ids == [1]
         assert res.observations(CFG, clean_article_id=1) == [(1, 1.0, CFG.clean_weight)]
@@ -122,7 +150,7 @@ class TestGradeBatch:
     def test_proof_of_read_failure_is_hard(self):
         items = [make_item(1, LABEL_RELEVANT, good_proof=False),
                  make_item(2, LABEL_IRRELEVANT, "non_economic")]
-        res = grade_batch(items, {}, never_relevant, lambda i: False, RNG(0), CFG)
+        res = grade_batch(items, {}, never_relevant, lambda i: False, stage_junk, RNG(0), CFG, enforced=True)
         assert res.proof_failures == [1]
         # A proof-of-read failure must reach the reputation stream, not just
         # the penalty path — it is the strongest evidence the miner never read.
@@ -132,14 +160,14 @@ class TestGradeBatch:
         items = [make_item(1, LABEL_IRRELEVANT, "non_economic"),
                  make_item(2, LABEL_RELEVANT)]
         res = grade_batch(items, {1: ("pos", True)}, never_relevant,
-                          lambda i: False, RNG(0), CFG)
+                          lambda i: False, stage_junk, RNG(0), CFG, enforced=True)
         assert [(e.kind, e.code) for e in res.events] == [("hard", "canary_pos_missed")]
 
     def test_pos_canary_missed_llm_labeled_is_soft(self):
         items = [make_item(1, LABEL_IRRELEVANT, "non_economic"),
                  make_item(2, LABEL_RELEVANT)]
         res = grade_batch(items, {1: ("pos", False)}, never_relevant,
-                          lambda i: False, RNG(0), CFG)
+                          lambda i: False, stage_junk, RNG(0), CFG, enforced=True)
         assert [(e.kind, e.code) for e in res.events] == [("soft", "canary_pos_missed")]
 
     def test_neg_canary_flagged_is_soft_and_pos_canary_kept_is_clean(self):
@@ -147,29 +175,26 @@ class TestGradeBatch:
                  make_item(2, LABEL_RELEVANT),                       # pos canary correctly kept
                  make_item(3, LABEL_IRRELEVANT, "non_economic")]
         res = grade_batch(items, {1: ("neg", False), 2: ("pos", True)},
-                          never_relevant, lambda i: False, RNG(0), CFG)
+                          never_relevant, lambda i: False, stage_junk, RNG(0), CFG, enforced=True)
         assert [(e.kind, e.code) for e in res.events] == [("soft", "canary_neg_flagged")]
 
     def test_audit_deterministic_false_negative_is_hard(self):
         items = [make_item(1, LABEL_IRRELEVANT, "non_economic"),
                  make_item(2, LABEL_RELEVANT)]
         res = grade_batch(items, {}, lambda i: i["article_id"] == 1,
-                          lambda i: False, RNG(0), CFG)
+                          lambda i: False, stage_junk, RNG(0), CFG, enforced=True)
         assert [(e.kind, e.code) for e in res.events] == \
             [("hard", "false_negative_deterministic")]
         assert 1 not in res.retire_candidate_ids
 
-    def test_audit_llm_false_negative_soft_by_default_hard_when_configured(self):
+    def test_audit_llm_false_negative_is_always_soft(self):
         items = [make_item(1, LABEL_IRRELEVANT, "non_economic")]
-        res = grade_batch(items, {}, never_relevant, lambda i: True, RNG(0), CFG)
+        res = grade_batch(items, {}, never_relevant, lambda i: True, stage_junk, RNG(0), CFG, enforced=True)
         assert [(e.kind, e.code) for e in res.events] == [("soft", "false_negative_llm")]
-        strict = TriageConfig(hard_llm_verdicts=True)
-        res2 = grade_batch(items, {}, never_relevant, lambda i: True, RNG(0), strict)
-        assert res2.events[0].kind == "hard"
 
     def test_audit_llm_unavailable_no_event(self):
         items = [make_item(1, LABEL_IRRELEVANT, "non_economic")]
-        res = grade_batch(items, {}, never_relevant, lambda i: None, RNG(0), CFG)
+        res = grade_batch(items, {}, never_relevant, lambda i: None, stage_junk, RNG(0), CFG, enforced=True)
         assert not res.events
 
     def test_malformed_record_on_v3_miner_is_soft_and_auditable(self):
@@ -178,7 +203,7 @@ class TestGradeBatch:
                   "analysis_data": {"triage": {"label": "spam"},
                                     "proof_of_read": build_proof_of_read(TITLE, BODY)}}]
         res = grade_batch(items, {}, lambda i: i["article_id"] == 2,
-                          lambda i: False, RNG(0), CFG)
+                          lambda i: False, stage_junk, RNG(0), CFG, enforced=True)
         codes = sorted(e.code for e in res.events)
         assert "triage_malformed" in codes
         # treated as irrelevant claim -> audited -> deterministic FN caught
@@ -188,7 +213,8 @@ class TestGradeBatch:
         cfg = TriageConfig(borderline_cap=1, audit_irrelevant_n=0)
         items = [make_item(1, LABEL_BORDERLINE), make_item(2, LABEL_BORDERLINE),
                  make_item(3, LABEL_RELEVANT)]
-        res = grade_batch(items, {}, never_relevant, lambda i: False, RNG(0), cfg)
+        res = grade_batch(items, {}, never_relevant, lambda i: False, stage_junk, RNG(0), cfg,
+                          enforced=True)
         assert res.borderline_ids == [1]
         assert 2 in res.retire_candidate_ids   # capped -> irrelevant claim
         assert res.relevant_ids == [3]
@@ -270,12 +296,18 @@ class TestCanaryPool:
         assert pool.size("neg") == 0
         assert pool.draw("neg", RNG(0)) is None
 
-    def test_label_of_and_persistence(self, tmp_path):
-        path = str(tmp_path / "canaries.json")
-        pool = CanaryPool(CFG, state_path=path, now=lambda: 0.0)
+    def test_label_of(self):
+        pool = CanaryPool(CFG, now=lambda: 0.0)
         pool.add(9, "pos", deterministic=True)
         assert pool.label_of(9) == ("pos", True)
         assert pool.label_of(10) is None
-        pool.save()
-        pool2 = CanaryPool(CFG, state_path=path, now=lambda: 1.0)
-        assert pool2.label_of(9) == ("pos", True)
+
+    def test_draw_restricted_to_available_never_burns_dead_exposures(self):
+        cfg = TriageConfig(canary_max_exposures=1)
+        pool = CanaryPool(cfg, now=lambda: 0.0)
+        pool.add(5, "pos", deterministic=True)
+        pool.add(6, "pos", deterministic=True)
+        rng = random.Random(0)
+        assert pool.draw("pos", rng, available={6}) == 6      # 5 not injectable
+        assert pool.draw("pos", rng, available={6}) is None   # 6 spent; 5 intact
+        assert pool.draw("pos", rng, available={5, 6}) == 5

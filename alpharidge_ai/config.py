@@ -390,27 +390,12 @@ VALIDATION_SAMPLE_SIZE      = int(os.getenv("VALIDATION_SAMPLE_SIZE", "1"))
 SUMMARY_AGREEMENT_FLOOR     = float(os.getenv("SUMMARY_AGREEMENT_FLOOR", "0.4"))
 SAMPLING_SUBSTANTIVE_WEIGHT = float(os.getenv("SAMPLING_SUBSTANTIVE_WEIGHT", "2.0"))
 
-# Article triage (miner-side relevance filtering, schema v3). Ships dark:
-# TRIAGE_ENABLED default false, flipped via served config once all validators
+# Cutover switch for mandatory triage. While false, a batch with no triage
+# data grades the legacy way; once served true, it fails integrity checks.
+# The flag and the grace path it controls are removed after the migration.
+TRIAGE_ENFORCED             = _as_bool(os.getenv("TRIAGE_ENFORCED", "false"))
+
 # run the release. Triage events feed the existing reputation observation
-# stream, so the emission gate prices triage accuracy with no extra machinery.
-TRIAGE_ENABLED              = _as_bool(os.getenv("TRIAGE_ENABLED", "false"))
-TRIAGE_FEE_POINTS           = float(os.getenv("TRIAGE_FEE_POINTS", "0.2"))
-TRIAGE_REL_POINT_MULT       = int(os.getenv("TRIAGE_REL_POINT_MULT", "5"))
-TRIAGE_CANARY_POS_RATE      = float(os.getenv("TRIAGE_CANARY_POS_RATE", "0.7"))
-TRIAGE_CANARY_NEG_RATE      = float(os.getenv("TRIAGE_CANARY_NEG_RATE", "0.7"))
-TRIAGE_AUDIT_IRRELEVANT_N   = int(os.getenv("TRIAGE_AUDIT_IRRELEVANT_N", "1"))
-TRIAGE_BORDERLINE_CAP       = int(os.getenv("TRIAGE_BORDERLINE_CAP", "3"))
-TRIAGE_HARD_LLM_VERDICTS    = _as_bool(os.getenv("TRIAGE_HARD_LLM_VERDICTS", "false"))
-TRIAGE_AUDIT_LLM_ENABLED    = _as_bool(os.getenv("TRIAGE_AUDIT_LLM_ENABLED", "false"))
-TRIAGE_AUDIT_MIN_CONFIDENCE = float(os.getenv("TRIAGE_AUDIT_MIN_CONFIDENCE", "0.75"))
-TRIAGE_HARD_WEIGHT          = float(os.getenv("TRIAGE_HARD_WEIGHT", "2.0"))
-TRIAGE_SOFT_WEIGHT          = float(os.getenv("TRIAGE_SOFT_WEIGHT", "0.4"))
-TRIAGE_CANARY_TTL_S         = float(os.getenv("TRIAGE_CANARY_TTL_S", str(6 * 3600)))
-TRIAGE_CANARY_MAX_EXPOSURES = int(os.getenv("TRIAGE_CANARY_MAX_EXPOSURES", "30"))
-# Miner-side switch: do not enable until validators run a triage-aware release,
-# or triage-only (analysis-less) articles will fail v2 validation as incomplete.
-MINER_TRIAGE_ENABLED        = _as_bool(os.getenv("MINER_TRIAGE_ENABLED", "false"))
 
 
 _REMOTE_CONFIG_KEYS = {
@@ -467,21 +452,7 @@ _REMOTE_CONFIG_KEYS = {
     "VALIDATION_SAMPLE_SIZE":     (int,   "VALIDATION_SAMPLE_SIZE"),
     "SAMPLING_SUBSTANTIVE_WEIGHT":(float, "SAMPLING_SUBSTANTIVE_WEIGHT"),
     "SUMMARY_AGREEMENT_FLOOR":    (float, "SUMMARY_AGREEMENT_FLOOR"),
-    # Article triage track (served so all validators match).
-    "TRIAGE_ENABLED":             (_as_bool, "TRIAGE_ENABLED"),
-    "TRIAGE_FEE_POINTS":          (float, "TRIAGE_FEE_POINTS"),
-    "TRIAGE_REL_POINT_MULT":      (int,   "TRIAGE_REL_POINT_MULT"),
-    "TRIAGE_CANARY_POS_RATE":     (float, "TRIAGE_CANARY_POS_RATE"),
-    "TRIAGE_CANARY_NEG_RATE":     (float, "TRIAGE_CANARY_NEG_RATE"),
-    "TRIAGE_AUDIT_IRRELEVANT_N":  (int,   "TRIAGE_AUDIT_IRRELEVANT_N"),
-    "TRIAGE_BORDERLINE_CAP":      (int,   "TRIAGE_BORDERLINE_CAP"),
-    "TRIAGE_HARD_LLM_VERDICTS":   (_as_bool, "TRIAGE_HARD_LLM_VERDICTS"),
-    "TRIAGE_AUDIT_LLM_ENABLED":   (_as_bool, "TRIAGE_AUDIT_LLM_ENABLED"),
-    "TRIAGE_AUDIT_MIN_CONFIDENCE":(float, "TRIAGE_AUDIT_MIN_CONFIDENCE"),
-    "TRIAGE_HARD_WEIGHT":         (float, "TRIAGE_HARD_WEIGHT"),
-    "TRIAGE_SOFT_WEIGHT":         (float, "TRIAGE_SOFT_WEIGHT"),
-    "TRIAGE_CANARY_TTL_S":        (float, "TRIAGE_CANARY_TTL_S"),
-    "TRIAGE_CANARY_MAX_EXPOSURES":(int,   "TRIAGE_CANARY_MAX_EXPOSURES"),
+    "TRIAGE_ENFORCED":            (_as_bool, "TRIAGE_ENFORCED"),
     # Weight window. Must also be present in the API's SUBNET_CONFIG or the
     # served value never reaches the elif below and the rollout does nothing.
     "WEIGHT_WINDOW_EPOCHS":       (_cast_window_epochs, "WEIGHT_WINDOW_EPOCHS"),

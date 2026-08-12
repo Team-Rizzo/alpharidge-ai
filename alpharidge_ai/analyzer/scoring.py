@@ -1482,10 +1482,7 @@ def _summary_agreement(record_intel, reference_intel):
 # supply shocks classify here. An article in one of these is never treated as
 # clearly irrelevant, so honest miners keeping it are not charged for it and it
 # never becomes a negative canary.
-_MARKET_ADJACENT_SECTORS = frozenset({
-    "MACRO", "MONETARY", "MARKET", "EQUITIES", "COMMODITIES", "CRYPTO",
-    "GEOPOLITICS", "TECH", "ENERGY", "RATES",
-})
+from alpharidge_ai.triage import MARKET_ADJACENT_SECTORS as _MARKET_ADJACENT_SECTORS
 
 
 def _reference_clearly_irrelevant(intel) -> bool:

@@ -111,6 +111,26 @@ class ValidationClient:
         except Exception as e:
             bt.logging.debug(f"[PENALTY_DETAIL] flush block error (ignored): {e}")
 
+    async def _flush_variants(self):
+        """Best-effort flush of buffered verifier analyses to /articles/variants.
+        Snapshot-and-clear is atomic; failures drop the snapshot (bounded buffer)."""
+        try:
+            buf = getattr(self._validator, "_variant_buffer", None)
+            if not buf:
+                return
+            snapshot = buf[:500]
+            del buf[:500]
+            try:
+                resp = await self.api_client.submit_analysis_variants(snapshot)
+                if not getattr(resp, "success", False):
+                    buf[:0] = snapshot   # API refused: retry next cycle
+                else:
+                    bt.logging.debug(f"[VARIANTS] flushed {len(snapshot)}")
+            except Exception as e:
+                bt.logging.debug(f"[VARIANTS] flush failed, dropped {len(snapshot)}: {e}")
+        except Exception as e:
+            bt.logging.debug(f"[VARIANTS] flush block error (ignored): {e}")
+
     async def _flush_dispatch_status(self):
         """Best-effort push of the per-miner adaptive-dispatch status snapshot to the
         diagnostics endpoint (display-only, decoupled from consensus). Only while
@@ -527,6 +547,7 @@ class ValidationClient:
                 # Flush display-only penalty attribution (best-effort, decoupled from
                 # consensus — never blocks scoring/weights; failures drop the snapshot).
                 await self._flush_penalty_detail()
+                await self._flush_variants()
                 # Same channel, for the adaptive-dispatch status snapshot (throttled).
                 await self._flush_dispatch_status()
                 # And the per-miner dispatch/cooldown event log (park/unpark, batch-size).
