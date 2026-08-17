@@ -23,11 +23,10 @@ import bittensor as bt
 from alpharidge_ai import config
 from alpharidge_ai.utils import attestation_crypto as ac
 
-# Defense-in-depth bounds on ingested broadcast data. A legit miner earns on the
-# order of 1-50 points per epoch; anything above MAX_POINTS_PER_UID is fabricated
-# (the MITM attacks injected ~65000). Legit broadcasts use seq == epoch, so a seq
-# far from the stated epoch signals a rogue/poisoned broadcaster.
-MAX_POINTS_PER_UID = 500
+# Defense-in-depth bounds on ingested broadcast data. Anything above
+# MAX_POINTS_PER_UID per epoch is fabricated. Legit broadcasts use seq == epoch,
+# so a seq far from the stated epoch signals a rogue/poisoned broadcaster.
+MAX_POINTS_PER_UID = 5000
 MAX_SEQ_EPOCH_SKEW = 100
 
 

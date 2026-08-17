@@ -105,11 +105,13 @@ class HarnessValidator:
     _has_full_analysis = staticmethod(validator_module.Validator._has_full_analysis)
     _triage_only_analysis = staticmethod(validator_module.Validator._triage_only_analysis)
     _k_for = validator_module.Validator._k_for
+    _attribute_pay = validator_module.Validator._attribute_pay
 
     def __init__(self):
         self._canary_pool = CanaryPool(TriageConfig())
         self._canary_articles = {}
         self._article_k = {}
+        self._article_pay = {}
         self._triage_extractor = None
         self._triage_auditor = None
         self._triage_stage = None
@@ -651,7 +653,76 @@ class TestOverlap:
         assert v._miner_reward.points == 2            # round(0.2/3 + 6/3)
         assert len(v._variant_buffer) == 1
         assert v._variant_buffer[0]["miner_hotkey"] == "hk"
+        assert "miner_signature" not in v._variant_buffer[0]   # unsigned: no verdict
         assert not v._article_store.processed and not v._article_store.reset
+
+    def test_verification_variants_carry_signed_verdicts_summing_to_payout(self, stage, triage_on):
+        from alpharidge_ai.triage import build_proof_of_read, build_triage_record
+        from alpharidge_ai.utils import attestation_crypto as ac
+        import bittensor as bt
+        v = self._bind(HarnessValidator())
+        kp = bt.Keypair.create_from_uri("//Alice")
+        arts = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE), article(3, MACRO_ARTICLE)]
+        returned = []
+        for a in mine(stage, arts):
+            data = dict(a.analysis.analysis_data)
+            if data["triage"]["label"] == "relevant":
+                data["event_fingerprint"] = {"content_hash": "v"}
+            returned.append(a.model_copy(update={"analysis": types.SimpleNamespace(
+                analysis_data=data, sentiment=getattr(a.analysis, "sentiment", "neutral"))}))
+        sigs, ncs = {}, {}
+        for a in returned:
+            ah = ac.analysis_hash(ac.analysis_to_dict(a.analysis))
+            ncs[str(a.id)] = "n%d" % a.id
+            sigs[str(a.id)] = ac.sign_miner_item(kp, str(a.id), ah, ncs[str(a.id)])
+        res = v._grade_triage(returned, arts, kp.ss58_address)
+        import time as _t
+        for a in arts:
+            v._article_k[str(a.id)] = (3, _t.time())
+        v._apply_verification_outcome(returned, kp.ss58_address, res, fp_ids=set(),
+                                      miner_signatures=sigs, nonces=ncs, epoch=77)
+        # every graded article is buffered (irrelevant ones as triage-only rows)
+        assert sorted(e["article_id"] for e in v._variant_buffer) == [1, 2, 3]
+        for e in v._variant_buffer:
+            assert e["validator_verdict"] == "valid" and e["epoch"] == 77
+            assert ac.verify_miner_signature(kp.ss58_address, str(e["article_id"]),
+                                             e["miner_analysis_hash"], e["nonce"],
+                                             e["miner_signature"])
+        # verdict points sum to the integer payout the miner was credited
+        assert round(sum(e["points_awarded"] for e in v._variant_buffer), 3) == v._miner_reward.points
+        assert v._miner_reward.points == 4           # round(3*0.2/3 + 2*6/3)
+
+    def test_primary_pay_attributed_to_stored_articles(self, stage, triage_on, monkeypatch):
+        v = HarnessValidator()
+        batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE),
+                 article(3, MACRO_ARTICLE), article(4, JUNK_ARTICLE)]
+        returned = mine(stage, batch)
+        res = v._grade_triage(returned, batch, "hk")
+        monkeypatch.setattr(config, "TRIAGE_ENFORCED", False, raising=False)
+        v._apply_triage_outcome(returned, "hk", res, fp_ids=set(),
+                                sent_by_id={int(a.id): a for a in batch})
+        assert v._miner_reward.points == 13
+        # all four articles were stored (2 kept, 2 retired) and share the payout
+        assert sorted(v._article_pay) == ["1", "2", "3", "4"]
+        assert round(sum(v._article_pay.values()), 3) == 13
+        assert v._article_pay["1"] > v._article_pay["2"]      # relevant outearns triage-only
+        # the verdict pops the recorded value; unknown articles fall back to 1
+        assert v._article_pay.pop("1") > 6 and v._article_pay.pop("999", 1.0) == 1.0
+
+    def test_canary_pay_spreads_onto_stored_articles(self, stage, triage_on, monkeypatch):
+        v = HarnessValidator()
+        canary = article(50, ASSET_ARTICLE)
+        v._canary_pool.add(50, "pos", deterministic=True)
+        v._canary_articles[50] = canary
+        batch = [canary, article(2, JUNK_ARTICLE)]
+        returned = mine(stage, batch)
+        res = v._grade_triage(returned, batch, "hk")
+        monkeypatch.setattr(config, "TRIAGE_ENFORCED", False, raising=False)
+        v._apply_triage_outcome(returned, "hk", res, fp_ids=set(),
+                                sent_by_id={int(a.id): a for a in batch})
+        # canary is graded+paid but never stored: its pay lands on the stored article
+        assert "50" not in v._article_pay and list(v._article_pay) == ["2"]
+        assert round(v._article_pay["2"], 3) == v._miner_reward.points
 
     def test_verification_registry_roundtrip_and_ttl(self, stage, triage_on, monkeypatch):
         v = self._bind(HarnessValidator())

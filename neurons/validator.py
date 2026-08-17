@@ -188,6 +188,7 @@ class Validator(BaseValidatorNeuron):
         # and analyses awaiting submission to the variants endpoint.
         self._verification_pending: dict = {}
         self._article_k: dict = {}     # aid -> (assignment count, ts)
+        self._article_pay: dict = {}   # aid -> points paid, reported on the verdict
         self._variant_buffer: list = []
 
     def resync_metagraph(self):
@@ -857,18 +858,45 @@ class Validator(BaseValidatorNeuron):
         return (TRIAGE_CFG.overlap_k
                 if getattr(config, "TRIAGE_ENFORCED", False) else 1)
 
-    def _buffer_variants(self, miner_hotkey: str, articles) -> None:
+    def _attribute_pay(self, per_article: dict, payout: int, record: bool = True) -> dict:
+        """Scale per-article pay so the verdicts sum to the integer payout."""
+        if not per_article:
+            return {}
+        base = sum(per_article.values())
+        scale = (payout / base) if base > 0 else 0.0
+        out = {aid: round(pts * scale, 4) for aid, pts in per_article.items()}
+        if record:
+            if len(self._article_pay) > 50_000:
+                for k in list(self._article_pay)[:10_000]:
+                    self._article_pay.pop(k, None)
+            for aid, pts in out.items():
+                self._article_pay[str(aid)] = pts
+        return out
+
+    def _buffer_variants(self, miner_hotkey: str, articles, pay=None,
+                         miner_signatures=None, nonces=None, epoch=None) -> None:
+        pay = pay or {}
+        sigs = miner_signatures or {}
+        ncs = nonces or {}
         for a in articles:
-            data = getattr(getattr(a, "analysis", None), "analysis_data", None)
-            if isinstance(data, dict) and data.get("event_fingerprint"):
-                if len(str(data)) > 300_000:
-                    continue
-                if len(self._variant_buffer) < 5000:
-                    self._variant_buffer.append({
-                        "article_id": int(a.id),
-                        "miner_hotkey": miner_hotkey,
-                        "analysis_data": data,
-                    })
+            analysis = getattr(a, "analysis", None)
+            data = getattr(analysis, "analysis_data", None)
+            if not isinstance(data, dict) or len(str(data)) > 300_000:
+                continue
+            if len(self._variant_buffer) >= 5000:
+                break
+            entry = {
+                "article_id": int(a.id),
+                "miner_hotkey": miner_hotkey,
+                "analysis_data": data,
+            }
+            rid = str(a.id)
+            if sigs.get(rid) and ncs.get(rid) and epoch is not None:
+                entry.update(build_verdict_fields(
+                    miner_hotkey=miner_hotkey, miner_signature=sigs[rid],
+                    nonce=ncs[rid], analysis=analysis, validator_verdict="valid",
+                    points_awarded=float(pay.get(int(a.id), 0.0)), epoch=int(epoch)))
+            self._variant_buffer.append(entry)
 
     def _stage_label_item(self, item: dict) -> str:
         rec, _, _ = self._get_triage_stage().evaluate(
@@ -1043,6 +1071,7 @@ class Validator(BaseValidatorNeuron):
         total_pay = sum(TRIAGE_CFG.fee_points / self._k_for(a.id)
                         for a in article_batch)
         rel_mult = TRIAGE_CFG.rel_point_mult
+        per_article: dict = {}
 
         for article in article_batch:
             aid = int(article.id)
@@ -1059,6 +1088,7 @@ class Validator(BaseValidatorNeuron):
                     pass
                 continue
             if aid in keep_ids or aid in retire_ids:
+                per_article[aid] = TRIAGE_CFG.fee_points / self._k_for(aid)
                 stored = article
                 if aid in retire_ids:
                     # Store our copy with a rebuilt triage-only analysis.
@@ -1080,6 +1110,7 @@ class Validator(BaseValidatorNeuron):
                     content_len = len(article.content or "")
                     weight = 3 if content_len >= 2000 else (2 if content_len >= 500 else 1)
                     total_pay += rel_mult * weight / self._k_for(aid)
+                    per_article[aid] += rel_mult * weight / self._k_for(aid)
                     try:
                         self._article_store.mark_rewarded(article.id)
                     except Exception:
@@ -1096,8 +1127,10 @@ class Validator(BaseValidatorNeuron):
             payout = max(1, payout)
         if payout > 0:
             self._miner_reward.add_reward(miner_hotkey, payout)
+        self._attribute_pay(per_article, payout)
 
-    def _apply_verification_outcome(self, article_batch, miner_hotkey, triage_res, fp_ids):
+    def _apply_verification_outcome(self, article_batch, miner_hotkey, triage_res, fp_ids,
+                                    miner_signatures=None, nonces=None, epoch=None):
         """Pay a verification response at the split rate and keep its analyses
         as variants. No store interaction — the primary owns the article."""
         keep_ids = set(triage_res.relevant_ids) | set(triage_res.borderline_valuable_ids)
@@ -1107,20 +1140,25 @@ class Validator(BaseValidatorNeuron):
         total_pay = sum(TRIAGE_CFG.fee_points / self._k_for(a.id)
                         for a in article_batch)
         variants = []
+        per_article: dict = {}
         for article in article_batch:
             aid = int(article.id)
             if aid in canary_ids or aid in fp_ids:
                 continue
             k = self._k_for(aid)
+            per_article[aid] = TRIAGE_CFG.fee_points / k
             content_len = len(article.content or "")
             weight = 3 if content_len >= 2000 else (2 if content_len >= 500 else 1)
             if aid in keep_ids and self._has_full_analysis(article):
                 total_pay += TRIAGE_CFG.rel_point_mult * weight / k
-                variants.append(article)
+                per_article[aid] += TRIAGE_CFG.rel_point_mult * weight / k
+            variants.append(article)
         payout = int(round(total_pay))
         if payout > 0:
             self._miner_reward.add_reward(miner_hotkey, payout)
-        self._buffer_variants(miner_hotkey, variants)
+        self._buffer_variants(miner_hotkey, variants,
+                              self._attribute_pay(per_article, payout, record=False),
+                              miner_signatures, nonces, epoch)
 
     def _record_observations(self, target_hotkey, observations):
         if not observations:
@@ -1378,7 +1416,9 @@ class Validator(BaseValidatorNeuron):
             self._adaptive_metrics.mark_scored(miner_hotkey)
         self._article_cooldown.record_batch_valid(miner_hotkey, latency_s)
         if triage_active and verification:
-            self._apply_verification_outcome(article_batch, miner_hotkey, triage_res, fp_ids)
+            self._apply_verification_outcome(
+                article_batch, miner_hotkey, triage_res, fp_ids,
+                miner_signatures, nonces, self._miner_reward._get_current_epoch())
         elif triage_active:
             self._apply_triage_outcome(article_batch, miner_hotkey, triage_res, fp_ids,
                                        {int(a.id): a for a in sent_batch},
@@ -1411,6 +1451,7 @@ class Validator(BaseValidatorNeuron):
                     else:
                         weight = 1
                     self._miner_reward.add_reward(miner_hotkey, weight)
+                    self._article_pay[str(article.id)] = float(weight)
                     try:
                         self._article_store.mark_rewarded(article.id)
                     except Exception:
@@ -2158,7 +2199,8 @@ class Validator(BaseValidatorNeuron):
                     miner_hotkey=hotkey, miner_signature=meta["miner_signature"],
                     nonce=meta["nonce"], analysis=article.analysis,
                     validator_verdict=meta["validator_verdict"],
-                    points_awarded=1.0, epoch=meta["epoch"]))
+                    points_awarded=self._article_pay.pop(str(article.id), 1.0),
+                    epoch=meta["epoch"]))
             completed_articles.append(base)
         response = await self._validation_client.api_client.submit_completed_articles(completed_articles)
         return response
