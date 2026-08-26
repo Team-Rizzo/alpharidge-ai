@@ -188,3 +188,58 @@ def test_validation_client_references_no_undefined_names():
 
     leaks = sorted(set(undefined(top, [source_path.stem])))
     assert not leaks, "undefined names in validation_client:\n  " + "\n  ".join(leaks)
+
+
+# --- the API reward payload must be one epoch, not the window ------------
+
+def test_api_reward_payload_aggregates_one_epoch_not_the_window():
+    """A row stamped with one epoch's block range must carry one epoch's points.
+
+    The weight path's `rewards` list sums the K-epoch window. The API row is
+    stamped start_block..stop_block for target_epoch alone, and the dashboard
+    derives epoch = start_block / BLOCK_LENGTH from it, so submitting the window
+    total records K epochs of points as though they were one. K is served
+    remotely and is 7 in production, so that is a 7x overstatement, not a latent
+    one. Aggregating a one-epoch window keeps the pooling and the gate the table
+    is expected to reflect while restoring the span.
+
+    Read off the real call site: whatever feeds rewards_payload must come from
+    an _aggregate_window call whose start and end are both target_epoch.
+    """
+    import ast
+
+    source_path = Path(validation_client_module.__file__)
+    tree = ast.parse(source_path.read_text())
+
+    run = next(
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "run"
+    )
+
+    # The comprehension that builds rewards_payload, and the name it iterates.
+    payload = next(
+        n for n in ast.walk(run)
+        if isinstance(n, ast.Assign)
+        and any(getattr(t, "id", None) == "rewards_payload" for t in n.targets)
+    )
+    source_name = payload.value.generators[0].iter.id
+
+    # That name must be bound from a single-epoch _aggregate_window call.
+    binding = next(
+        n for n in ast.walk(run)
+        if isinstance(n, ast.Assign)
+        and any(
+            source_name in [getattr(e, "id", None) for e in ast.walk(t)]
+            for t in n.targets
+        )
+    )
+    call = binding.value
+    assert isinstance(call, ast.Call) and call.func.attr == "_aggregate_window", (
+        f"rewards_payload is built from {source_name!r}, which is not an "
+        "_aggregate_window result"
+    )
+    _, start, end = call.args[:3]
+    assert start.id == "target_epoch" and end.id == "target_epoch", (
+        "the API reward payload must aggregate target_epoch alone; got window "
+        f"[{ast.dump(start)}..{ast.dump(end)}]"
+    )

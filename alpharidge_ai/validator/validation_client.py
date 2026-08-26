@@ -926,6 +926,17 @@ class ValidationClient:
                         # Rewards: API expects {start_block, stop_block, hotkey, points}
                         start_block = int(target_epoch) * int(config.BLOCK_LENGTH)
                         stop_block = (int(target_epoch) + 1) * int(config.BLOCK_LENGTH) - 1
+                        # Aggregate the target epoch ALONE, not the weight window. The
+                        # row is stamped with one epoch's block range and consumers
+                        # derive epoch = start_block / BLOCK_LENGTH from it, so the
+                        # window-summed `rewards` the weight path uses would land K
+                        # epochs of points under a single-epoch label -- 7x at the K
+                        # in force today. Same pooling and gating as the weight path,
+                        # over a one-epoch window, which is what this submitted before
+                        # the window was introduced.
+                        epoch_rewards_list, _, _ = self._aggregate_window(
+                            target_epoch, target_epoch, target_epoch, quiet=True
+                        )
                         rewards_payload = [
                             {
                                 "start_block": start_block,
@@ -933,7 +944,7 @@ class ValidationClient:
                                 "hotkey": r.hotkey,
                                 "points": float(getattr(r, "reward", 0)),
                             }
-                            for r in rewards
+                            for r in epoch_rewards_list
                         ]
 
                         # Penalties: API expects {hotkey, reason}. Same reason as the
