@@ -181,6 +181,38 @@ class ValidationClient:
         except Exception as e:
             bt.logging.debug(f"[MINER_EVENT] flush block error (ignored): {e}")
 
+    def _epoch_rewards(self, epoch: int) -> Dict[str, int]:
+        """This validator's reward points for one epoch, hotkey -> points.
+
+        For the reporting paths (Score synapse, API submit) that label their payload
+        with a single epoch's block range. The weight path uses the _range variants
+        instead and must keep doing so.
+
+        An epoch the store no longer holds (or never held) is an empty dict, not an
+        error: get_rewards raises KeyError for an absent epoch, and an epoch with no
+        activity is a normal state, not a failure worth aborting the block for.
+        """
+        try:
+            return self._validator._miner_reward.get_rewards(int(epoch)) or {}
+        except (KeyError, IndexError):
+            return {}
+        except Exception as e:
+            bt.logging.warning(f"[ValidationClient] Failed to read rewards for epoch={epoch}: {e}")
+            return {}
+
+    def _epoch_penalties(self, epoch: int) -> Dict[str, int]:
+        """This validator's penalty counts for one epoch, hotkey -> count.
+
+        Single-epoch counterpart of get_penalties_range; see _epoch_rewards.
+        """
+        try:
+            return self._validator._miner_penalty.get_penalties(int(epoch)) or {}
+        except (KeyError, IndexError):
+            return {}
+        except Exception as e:
+            bt.logging.warning(f"[ValidationClient] Failed to read penalties for epoch={epoch}: {e}")
+            return {}
+
     def _aggregate_window(self, target_epoch: int, window_start: int, window_end: int, quiet: bool = False):
         """Pool local and broadcast points over the inclusive epoch window.
 
@@ -835,11 +867,17 @@ class ValidationClient:
                         self._last_deep_verify_epoch = target_epoch
 
                 # Send each active miner their raw reward/penalty counts for this epoch (once per epoch)
-                if self._last_score_epoch != target_epoch:
+                if target_epoch >= 0 and self._last_score_epoch != target_epoch:
                     try:
                         score_start_block = int(target_epoch) * int(config.BLOCK_LENGTH)
                         score_end_block = (int(target_epoch) + 1) * int(config.BLOCK_LENGTH) - 1
-                        active_hotkeys = set((local_rewards_map or {}).keys()) | set((local_penalties or {}).keys())
+                        # This block reports ONE epoch, so it reads the per-epoch stores
+                        # directly. The weight path's window sums are deliberately not
+                        # reused here: they cover K epochs and would report every miner
+                        # inflated by K under a single-epoch block range.
+                        epoch_rewards = self._epoch_rewards(target_epoch)
+                        epoch_penalties = self._epoch_penalties(target_epoch)
+                        active_hotkeys = set(epoch_rewards.keys()) | set(epoch_penalties.keys())
 
                         async def _send_score(hk: str) -> None:
                             try:
@@ -847,8 +885,8 @@ class ValidationClient:
                                     return
                                 uid = self._validator.metagraph.hotkeys.index(hk)
                                 axon = self._validator.metagraph.axons[uid]
-                                r = int((local_rewards_map or {}).get(hk, 0))
-                                p = int((local_penalties or {}).get(hk, 0))
+                                r = int(epoch_rewards.get(hk, 0))
+                                p = int(epoch_penalties.get(hk, 0))
                                 syn = Score(
                                     block_window_start=score_start_block,
                                     block_window_end=score_end_block,
@@ -870,7 +908,7 @@ class ValidationClient:
                         self._last_score_epoch = target_epoch
                         bt.logging.info(f"[SCORE] Sent epoch={target_epoch} scores to {len(active_hotkeys)} miner(s)")
                     except Exception as e:
-                        bt.logging.debug(f"[ValidationClient.run] [SCORE] Failed to send scores: {e}")
+                        bt.logging.warning(f"[ValidationClient.run] [SCORE] Failed to send scores: {e}")
 
                 bt.logging.debug(f"[ValidationClient.run] Sleeping for {self.poll_seconds} seconds before next poll loop")
                 
@@ -898,13 +936,16 @@ class ValidationClient:
                             for r in rewards
                         ]
 
-                        # Penalties: API expects {hotkey, reason}
+                        # Penalties: API expects {hotkey, reason}. Same reason as the
+                        # Score block: the reason string names a single epoch, so the
+                        # count has to come from that epoch's store, not the window sum.
+                        epoch_penalties = self._epoch_penalties(target_epoch)
                         penalties_payload = [
                             {
                                 "hotkey": hk,
                                 "reason": f"epoch={int(target_epoch)} count={int(cnt)}",
                             }
-                            for hk, cnt in (local_penalties or {}).items()
+                            for hk, cnt in epoch_penalties.items()
                             if int(cnt) > 0
                         ]
 
@@ -913,6 +954,10 @@ class ValidationClient:
                         if penalties_payload:
                             await self.api_client.submit_penalties(penalties=penalties_payload)
                         self._last_api_submit_epoch = int(target_epoch)
+                        bt.logging.info(
+                            f"[API_SUBMIT] epoch={int(target_epoch)} "
+                            f"rewards={len(rewards_payload)} penalties={len(penalties_payload)}"
+                        )
                 except Exception as e:
                     bt.logging.warning(f"[ValidationClient.run] Failed to submit rewards and penalties: {e}")
                 
