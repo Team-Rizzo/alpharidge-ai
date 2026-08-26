@@ -1,10 +1,7 @@
 """Per-epoch reads used by the reporting paths.
 
-The Score synapse and the API submit both label their payload with a single
-epoch's block range, so they must read that epoch alone. The weight path sums a
-K-epoch window and keeps the _range readers. These tests pin the difference: at
-K > 1 the window sum is roughly K times the single epoch, so a reporting path
-that reused it would overstate every miner while claiming one epoch.
+Payloads stamped with one epoch's block range must carry that epoch's numbers.
+The weight path keeps the _range readers; these tests pin the two apart.
 """
 from pathlib import Path
 
@@ -31,11 +28,7 @@ class FakeValidator:
 
 @pytest.fixture
 def client():
-    """A client parked on the epoch after the window, as the run loop is.
-
-    target_epoch is current_epoch - 2 in service, so the epochs being reported
-    are always closed and never the one the stores are still filling.
-    """
+    """A client parked past the window, as the run loop is."""
     state = {"epoch": BASE_EPOCH}
 
     def block():
@@ -69,7 +62,7 @@ def fill_window(client, hotkey="hk0", points=10, penalties=2):
 # --- the point of the fix ------------------------------------------------
 
 def test_epoch_read_is_one_epoch_not_the_window(client):
-    """The reporting read must not carry the other K-1 epochs with it."""
+    """The reporting read must not carry neighbouring epochs with it."""
     fill_window(client, points=10, penalties=2)
     last = BASE_EPOCH + K - 1
 
@@ -78,7 +71,7 @@ def test_epoch_read_is_one_epoch_not_the_window(client):
 
 
 def test_window_read_is_k_times_the_epoch_read(client):
-    """States the factor the wrong fix would have introduced, so it stays visible."""
+    """Pins the window read as distinct from the per-epoch read."""
     fill_window(client, points=10, penalties=2)
     start, end = BASE_EPOCH, BASE_EPOCH + K - 1
 
@@ -105,12 +98,7 @@ def test_each_epoch_reads_back_its_own_amount(client):
 # --- absent epochs are a normal state, not a failure ---------------------
 
 def test_absent_epoch_is_empty_not_an_error(client):
-    """get_rewards raises KeyError for an unknown epoch; reporting must not abort.
-
-    An epoch that fell out of retention, or one nobody earned in, is ordinary.
-    Raising here would take the whole Score/submit block down with it, which is
-    the failure mode this fix exists to remove.
-    """
+    """An unknown epoch raises; reporting must degrade to empty, not abort."""
     fill_window(client)
 
     assert client._epoch_rewards(BASE_EPOCH - 500) == {}
@@ -118,12 +106,7 @@ def test_absent_epoch_is_empty_not_an_error(client):
 
 
 def test_negative_epoch_is_a_relative_offset_which_is_why_callers_guard(client):
-    """-1 means "the newest stored epoch", not "epoch number -1".
-
-    A negative target_epoch would therefore read a real but wrong epoch and
-    report it under the wrong block range, silently. Both call sites guard
-    target_epoch >= 0 for exactly this; the guard is the fix, not the helper.
-    """
+    """Negative epochs are relative offsets, so both call sites guard >= 0."""
     validator = client._validator
     for i, points in enumerate([4, 9, 16]):
         client._test_advance_to(BASE_EPOCH + i)
@@ -147,17 +130,10 @@ def test_empty_epoch_reads_as_empty(client):
 # --- the class of bug, not just this instance ----------------------------
 
 def test_validation_client_references_no_undefined_names():
-    """Every name the module reads must be defined somewhere it can see.
+    """Every name the module reads must be bound somewhere it can see.
 
-    This is the check that would have caught the original fault. A refactor
-    moved local_rewards_map and local_penalties into _aggregate_window and left
-    three reads behind in run(); Python only notices at runtime, on the one
-    branch per epoch that touches them, so it shipped and ran broken for 16
-    days. Reading the whole module statically catches the next one at import
-    time instead of in production.
-
-    Scope: names that are read but never bound in their own scope, not free
-    from an enclosing one, not a module global, and not a builtin.
+    Catches a name left behind by a refactor at test time rather than on the
+    one branch per epoch that reads it.
     """
     import builtins
     import symtable
@@ -194,14 +170,6 @@ def test_validation_client_references_no_undefined_names():
 
 def test_api_reward_payload_aggregates_one_epoch_not_the_window():
     """A row stamped with one epoch's block range must carry one epoch's points.
-
-    The weight path's `rewards` list sums the K-epoch window. The API row is
-    stamped start_block..stop_block for target_epoch alone, and the dashboard
-    derives epoch = start_block / BLOCK_LENGTH from it, so submitting the window
-    total records K epochs of points as though they were one. K is served
-    remotely and is 7 in production, so that is a 7x overstatement, not a latent
-    one. Aggregating a one-epoch window keeps the pooling and the gate the table
-    is expected to reflect while restoring the span.
 
     Read off the real call site: whatever feeds rewards_payload must come from
     an _aggregate_window call whose start and end are both target_epoch.

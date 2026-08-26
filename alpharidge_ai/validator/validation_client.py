@@ -182,16 +182,7 @@ class ValidationClient:
             bt.logging.debug(f"[MINER_EVENT] flush block error (ignored): {e}")
 
     def _epoch_rewards(self, epoch: int) -> Dict[str, int]:
-        """This validator's reward points for one epoch, hotkey -> points.
-
-        For the reporting paths (Score synapse, API submit) that label their payload
-        with a single epoch's block range. The weight path uses the _range variants
-        instead and must keep doing so.
-
-        An epoch the store no longer holds (or never held) is an empty dict, not an
-        error: get_rewards raises KeyError for an absent epoch, and an epoch with no
-        activity is a normal state, not a failure worth aborting the block for.
-        """
+        """Reward points for one epoch, hotkey -> points. Absent epoch -> {}."""
         try:
             return self._validator._miner_reward.get_rewards(int(epoch)) or {}
         except (KeyError, IndexError):
@@ -201,10 +192,7 @@ class ValidationClient:
             return {}
 
     def _epoch_penalties(self, epoch: int) -> Dict[str, int]:
-        """This validator's penalty counts for one epoch, hotkey -> count.
-
-        Single-epoch counterpart of get_penalties_range; see _epoch_rewards.
-        """
+        """Penalty counts for one epoch, hotkey -> count. Absent epoch -> {}."""
         try:
             return self._validator._miner_penalty.get_penalties(int(epoch)) or {}
         except (KeyError, IndexError):
@@ -871,10 +859,7 @@ class ValidationClient:
                     try:
                         score_start_block = int(target_epoch) * int(config.BLOCK_LENGTH)
                         score_end_block = (int(target_epoch) + 1) * int(config.BLOCK_LENGTH) - 1
-                        # This block reports ONE epoch, so it reads the per-epoch stores
-                        # directly. The weight path's window sums are deliberately not
-                        # reused here: they cover K epochs and would report every miner
-                        # inflated by K under a single-epoch block range.
+                        # Reports one epoch, so read the per-epoch stores.
                         epoch_rewards = self._epoch_rewards(target_epoch)
                         epoch_penalties = self._epoch_penalties(target_epoch)
                         active_hotkeys = set(epoch_rewards.keys()) | set(epoch_penalties.keys())
@@ -926,14 +911,7 @@ class ValidationClient:
                         # Rewards: API expects {start_block, stop_block, hotkey, points}
                         start_block = int(target_epoch) * int(config.BLOCK_LENGTH)
                         stop_block = (int(target_epoch) + 1) * int(config.BLOCK_LENGTH) - 1
-                        # Aggregate the target epoch ALONE, not the weight window. The
-                        # row is stamped with one epoch's block range and consumers
-                        # derive epoch = start_block / BLOCK_LENGTH from it, so the
-                        # window-summed `rewards` the weight path uses would land K
-                        # epochs of points under a single-epoch label -- 7x at the K
-                        # in force today. Same pooling and gating as the weight path,
-                        # over a one-epoch window, which is what this submitted before
-                        # the window was introduced.
+                        # One epoch per row, to match the block range stamped on it.
                         epoch_rewards_list, _, _ = self._aggregate_window(
                             target_epoch, target_epoch, target_epoch, quiet=True
                         )
@@ -947,9 +925,7 @@ class ValidationClient:
                             for r in epoch_rewards_list
                         ]
 
-                        # Penalties: API expects {hotkey, reason}. Same reason as the
-                        # Score block: the reason string names a single epoch, so the
-                        # count has to come from that epoch's store, not the window sum.
+                        # Penalties: API expects {hotkey, reason}
                         epoch_penalties = self._epoch_penalties(target_epoch)
                         penalties_payload = [
                             {
