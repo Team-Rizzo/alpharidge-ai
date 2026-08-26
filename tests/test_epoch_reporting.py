@@ -6,11 +6,14 @@ K-epoch window and keeps the _range readers. These tests pin the difference: at
 K > 1 the window sum is roughly K times the single epoch, so a reporting path
 that reused it would overstate every miner while claiming one epoch.
 """
+from pathlib import Path
+
 import pytest
 
 from alpharidge_ai import config
 from alpharidge_ai.utils.penalty import MinerPenalty
 from alpharidge_ai.utils.reward import MinerReward
+from alpharidge_ai.validator import validation_client as validation_client_module
 from alpharidge_ai.validator.validation_client import ValidationClient
 
 BLOCK_LENGTH = config.BLOCK_LENGTH
@@ -139,3 +142,49 @@ def test_empty_epoch_reads_as_empty(client):
 
     assert client._epoch_rewards(quiet) == {}
     assert client._epoch_penalties(quiet) == {}
+
+
+# --- the class of bug, not just this instance ----------------------------
+
+def test_validation_client_references_no_undefined_names():
+    """Every name the module reads must be defined somewhere it can see.
+
+    This is the check that would have caught the original fault. A refactor
+    moved local_rewards_map and local_penalties into _aggregate_window and left
+    three reads behind in run(); Python only notices at runtime, on the one
+    branch per epoch that touches them, so it shipped and ran broken for 16
+    days. Reading the whole module statically catches the next one at import
+    time instead of in production.
+
+    Scope: names that are read but never bound in their own scope, not free
+    from an enclosing one, not a module global, and not a builtin.
+    """
+    import builtins
+    import symtable
+
+    source_path = Path(validation_client_module.__file__)
+    top = symtable.symtable(source_path.read_text(), str(source_path), "exec")
+    module_names = set(top.get_identifiers())
+    builtin_names = set(dir(builtins))
+
+    def undefined(table, trail):
+        found = []
+        for sym in table.get_symbols():
+            name = sym.get_name()
+            if (
+                sym.is_referenced()
+                and not sym.is_assigned()
+                and not sym.is_parameter()
+                and not sym.is_free()
+                and not sym.is_imported()
+                and sym.is_global()
+                and name not in module_names
+                and name not in builtin_names
+            ):
+                found.append(f"{'.'.join(trail)} -> {name}")
+        for child in table.get_children():
+            found += undefined(child, trail + [child.get_name()])
+        return found
+
+    leaks = sorted(set(undefined(top, [source_path.stem])))
+    assert not leaks, "undefined names in validation_client:\n  " + "\n  ".join(leaks)
