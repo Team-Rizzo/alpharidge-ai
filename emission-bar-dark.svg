@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 226" width="780" height="226" role="img" aria-label="Miner emission each epoch: miners claim the share their verified work is worth, the remainder burns at UID 189" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="780" height="226" rx="12" fill="#161b22"/>
+  <rect x="0.5" y="0.5" width="779" height="225" rx="12" fill="none" stroke="#2b3440"/>
+
+  <text x="36" y="38" font-size="17" font-weight="700" fill="#e6edf3">Miner emission each epoch</text>
+  <text x="36" y="60" font-size="12.5" fill="#9aa5b1">Each miner claims the share its verified work is worth. Whatever is left over burns.</text>
+
+  <rect x="36" y="78" width="150" height="56" rx="3" fill="#1f4f9c"/>
+  <text x="111" y="112" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle">miner</text>
+  <rect x="188" y="78" width="120" height="56" rx="3" fill="#2f6feb"/>
+  <text x="248" y="112" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle">miner</text>
+  <rect x="310" y="78" width="90" height="56" rx="3" fill="#5b8ff2"/>
+  <text x="355" y="112" font-size="12" font-weight="600" fill="#0d2b5e" text-anchor="middle">miner</text>
+  <rect x="402" y="78" width="59" height="56" rx="3" fill="#8fb3f7"/>
+  <text x="432" y="112" font-size="12" font-weight="600" fill="#0d2b5e" text-anchor="middle">+ more</text>
+  <rect x="463" y="78" width="281" height="56" rx="3" fill="#3a434f"/>
+  <text x="604" y="112" font-size="13" font-weight="700" fill="#d0d7de" text-anchor="middle">BURN &#183; UID 189</text>
+
+  <text x="248" y="156" font-size="11.5" fill="#9aa5b1" text-anchor="middle">paid for verified work</text>
+  <text x="604" y="156" font-size="11.5" fill="#9aa5b1" text-anchor="middle">unclaimed, not issued to anyone</text>
+
+  <text x="36" y="192" font-size="12" fill="#e6edf3">Every additional verified article claims more of the bar. Claim all of it and burn is zero.</text>
+</svg>
