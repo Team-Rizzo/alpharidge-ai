@@ -300,6 +300,8 @@ class ValidationClient:
                 continue
             if rep_gating:
                 r = self._validator._reputation_store.reputation(hk)
+                n = self._validator._reputation_store.samples(hk)
+                n_min = int(getattr(config, "EMISSION_N_MIN", 0))
                 g = reputation.emission(
                     r,
                     getattr(config, "EMISSION_MIDPOINT", 0.59),
@@ -307,9 +309,12 @@ class ValidationClient:
                     getattr(config, "EMISSION_BONUS_CEILING", 0.0),
                     getattr(config, "EMISSION_BONUS_START", 0.63),
                     getattr(config, "EMISSION_BONUS_FULL", 0.75),
+                    n=n, n_min=n_min,
                 )
                 val = int(round(g * int(pts)))
-                info(f"[REWARDS] UID={uid} hk={hk[:12]}.. gated={val} (rep={r:.3f} mult={g:.3f} vol={pts})")
+                held = " neutral(under-observed)" if n_min > 0 and n < n_min else ""
+                info(f"[REWARDS] UID={uid} hk={hk[:12]}.. gated={val} "
+                     f"(rep={r:.3f} n={n} mult={g:.3f} vol={pts}){held}")
                 rewards.append(Reward(hotkey=hk, reward=val, epoch=target_epoch))
                 continue
             pen = uid_penalty_totals.get(uid, 0)
@@ -770,12 +775,14 @@ class ValidationClient:
                             b_ceil = getattr(config, "EMISSION_BONUS_CEILING", 0.0)
                             b_start = getattr(config, "EMISSION_BONUS_START", 0.63)
                             b_full = getattr(config, "EMISSION_BONUS_FULL", 0.75)
+                            n_min = int(getattr(config, "EMISSION_N_MIN", 0))
                             snap = self._validator._reputation_store.snapshot()
                             # display-only, decoupled from consensus.
                             rows = [{"miner_hotkey": hk, "reputation": float(st.get("r", 0.5)),
                                      "samples": int(st.get("n", 0)),
                                      "gate": reputation.emission(float(st.get("r", 0.5)), mid, gain,
-                                                                 b_ceil, b_start, b_full)}
+                                                                 b_ceil, b_start, b_full,
+                                                                 n=int(st.get("n", 0)), n_min=n_min)}
                                     for hk, st in snap.items()]
                             if rows:
                                 await self.api_client.post_reputation_snapshot(int(target_epoch), rows)

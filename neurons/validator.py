@@ -1689,6 +1689,7 @@ class Validator(BaseValidatorNeuron):
             getattr(config, "EMISSION_BONUS_START", 0.63),
             getattr(config, "EMISSION_BONUS_FULL", 0.75),
         )
+        _n_min = int(getattr(config, "EMISSION_N_MIN", 0))
         rows = []
         for hk in (set(ct) | live_hks):
             st = ct.get(hk, {})
@@ -1696,7 +1697,9 @@ class Validator(BaseValidatorNeuron):
             if rep_on:
                 try:
                     r = self._reputation_store.reputation(hk)
-                    emission_mult = round(float(_rep_emission(r, *_em_args)), 3)
+                    n = self._reputation_store.samples(hk)
+                    emission_mult = round(
+                        float(_rep_emission(r, *_em_args, n=n, n_min=_n_min)), 3)
                 except Exception:
                     emission_mult = None
             rows.append({
@@ -2388,11 +2391,17 @@ class Validator(BaseValidatorNeuron):
         try:
             sender = synapse.dendrite.hotkey
             targets = {t: [tuple(o) for o in lst] for t, lst in (synapse.observations or {}).items()}
-            self._reputation_store.ingest(sender, int(synapse.epoch), targets)
+            accepted, reason = self._reputation_store.ingest(
+                sender, int(synapse.epoch), targets, seq=int(synapse.seq))
             self._reputation_store.save()
-            bt.logging.info(
-                f"[REPUTATION_BROADCAST] Ingested from {sender[:12]}.. "
-                f"epoch={synapse.epoch} targets={len(targets)}")
+            if accepted:
+                bt.logging.info(
+                    f"[REPUTATION_BROADCAST] Ingested from {sender[:12]}.. "
+                    f"epoch={synapse.epoch} targets={len(targets)} {reason}")
+            else:
+                bt.logging.warning(
+                    f"[REPUTATION_BROADCAST] Rejected from {sender[:12]}.. "
+                    f"epoch={synapse.epoch} reason={reason}")
         except Exception as e:
             bt.logging.debug(f"[REPUTATION_BROADCAST] Failed to ingest: {e}")
         return synapse
