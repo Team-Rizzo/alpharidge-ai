@@ -85,9 +85,9 @@ def article_score(miner_keys: Sequence, grader_keys: Iterable,
     supported: Set = gold | set(adjudicated_valid)
     confidences = confidences or {}
 
-    hits = sum(1 for k in submitted if k in gold)
-    recall = hits / len(gold)
-    precision = (sum(1 for k in submitted if k in supported) / len(submitted)
+    hits = len({k for k in submitted if k in gold})
+    recall = min(1.0, hits / len(gold))
+    precision = (min(1.0, sum(1 for k in submitted if k in supported) / len(submitted))
                  if submitted else 0.0)
     f1 = _f1(precision, recall)
 

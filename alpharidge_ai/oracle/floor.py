@@ -44,6 +44,8 @@ _PUNCT_MAP = {
 }
 
 _NUMBER_RE = re.compile(r"[-+]?\d{1,3}(?:[,\s]\d{3})+(?:\.\d+)?|[-+]?\d+(?:\.\d+)?")
+_QUOTED_RE = re.compile(r'"[^"]+"')
+_SENTENCE_END = re.compile(r"[.!?]")
 _WORD_RE = re.compile(r"\w+", re.UNICODE)
 _TRAILING_PUNCT = ".,;:!?'\"-)]}"
 
@@ -269,7 +271,8 @@ def align_quote(article: Normalized, quote_text: str,
     exact = window.find(needle)
     if exact >= 0:
         s = search_lo + exact
-        o_start, o_end = article.to_original(s, s + len(needle))
+        c_start, c_end = canonical_span(article, s, s + len(needle))
+        o_start, o_end = article.to_original(c_start, c_end)
         return AlignedQuote(o_start, o_end, 1.0)
 
     if len(needle) > len(window):
@@ -283,8 +286,33 @@ def align_quote(article: Normalized, quote_text: str,
     e = search_lo + hit.dest_end
     if e <= s:
         return None
-    o_start, o_end = article.to_original(s, e)
+    c_start, c_end = canonical_span(article, s, e)
+    o_start, o_end = article.to_original(c_start, c_end)
     return AlignedQuote(o_start, o_end, hit.score / 100.0)
+
+
+def canonical_span(article: Normalized, start: int, end: int) -> Tuple[int, int]:
+    """Widen a match to the passage that contains it, in normalised offsets.
+
+    Two submissions quoting different lengths of the same sentence must key to the same
+    span, or an honest partial quote scores as a miss against the grader's fuller one.
+    """
+    text = article.text
+    for m in _QUOTED_RE.finditer(text):
+        if m.start() <= start and end <= m.end():
+            return (m.start() + 1, m.end() - 1)
+
+    lo = 0
+    for m in _SENTENCE_END.finditer(text, 0, start):
+        lo = m.end()
+    tail = _SENTENCE_END.search(text, max(end - 1, 0))
+    hi = tail.start() if tail else len(text)
+
+    while lo < hi and text[lo].isspace():
+        lo += 1
+    while hi > lo and text[hi - 1].isspace():
+        hi -= 1
+    return (lo, hi) if hi > lo else (start, end)
 
 
 def _original_to_normalized(article: Normalized, original_offset: int) -> int:
