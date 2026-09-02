@@ -18,6 +18,7 @@ from alpharidge_ai.protocol import ValidatorPenalties
 from alpharidge_ai.protocol import ValidatorReputationObs
 from alpharidge_ai.protocol import Score
 from alpharidge_ai.validator import reputation
+from alpharidge_ai.validator import emission_params
 from alpharidge_ai.utils.validators import get_validator_hotkeys
 from alpharidge_ai.validator import deep_verify
 from alpharidge_ai.consensus import overlap_audit
@@ -375,6 +376,9 @@ class ValidationClient:
         # validator has to pick the same one.
         rewards = []
         rep_gating = getattr(config, "REPUTATION_GATING_ENABLED", False)
+        params = emission_params.resolve(
+            self._validator._mechanism_profile.resolve(int(self._validator.block))
+            if hasattr(self._validator, "_mechanism_profile") else None)
         bt.logging.debug(f"[ValidationClient] Building rewards list, penalty_totals: {uid_penalty_totals}")
         for uid, pts in combined_uid_rewards.items():
             try:
@@ -385,16 +389,8 @@ class ValidationClient:
             if rep_gating:
                 r = self._validator._reputation_store.reputation(hk)
                 n = self._validator._reputation_store.samples(hk)
-                n_min = int(getattr(config, "EMISSION_N_MIN", 0))
-                g = reputation.emission(
-                    r,
-                    getattr(config, "EMISSION_MIDPOINT", 0.59),
-                    getattr(config, "EMISSION_GAIN", 100.0),
-                    getattr(config, "EMISSION_BONUS_CEILING", 0.0),
-                    getattr(config, "EMISSION_BONUS_START", 0.63),
-                    getattr(config, "EMISSION_BONUS_FULL", 0.75),
-                    n=n, n_min=n_min,
-                )
+                n_min = params.n_min
+                g = reputation.emission(r, *params.as_args(), n=n, n_min=n_min)
                 val = int(round(g * int(pts)))
                 held = " neutral(under-observed)" if n_min > 0 and n < n_min else ""
                 info(f"[REWARDS] UID={uid} hk={hk[:12]}.. gated={val} "
@@ -864,19 +860,24 @@ class ValidationClient:
                         bt.logging.debug(f"[REPUTATION] finalize failed: {e}")
                     if int(target_epoch) != getattr(self, "_last_rep_snapshot_epoch", -1):
                         try:
-                            mid = getattr(config, "EMISSION_MIDPOINT", 0.59)
-                            gain = getattr(config, "EMISSION_GAIN", 100.0)
-                            b_ceil = getattr(config, "EMISSION_BONUS_CEILING", 0.0)
-                            b_start = getattr(config, "EMISSION_BONUS_START", 0.63)
-                            b_full = getattr(config, "EMISSION_BONUS_FULL", 0.75)
-                            n_min = int(getattr(config, "EMISSION_N_MIN", 0))
+                            p = emission_params.resolve(
+                                self._validator._mechanism_profile.resolve(
+                                    int(self._validator.block)))
+                            n_min = p.n_min
                             snap = self._validator._reputation_store.snapshot()
+                            median = emission_params.live_median(snap, n_min)
+                            if median is not None:
+                                bt.logging.info(
+                                    f"[EMISSION] {p.source} midpoint={p.midpoint:.3f} "
+                                    f"gain={p.gain:.1f} ceiling={p.ceiling:.2f} "
+                                    f"live_median={median:.3f} "
+                                    f"drift={median - p.midpoint:+.3f}")
                             # display-only, decoupled from consensus.
                             rows = [{"miner_hotkey": hk, "reputation": float(st.get("r", 0.5)),
                                      "samples": int(st.get("n", 0)),
-                                     "gate": reputation.emission(float(st.get("r", 0.5)), mid, gain,
-                                                                 b_ceil, b_start, b_full,
-                                                                 n=int(st.get("n", 0)), n_min=n_min)}
+                                     "gate": reputation.emission(
+                                         float(st.get("r", 0.5)), *p.as_args(),
+                                         n=int(st.get("n", 0)), n_min=n_min)}
                                     for hk, st in snap.items()]
                             if rows:
                                 await self.api_client.post_reputation_snapshot(int(target_epoch), rows)

@@ -65,6 +65,7 @@ from alpharidge_ai.protocol import ValidatorReputationObs
 from alpharidge_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch, classify_article_batch_failure
 from alpharidge_ai.validator.reputation_store import ReputationStore
 from alpharidge_ai.validator.reputation import emission as _rep_emission
+from alpharidge_ai.validator import emission_params
 from alpharidge_ai.validator.profile_client import ProfileClient
 from alpharidge_ai.market.ration_store import RationStore
 from alpharidge_ai.validator.capacity_controller import CapacityController
@@ -1796,14 +1797,10 @@ class Validator(BaseValidatorNeuron):
         # Per-miner reputation emission multiplier (display-only): ~0 below the cliff, ~1
         # cleared, up to ~1.3 with the bonus. None when reputation scoring is off.
         rep_on = getattr(config, "REPUTATION_SCORING_ENABLED", False)
-        _em_args = (
-            getattr(config, "EMISSION_MIDPOINT", 0.59),
-            getattr(config, "EMISSION_GAIN", 100.0),
-            getattr(config, "EMISSION_BONUS_CEILING", 0.0),
-            getattr(config, "EMISSION_BONUS_START", 0.63),
-            getattr(config, "EMISSION_BONUS_FULL", 0.75),
-        )
-        _n_min = int(getattr(config, "EMISSION_N_MIN", 0))
+        _params = emission_params.resolve(
+            self._mechanism_profile.resolve(int(self.block)))
+        _em_args = _params.as_args()
+        _n_min = _params.n_min
         rows = []
         for hk in (set(ct) | live_hks):
             st = ct.get(hk, {})
