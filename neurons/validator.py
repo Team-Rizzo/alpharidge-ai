@@ -66,6 +66,7 @@ from alpharidge_ai.analyzer.scoring import validate_miner_batch, validate_miner_
 from alpharidge_ai.validator.reputation_store import ReputationStore
 from alpharidge_ai.validator.reputation import emission as _rep_emission
 from alpharidge_ai.validator.profile_client import ProfileClient
+from alpharidge_ai.market.ration_store import RationStore
 from alpharidge_ai.triage import TRIAGE_SCHEMA_VERSION, gazetteer_assets
 from alpharidge_ai.models.article_intelligence import SCHEMA_VERSION
 from alpharidge_ai.utils.api_models import NewsArticleAnalysisBase
@@ -141,6 +142,11 @@ class Validator(BaseValidatorNeuron):
         # before anything depends on it.
         self._mechanism_profile = ProfileClient()
         self._mechanism_profile.load()
+
+        # Earned rations. Local to this validator and never broadcast. Shadow only:
+        # observed and logged beside today's batch size, which still drives dispatch.
+        self._ration_store = RationStore()
+        self._ration_store.load()
         self._graded_scorer = None  # lazy; built on first use when scoring is served on
         # Transient per-item verdict metadata (resource_id -> {miner_signature, nonce,
         # validator_verdict, epoch}); populated during validation, drained at submission.
@@ -777,6 +783,33 @@ class Validator(BaseValidatorNeuron):
         self._verdict_meta.update(
             collect_verdict_meta(message_batch, miner_signatures, nonces, "valid", current_epoch))
         return True
+
+    def _observe_ration(self, miner_hotkey, article_batch, floor_results):
+        """Fold a batch outcome into the ration state and log what it would lease.
+
+        Growth keys on work that cleared the floor, never on what was submitted or on
+        how many slots were held. Shadow only: nothing here changes dispatch yet.
+        """
+        try:
+            profile = self._mechanism_profile.resolve(int(self.block))
+            if profile is None:
+                return
+            dispatched = len(article_batch or [])
+            if not dispatched:
+                return
+            validated = sum(1 for a in (article_batch or [])
+                            if floor_results.get(int(a.id), True))
+            epoch = int(self._miner_reward._get_current_epoch())
+            self._ration_store.observe(miner_hotkey, epoch=epoch, validated=validated,
+                                       dispatched=dispatched, profile=profile)
+
+            state = self._ration_store.book.states.get(miner_hotkey)
+            bt.logging.info(
+                f"[RATION] hk={miner_hotkey[:12]}.. validated={validated}/{dispatched} "
+                f"ema={state.ema:.2f} batch_size={self._article_cooldown.batch_size(miner_hotkey)} "
+                f"(shadow)")
+        except Exception as e:
+            bt.logging.debug(f"[RATION] observe failed: {e}")
 
     def _get_graded_scorer(self):
         if self._graded_scorer is None:
@@ -1438,6 +1471,7 @@ class Validator(BaseValidatorNeuron):
                 bt.logging.info(
                     f"[FLOOR] hk={miner_hotkey} failed={len(floor_failed)}/"
                     f"{len(floor_results)} gating={'on' if floor_gating else 'shadow'}")
+            self._observe_ration(miner_hotkey, article_batch, floor_results)
 
             for article in article_batch:
                 if self._canary_pool.label_of(int(article.id)) is not None:
