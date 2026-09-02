@@ -389,15 +389,9 @@ EMISSION_BONUS_FULL         = float(os.getenv("EMISSION_BONUS_FULL", "0.75"))
 # Observations required before reputation may move a hotkey's multiplier. Below it the
 # multiplier is neutral 1.0 (see reputation.emission).
 EMISSION_N_MIN              = int(os.getenv("EMISSION_N_MIN", "100"))
-# Credit volume per article that clears the deterministic floor, instead of on one
-# verdict for the whole batch. Off = log the difference only.
-FLOOR_GATING_ENABLED        = _as_bool(os.getenv("FLOOR_GATING_ENABLED", "false"))
 # Run the keyed audit and log what it would observe. Off by default: it spends on
 # grader calls and writes nothing, so it is opt-in per validator.
 AUDIT_SHADOW_ENABLED        = _as_bool(os.getenv("AUDIT_SHADOW_ENABLED", "false"))
-# Lease dispatch on earned rations instead of the adaptive batch size. Local policy:
-# rations set no weights, so validators may differ without splitting consensus.
-RATION_DISPATCH_ENABLED     = _as_bool(os.getenv("RATION_DISPATCH_ENABLED", "false"))
 # Reference analyses the audit may run per batch beyond the acceptance sample. Bounds
 # both the grader spend and how long one batch can take to validate.
 AUDIT_MAX_PER_BATCH         = int(os.getenv("AUDIT_MAX_PER_BATCH", "4"))
@@ -465,9 +459,7 @@ _REMOTE_CONFIG_KEYS = {
     "EMISSION_BONUS_START":       (float, "EMISSION_BONUS_START"),
     "EMISSION_BONUS_FULL":        (float, "EMISSION_BONUS_FULL"),
     "EMISSION_N_MIN":             (int,   "EMISSION_N_MIN"),
-    "FLOOR_GATING_ENABLED":       (_as_bool, "FLOOR_GATING_ENABLED"),
     "AUDIT_SHADOW_ENABLED":       (_as_bool, "AUDIT_SHADOW_ENABLED"),
-    "RATION_DISPATCH_ENABLED":    (_as_bool, "RATION_DISPATCH_ENABLED"),
     "AUDIT_MAX_PER_BATCH":        (int,   "AUDIT_MAX_PER_BATCH"),
     "VALIDATION_SAMPLE_SIZE":     (int,   "VALIDATION_SAMPLE_SIZE"),
     "SAMPLING_SUBSTANTIVE_WEIGHT":(float, "SAMPLING_SUBSTANTIVE_WEIGHT"),
@@ -500,7 +492,6 @@ _CONSENSUS_KEYS = {
     "EMISSION_BONUS_FULL",
     "EMISSION_N_MIN",
     "SAMPLING_SUBSTANTIVE_WEIGHT",
-    "FLOOR_GATING_ENABLED",
 }
 
 REMOTE_CONFIG_REFRESH_SECONDS = int(os.getenv("REMOTE_CONFIG_REFRESH_SECONDS", "3600"))

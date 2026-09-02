@@ -12,14 +12,19 @@ def tracker():
     return MinerCooldownTracker(adaptive=True)
 
 
-def test_dispatch_on_rations_is_off_by_default():
-    assert config.RATION_DISPATCH_ENABLED is False
+def test_dispatch_is_a_profile_field_and_defaults_off():
+    from alpharidge_ai.mechanism import profile as mp
+    from tests.test_profile_client import valid
+    assert mp.parse(valid()).rations.dispatch is False
+
+    raw = valid()
+    raw["rations"]["dispatch"] = True
+    assert mp.parse(raw).rations.dispatch is True
 
 
-def test_the_flag_is_served_but_not_a_consensus_key():
-    """Rations set no weights, so validators may differ without splitting consensus."""
-    assert "RATION_DISPATCH_ENABLED" in config._REMOTE_CONFIG_KEYS
-    assert "RATION_DISPATCH_ENABLED" not in config._CONSENSUS_KEYS
+def test_dispatch_has_no_local_switch():
+    assert not hasattr(config, "RATION_DISPATCH_ENABLED")
+    assert "RATION_DISPATCH_ENABLED" not in config._REMOTE_CONFIG_KEYS
 
 
 # ---- the adapter ------------------------------------------------------------------

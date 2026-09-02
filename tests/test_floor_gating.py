@@ -78,14 +78,21 @@ def test_the_sweep_never_raises_on_a_malformed_article():
 
 # ---- the flag ---------------------------------------------------------------------
 
-def test_gating_is_off_by_default():
-    assert config.FLOOR_GATING_ENABLED is False
+def test_gating_is_a_profile_field_and_defaults_off():
+    """It changes credited volume, so it lands with everything else at one block."""
+    from alpharidge_ai.mechanism import profile as mp
+    from tests.test_profile_client import valid
+    assert mp.parse(valid()).settlement.floor_gating is False
+
+    raw = valid()
+    raw["settlement"]["floor_gating"] = True
+    assert mp.parse(raw).settlement.floor_gating is True
 
 
-def test_gating_is_a_consensus_key():
-    """It changes credited volume, so a local override would split weights."""
-    assert "FLOOR_GATING_ENABLED" in config._CONSENSUS_KEYS
-    assert "FLOOR_GATING_ENABLED" in config._REMOTE_CONFIG_KEYS
+def test_gating_has_no_local_switch():
+    """One source, so two validators cannot credit volume differently."""
+    assert not hasattr(config, "FLOOR_GATING_ENABLED")
+    assert "FLOOR_GATING_ENABLED" not in config._REMOTE_CONFIG_KEYS
 
 
 # ---- the credit decision ----------------------------------------------------------

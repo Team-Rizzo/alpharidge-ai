@@ -68,6 +68,15 @@ def _num(section: str, d: dict, key: str, lo: float, hi: float,
     return v
 
 
+def _bool(section: str, d: dict, key: str, default: bool = False) -> bool:
+    if key not in d:
+        return default
+    v = d[key]
+    if isinstance(v, bool):
+        return v
+    raise ProfileError(f"{section}.{key} must be true or false, got {v!r}")
+
+
 def _int(section: str, d: dict, key: str, lo: int, hi: int) -> int:
     if key not in d:
         raise ProfileError(f"{section}.{key} missing")
@@ -85,10 +94,14 @@ def _int(section: str, d: dict, key: str, lo: int, hi: int) -> int:
 @dataclass(frozen=True)
 class Settlement:
     C: float
+    floor_gating: bool = False
 
     @staticmethod
     def parse(d: dict) -> "Settlement":
-        return Settlement(C=_num("settlement", d, "C", 0.0, 1e15, lo_open=True))
+        return Settlement(
+            C=_num("settlement", d, "C", 0.0, 1e15, lo_open=True),
+            floor_gating=_bool("settlement", d, "floor_gating"),
+        )
 
 
 @dataclass(frozen=True)
@@ -129,6 +142,7 @@ class Rations:
     boost: float
     boost_days: int
     boost_tranche_max: float
+    dispatch: bool = False
 
     @staticmethod
     def parse(d: dict) -> "Rations":
@@ -149,6 +163,7 @@ class Rations:
             boost=boost,
             boost_days=_int("rations", d, "boost_days", 0, 365),
             boost_tranche_max=_num("rations", d, "boost_tranche_max", 0.0, 1.0),
+            dispatch=_bool("rations", d, "dispatch"),
         )
 
     @property
@@ -189,6 +204,7 @@ class Oracle:
     keeper_weight: float
     grader_models: Tuple[GraderModel, ...]
     schema_cutover_block: int
+    live: bool = False
 
     @staticmethod
     def parse(d: dict) -> "Oracle":
@@ -223,6 +239,7 @@ class Oracle:
             keeper_weight=_num("oracle", d, "keeper_weight", 0.0, 10.0),
             grader_models=tuple(models),
             schema_cutover_block=_int("oracle", d, "schema_cutover_block", 0, 2**63 - 1),
+            live=_bool("oracle", d, "live"),
         )
 
 

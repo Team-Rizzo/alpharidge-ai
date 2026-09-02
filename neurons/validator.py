@@ -808,33 +808,44 @@ class Validator(BaseValidatorNeuron):
             bt.logging.info("[AUDIT] shadow auditing enabled")
         return self._auditor
 
-    def _log_audit(self, miner_hotkey, observations):
-        """Log what the audit saw. Deliberately does not record it: an observation
-        written here propagates fleet-wide within an epoch and cannot be undone."""
+    def _oracle_is_live(self):
+        """Whether audit observations feed reputation, replacing the old scorer's."""
+        profile = self._mechanism_profile.resolve(int(self.block))
+        return bool(profile.oracle.live) if profile else False
+
+    def _log_audit(self, miner_hotkey, observations, live=False):
+        """Log what the audit saw, and record it once the oracle is live.
+
+        Until then this only logs. An observation reaching the store propagates
+        fleet-wide within an epoch and cannot be undone.
+        """
         for obs in observations or []:
             bt.logging.info(
                 f"[AUDIT] hk={miner_hotkey[:12]}.. id={obs.article_id} "
                 f"path={obs.path} score={obs.score:.3f} w={obs.weight:.2f} "
-                f"model={obs.grader_model} {obs.detail} (shadow)")
+                f"model={obs.grader_model} {obs.detail}"
+                f"{'' if live else ' (shadow)'}")
+        if live and observations:
+            self._record_observations(
+                miner_hotkey,
+                [(o.article_id, float(o.score), float(o.weight)) for o in observations])
 
     def _ration_for(self, hotkey):
         """This UID's earned ration for the current epoch, or None to leave dispatch
         on the adaptive batch size."""
-        if not getattr(config, "RATION_DISPATCH_ENABLED", False):
-            return None
         profile = self._mechanism_profile.resolve(int(self.block))
-        if profile is None:
+        if profile is None or not profile.rations.dispatch:
             return None
         plan = self._ration_plan
         return plan.get(hotkey) if plan else None
 
     def _refresh_ration_plan(self, hotkeys, supply):
         """Split the articles available this tick across UIDs, once, before slicing."""
-        if not getattr(config, "RATION_DISPATCH_ENABLED", False):
-            self._ration_plan = {}
-            return
         try:
             profile = self._mechanism_profile.resolve(int(self.block))
+            if profile is None or not profile.rations.dispatch:
+                self._ration_plan = {}
+                return
             epoch = int(self._miner_reward._get_current_epoch())
             self._ration_plan = self._ration_store.plan(
                 list(hotkeys), epoch=epoch, supply=float(supply), profile=profile)
@@ -1365,6 +1376,10 @@ class Validator(BaseValidatorNeuron):
                 triage_res.borderline_valuable_ids)
             track_batch = [a for a in article_batch if int(a.id) in deep_ids]
 
+        # Resolved once, before the branches: the triage path below reads it too, and
+        # binding it inside one branch would leave it undefined on the others.
+        oracle_live = self._oracle_is_live()
+
         # Try V2 validation if miner submitted analysis_data
         has_v2 = any(
             getattr(a.analysis, "analysis_data", None)
@@ -1384,11 +1399,14 @@ class Validator(BaseValidatorNeuron):
                 reference_by_id, miner_hotkey, self._get_auditor(), int(self.block),
             )
             self._log_audit(miner_hotkey,
-                            (validation_result or {}).get("audit_observations"))
+                            (validation_result or {}).get("audit_observations"),
+                            live=oracle_live)
             if gscorer is not None:
                 # Merged with triage grades below when grading succeeded
                 # (first-obs-wins dedup in the reputation store).
-                if not triage_active:
+                if not triage_active and not oracle_live:
+                    # Replaced, not supplemented: the audit measures the same thing
+                    # against the article rather than against our own re-run.
                     self._record_observations(
                         miner_hotkey, (validation_result or {}).get("observations") or [])
                 # Faithfulness cooldown update (min over sampled articles).
@@ -1424,7 +1442,7 @@ class Validator(BaseValidatorNeuron):
                         update={"analysis": None})
             self._record_triage_observations(
                 miner_hotkey, triage_res, article_batch,
-                (validation_result or {}).get("observations") or [],
+                [] if oracle_live else ((validation_result or {}).get("observations") or []),
                 allow_clean=full_push)
 
         if not is_valid:
@@ -1525,7 +1543,8 @@ class Validator(BaseValidatorNeuron):
                                        full_push=full_push)
         else:
             floor_results = (validation_result or {}).get("floor_results") or {}
-            floor_gating = bool(getattr(config, "FLOOR_GATING_ENABLED", False))
+            _profile = self._mechanism_profile.resolve(int(self.block))
+            floor_gating = bool(_profile.settlement.floor_gating) if _profile else False
             floor_failed = [aid for aid, ok in floor_results.items() if not ok]
             if floor_failed:
                 bt.logging.info(
