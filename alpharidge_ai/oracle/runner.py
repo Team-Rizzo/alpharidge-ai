@@ -113,7 +113,8 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
 
     verdict = schema_gate.evaluate(getattr(miner_intel, "schema_version", None),
                                   block=block,
-                                  cutover_block=oracle.schema_cutover_block)
+                                  cutover_block=oracle.schema_cutover_block,
+                                  intel=miner_intel)
     if not verdict.accepted:
         return None
 

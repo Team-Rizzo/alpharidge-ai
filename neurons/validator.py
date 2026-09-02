@@ -795,8 +795,14 @@ class Validator(BaseValidatorNeuron):
         return True
 
     def _get_auditor(self):
-        """The keyed auditor, built on first use. None unless shadow auditing is on."""
-        if not getattr(config, "AUDIT_SHADOW_ENABLED", False):
+        """The keyed auditor, built on first use.
+
+        Built whenever the oracle is live, whatever the local shadow flag says. The
+        flag only decides whether to run the audit *before* the oracle goes live; once
+        it is live the audit is the reputation source, and letting a local flag suppress
+        it would stop reputation moving at all.
+        """
+        if not (getattr(config, "AUDIT_SHADOW_ENABLED", False) or self._oracle_is_live()):
             return None
         if self._auditor is None:
             from alpharidge_ai.oracle import audit_key
@@ -863,11 +869,16 @@ class Validator(BaseValidatorNeuron):
             profile = self._mechanism_profile.resolve(int(self.block))
             if profile is None:
                 return
-            dispatched = len(article_batch or [])
+            # Only an explicit pass counts, and only articles the floor actually
+            # judged are treated as dispatched. An unknown outcome advances nothing:
+            # standing moves on validated work or it does not move.
+            judged = [a for a in (article_batch or [])
+                      if int(getattr(a, "id", -1)) in floor_results]
+            dispatched = len(judged)
             if not dispatched:
                 return
-            validated = sum(1 for a in (article_batch or [])
-                            if floor_results.get(int(a.id), True))
+            validated = sum(1 for a in judged
+                            if floor_results.get(int(a.id)) is True)
             epoch = int(self._miner_reward._get_current_epoch())
             self._ration_store.observe(miner_hotkey, epoch=epoch, validated=validated,
                                        dispatched=dispatched, profile=profile)
@@ -1379,6 +1390,13 @@ class Validator(BaseValidatorNeuron):
         # Resolved once, before the branches: the triage path below reads it too, and
         # binding it inside one branch would leave it undefined on the others.
         oracle_live = self._oracle_is_live()
+        # The old scorer stands down only when something is actually replacing it. A
+        # published flip with no working auditor must not leave reputation unfed.
+        audit_supersedes = oracle_live and self._get_auditor() is not None
+        if oracle_live and not audit_supersedes:
+            bt.logging.error(
+                "[AUDIT] oracle.live is published but no auditor could be built; "
+                "keeping the existing scorer so reputation still moves")
 
         # Try V2 validation if miner submitted analysis_data
         has_v2 = any(
@@ -1404,7 +1422,7 @@ class Validator(BaseValidatorNeuron):
             if gscorer is not None:
                 # Merged with triage grades below when grading succeeded
                 # (first-obs-wins dedup in the reputation store).
-                if not triage_active and not oracle_live:
+                if not triage_active and not audit_supersedes:
                     # Replaced, not supplemented: the audit measures the same thing
                     # against the article rather than against our own re-run.
                     self._record_observations(
@@ -1442,7 +1460,7 @@ class Validator(BaseValidatorNeuron):
                         update={"analysis": None})
             self._record_triage_observations(
                 miner_hotkey, triage_res, article_batch,
-                [] if oracle_live else ((validation_result or {}).get("observations") or []),
+                [] if audit_supersedes else ((validation_result or {}).get("observations") or []),
                 allow_clean=full_push)
 
         if not is_valid:

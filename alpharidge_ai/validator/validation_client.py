@@ -97,6 +97,29 @@ class ValidationClient:
         except Exception as e:
             bt.logging.warning(f"[CONTROLLER] Could not report the step: {e}")
 
+    def _weights_for(self, rewards, window_blocks: int, context: str):
+        """The weight vector to set, from whichever settlement is in force.
+
+        Under the capacity formula a point pays E/C until the subnet's work reaches
+        capacity, and the remainder burns. The legacy path prices points in USD and
+        carries a floor and a rescale above 100%; both are gone here.
+        """
+        profile = self._validator._mechanism_profile.resolve(int(self._validator.block))
+        if profile is None or not profile.settlement.live:
+            return calculate_weights(rewards, self._validator.metagraph,
+                                     window_blocks, context=context)
+
+        work = {r.hotkey: float(r.reward) for r in (rewards or [])}
+        result = settlement.settle(work, profile.settlement.C)
+        hotkeys = list(self._validator.metagraph.hotkeys)
+        size = int(getattr(self._validator.metagraph, "n", len(hotkeys)))
+        vector = settlement.weight_vector(result.shares, result.burn, hotkeys,
+                                          int(config.BURN_UID), size)
+        bt.logging.info(
+            f"[SETTLEMENT] live W={result.work:.0f} C={result.capacity:.0f} "
+            f"burn={result.burn:.4f} paid={result.paid:.4f} {context}")
+        return np.array(vector, dtype=np.float64)
+
     def _shadow_settlement(self, rewards, live_weights, epoch: int) -> None:
         """Compute what the capacity formula would pay, and log the difference.
 
@@ -105,7 +128,7 @@ class ValidationClient:
         """
         try:
             profile = self._validator._mechanism_profile.resolve(int(self._validator.block))
-            if profile is None:
+            if profile is None or profile.settlement.live:
                 return
 
             work = {r.hotkey: float(r.reward) for r in (rewards or [])}
@@ -910,9 +933,7 @@ class ValidationClient:
                             f"present={present_epochs}/{window_k} "
                             f"uid_rekey_skipped={uid_rekey_skipped} "
                         )
-                        weights = calculate_weights(
-                            rewards, self._validator.metagraph, window_blocks, context=context
-                        )
+                        weights = self._weights_for(rewards, window_blocks, context)
                         bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
                         self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())
                         self._shadow_settlement(rewards, weights, int(target_epoch))

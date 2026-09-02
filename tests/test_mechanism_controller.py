@@ -9,17 +9,24 @@ RULE = dict(arm_days=3, max_step=0.20, gap_days=14, **BAND)
 C0 = 26_697.0
 
 
-def drive(roi_series, capacity=C0, start_day=0, rule=None):
-    """Run a series of daily returns and collect the proposals."""
+def drive(roi_series, capacity=C0, start_day=0, rule=None, publish=True):
+    """Run a series of daily returns and collect the proposals.
+
+    `publish=True` models an operator who acts on every proposal, so capacity moves and
+    the gap applies. `publish=False` models one who ignores them: capacity holds and the
+    controller keeps raising the breach.
+    """
     rule = rule or RULE
     state = c.ControllerState()
-    proposals = []
+    proposals, last = [], capacity
     for i, value in enumerate(roi_series):
         state, proposal = c.advance(state, day=start_day + i, roi_today=value,
-                                    capacity=capacity, **rule)
+                                    capacity=capacity, last_capacity=last, **rule)
+        last = capacity
         if proposal:
             proposals.append(proposal)
-            capacity = proposal.to_capacity
+            if publish:
+                capacity = proposal.to_capacity
     return state, proposals, capacity
 
 
@@ -111,6 +118,15 @@ def test_a_step_waits_the_full_gap_before_the_next_one():
     assert past_gap[1].day - past_gap[0].day >= RULE["gap_days"]
 
 
+def test_an_ignored_proposal_is_raised_again():
+    """The gap is between real steps. A breach nobody acted on stays visible."""
+    _, ignored, capacity = drive([0.2] * 40, publish=False)
+    assert capacity == C0                       # nothing moved
+    assert len(ignored) > 2
+    gaps = [b.day - a.day for a, b in zip(ignored, ignored[1:])]
+    assert max(gaps) <= RULE["arm_days"] + 1
+
+
 def test_steps_are_bounded_by_the_cap():
     _, proposals, _ = drive([0.01] * 180)
     for p in proposals:
@@ -158,8 +174,8 @@ def test_state_round_trips_through_a_dict():
 
 def test_step_count_over_half_a_year_stays_low():
     """A crawling peg, not a weekly negotiation."""
-    _, proposals, _ = drive([0.2] * 180)
-    assert len(proposals) <= 13
+    _, steps, _ = drive([0.2] * 180)
+    assert len(steps) <= 13
 
 
 def test_no_whipsaw_on_a_smooth_regime_change():

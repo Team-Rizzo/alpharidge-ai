@@ -33,6 +33,7 @@ class CapacityController:
     state: controller.ControllerState = field(default_factory=controller.ControllerState)
     day: Optional[int] = None
     samples: List[float] = field(default_factory=list)
+    last_capacity: Optional[float] = None
 
     # ---- persistence ----
 
@@ -44,6 +45,8 @@ class CapacityController:
             self.state = controller.ControllerState.from_dict(data.get("state"))
             self.day = data.get("day")
             self.samples = [float(x) for x in (data.get("samples") or [])]
+            lc = data.get("last_capacity")
+            self.last_capacity = None if lc is None else float(lc)
         except Exception as e:
             bt.logging.warning(f"[CONTROLLER] Could not read state: {e}")
 
@@ -51,7 +54,8 @@ class CapacityController:
         try:
             tmp = self.path.with_suffix(".tmp")
             tmp.write_text(json.dumps({"state": self.state.to_dict(), "day": self.day,
-                                       "samples": self.samples}))
+                                       "samples": self.samples,
+                                       "last_capacity": self.last_capacity}))
             tmp.replace(self.path)
         except Exception as e:
             bt.logging.warning(f"[CONTROLLER] Could not persist state: {e}")
@@ -102,7 +106,9 @@ class CapacityController:
                 self.state, day=self.day, roi_today=mean,
                 capacity=profile.settlement.C,
                 roi_lo=rule.roi_lo, roi_hi=rule.roi_hi, arm_days=rule.arm_days,
-                max_step=rule.max_step, gap_days=rule.gap_days)
+                max_step=rule.max_step, gap_days=rule.gap_days,
+                last_capacity=self.last_capacity)
+            self.last_capacity = float(profile.settlement.C)
             bt.logging.info(
                 f"[CONTROLLER] day={self.day} roi={mean:.2f} "
                 f"ema={self.state.roi_ema:.2f} band=[{rule.roi_lo},{rule.roi_hi}] "

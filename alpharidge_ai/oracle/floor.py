@@ -454,12 +454,18 @@ def evaluate(intel, article_text: str, *,
         accepted.append(span)
         result.aligned_quotes[i] = span
 
-    for i, asset in enumerate(getattr(intel, "assets", None) or []):
-        evidence = getattr(asset, "evidence_span", None) or getattr(asset, "evidence", None)
-        if evidence is None:
+    for i, item in enumerate(list(getattr(intel, "assets", None) or []) +
+                             list(getattr(intel, "entities", None) or [])):
+        spans = getattr(item, "evidence_spans", None)
+        if spans is None:
+            single = getattr(item, "evidence_span", None) or getattr(item, "evidence", None)
+            spans = [single] if single else []
+        if not spans:
             continue
-        surface = getattr(asset, "symbol", None) or getattr(asset, "name", None)
-        if not span_supported(article, evidence, surface):
+        surface = (getattr(item, "symbol", None) or getattr(item, "name", None)
+                   or getattr(item, "canonical_name", None))
+        # One span that carries context is enough to evidence the item.
+        if not any(span_supported(article, s, surface) for s in spans):
             result.span_failures.add(i)
 
     return result

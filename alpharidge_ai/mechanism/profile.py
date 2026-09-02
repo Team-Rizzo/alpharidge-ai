@@ -95,12 +95,14 @@ def _int(section: str, d: dict, key: str, lo: int, hi: int) -> int:
 class Settlement:
     C: float
     floor_gating: bool = False
+    live: bool = False
 
     @staticmethod
     def parse(d: dict) -> "Settlement":
         return Settlement(
             C=_num("settlement", d, "C", 0.0, 1e15, lo_open=True),
             floor_gating=_bool("settlement", d, "floor_gating"),
+            live=_bool("settlement", d, "live"),
         )
 
 

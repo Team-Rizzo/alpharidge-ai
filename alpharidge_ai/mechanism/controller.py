@@ -107,17 +107,33 @@ def accept(state: ControllerState, proposal: Proposal) -> ControllerState:
     return replace(state, days_outside=0, last_step_day=int(proposal.day))
 
 
+def observed_step(state: ControllerState, *, day: int, capacity: float,
+                  last_capacity: Optional[float]) -> ControllerState:
+    """Record that capacity actually moved, which is what starts the gap clock.
+
+    A proposal is only a suggestion; the gap is between real steps. Starting the clock
+    on a proposal nobody published would silence the controller for the gap while the
+    breach it flagged went uncorrected.
+    """
+    if last_capacity is None or capacity == last_capacity:
+        return state
+    return replace(state, days_outside=0, last_step_day=int(day))
+
+
 def advance(state: ControllerState, *, day: int, roi_today: float, capacity: float,
             roi_lo: float, roi_hi: float, arm_days: int, max_step: float,
-            gap_days: int):
-    """One day of the controller: observe, then propose if armed.
+            gap_days: int, last_capacity: Optional[float] = None):
+    """One day of the controller: note any real step, observe, then propose if armed.
 
-    Returns (state, proposal). The state already assumes the proposal is taken, which
-    is what keeps a single breach from arming a second step the next day.
+    Returns (state, proposal). The arming count is cleared when a proposal is made so a
+    single breach does not re-arm daily, but the gap clock only moves when capacity
+    itself changed.
     """
+    state = observed_step(state, day=day, capacity=capacity,
+                          last_capacity=last_capacity)
     state = observe(state, roi_today, roi_lo=roi_lo, roi_hi=roi_hi)
     proposal = propose(state, day=day, capacity=capacity, roi_lo=roi_lo, roi_hi=roi_hi,
                        arm_days=arm_days, max_step=max_step, gap_days=gap_days)
     if proposal is not None:
-        state = accept(state, proposal)
+        state = replace(state, days_outside=0)
     return state, proposal

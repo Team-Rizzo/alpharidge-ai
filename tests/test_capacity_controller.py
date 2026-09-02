@@ -23,8 +23,12 @@ def ctrl(tmp_path):
     return cc.CapacityController(path=tmp_path / "controller.json")
 
 
-def drive(ctrl, profile, roi_by_day, monkeypatch, start_day=0):
-    """Run whole days at a fixed return, collecting any proposals."""
+def drive(ctrl, profile, roi_by_day, monkeypatch, start_day=0, publish=True):
+    """Run whole days at a fixed return, collecting any proposals.
+
+    `publish=True` models an operator republishing capacity after each proposal, which
+    is what makes a proposal a step.
+    """
     proposals = []
     for offset, value in enumerate(roi_by_day):
         monkeypatch.setattr(ctrl, "measure", lambda p, v=value: v)
@@ -33,7 +37,16 @@ def drive(ctrl, profile, roi_by_day, monkeypatch, start_day=0):
             got = ctrl.observe(epoch, profile)
             if got:
                 proposals.append(got)
+                if publish:
+                    profile = _with_capacity(profile, got.to_capacity)
     return proposals
+
+
+def _with_capacity(profile, capacity):
+    """A profile identical but for capacity, as a republish would produce."""
+    raw = dict(profile.raw)
+    raw["settlement"] = {**raw["settlement"], "C": float(capacity)}
+    return mp.parse(raw)
 
 
 # ---- measurement ------------------------------------------------------------------
@@ -100,6 +113,12 @@ def test_a_brief_excursion_arms_nothing(ctrl, profile, monkeypatch):
 def test_steps_respect_the_gap(ctrl, profile, monkeypatch):
     days = [p.day for p in drive(ctrl, profile, [0.2] * 60, monkeypatch)]
     assert all(b - a >= profile.controller.gap_days for a, b in zip(days, days[1:]))
+
+
+def test_an_unpublished_proposal_does_not_start_the_gap(ctrl, profile, monkeypatch):
+    """Capacity never moved, so the controller keeps flagging the breach."""
+    ignored = drive(ctrl, profile, [0.2] * 30, monkeypatch, publish=False)
+    assert len(ignored) > 1
 
 
 def test_without_a_profile_nothing_runs(ctrl):
