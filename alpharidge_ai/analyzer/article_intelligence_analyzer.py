@@ -36,6 +36,7 @@ from alpharidge_ai.models.article_intelligence import (
     FactualConfidence, ForwardEventType, GeoImpactZone, ImpactPotential,
     InferredImpact, MNPIRiskFlag, MarketAnalysisType, MarketSession,
     NumericClaim, NumericUnit, PositioningSignalType, QuoteExtraction,
+    MAX_NUMERIC_CLAIMS, MAX_QUOTES,
     SCHEMA_VERSION, Sentiment, SentimentDirection, SourceAttributionType,
     SourceCategory, SourceMetadata, StalenessFlag, TargetAudience,
     TechnicalQuality, TemporalFocus, TextStatistics, TopicSignature, Urgency,
@@ -45,6 +46,7 @@ from alpharidge_ai.analyzer.ner_fusion import NERFusionEngine
 from alpharidge_ai.analyzer.llm_cache import LLMCache
 from alpharidge_ai.analyzer.aspect_sentiment import AspectSentimentScorer, score_assets
 from alpharidge_ai.analyzer.horizon import reconcile_direction_with_horizons
+from alpharidge_ai.oracle import floor as oracle_floor
 
 try:
     from alpharidge_ai import config
@@ -325,12 +327,18 @@ EXTRACT_CLASSIFY_TOOL = {
                     "speaker": {"type": "string"}, "speaker_title": {"type": "string"},
                     "text": {"type": "string"}, "sentiment": {"type": "string"},
                     "is_market_moving": {"type": "boolean"},
-                }, "required": ["speaker", "text"]}},
+                    "confidence": {"type": "number", "description":
+                        "0-1: how certain this quote is verbatim from the article."},
+                }, "required": ["speaker", "text", "confidence"]}},
                 "numeric_claims": {"type": "array", "items": {"type": "object", "properties": {
                     "metric_name": {"type": "string"}, "value": {"type": "number"},
                     "unit": {"type": "string"}, "context": {"type": "string"},
                     "is_percentage_change": {"type": "boolean"},
-                }, "required": ["metric_name", "value", "unit"]}},
+                    "confidence": {"type": "number", "description":
+                        "0-1: how certain this claim is stated in the article. Be "
+                        "honest; a high number on a claim that is not there costs "
+                        "more than a low one."},
+                }, "required": ["metric_name", "value", "unit", "confidence"]}},
                 "event_type": {"type": "string", "enum": [e.value for e in EventType]},
                 "event_title": {"type": "string"},
                 "event_date": {"type": "string", "description": "YYYY-MM-DD or null"},
@@ -613,7 +621,7 @@ class ArticleIntelligenceAnalyzer:
                 entities=entities,
                 economic_data=self._build_economic_data(call1.get("economic_data", [])),
                 numeric_claims=self._build_numeric_claims(call1.get("numeric_claims", [])),
-                quotes=self._build_quotes(call1.get("quotes", [])),
+                quotes=self._build_quotes(call1.get("quotes", []), content or ""),
                 contagion_links=self._build_contagion_from_graph(ner_tickers),
                 chart_summary=ChartSummary(
                     headline=headline,
@@ -895,29 +903,54 @@ class ArticleIntelligenceAnalyzer:
                 pass
         return points
 
+    @staticmethod
+    def _confidence(raw, default: float = 0.5) -> float:
+        """A stated confidence in [0, 1]. Missing or unusable becomes the neutral value
+        rather than an optimistic one."""
+        try:
+            return min(1.0, max(0.0, float(raw)))
+        except (TypeError, ValueError):
+            return default
+
     def _build_numeric_claims(self, raw: list) -> List[NumericClaim]:
         claims = []
-        for c in (raw or [])[:10]:
+        for c in (raw or [])[:MAX_NUMERIC_CLAIMS]:
             try:
                 claims.append(NumericClaim(
                     metric_name=c["metric_name"], value=c["value"],
                     unit=c.get("unit", "other"),
                     context=(c.get("context") or "")[:200],
                     is_percentage_change=c.get("is_percentage_change", False),
+                    confidence=self._confidence(c.get("confidence")),
                 ))
             except Exception:
                 pass
         return claims
 
-    def _build_quotes(self, raw: list) -> List[QuoteExtraction]:
+    def _build_quotes(self, raw: list, content: str = "") -> List[QuoteExtraction]:
+        """Quotes, with their span located in the served text.
+
+        Offsets are found here rather than asked of the model: the same alignment the
+        validator uses, run over the same text, so both sides agree on where a quote
+        sits instead of trusting a model to count characters.
+        """
+        article = oracle_floor.normalize(content)
         quotes = []
-        for q in (raw or [])[:5]:
+        for q in (raw or [])[:MAX_QUOTES]:
             try:
+                text = q["text"][:1000]
+                start = end = None
+                if article.text:
+                    hit = oracle_floor.align_quote(article, text, None, None)
+                    if hit is not None:
+                        start, end = hit.start, hit.end
                 quotes.append(QuoteExtraction(
                     speaker=q["speaker"], speaker_title=q.get("speaker_title"),
-                    text=q["text"][:1000],
+                    text=text,
                     sentiment=_safe_enum(Sentiment, q.get("sentiment"), Sentiment.NEUTRAL),
                     is_market_moving=q.get("is_market_moving", False),
+                    confidence=self._confidence(q.get("confidence")),
+                    start_offset=start, end_offset=end,
                 ))
             except Exception:
                 pass
