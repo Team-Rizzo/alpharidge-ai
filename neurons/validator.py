@@ -155,6 +155,7 @@ class Validator(BaseValidatorNeuron):
         self._capacity_controller.load()
         self._graded_scorer = None  # lazy; built on first use when scoring is served on
         self._auditor = None        # lazy; built on first use when shadow auditing is on
+        self._ration_plan = {}      # this tick's rations; empty leaves dispatch as-is
         # Transient per-item verdict metadata (resource_id -> {miner_signature, nonce,
         # validator_verdict, epoch}); populated during validation, drained at submission.
         self._verdict_meta = {}
@@ -192,6 +193,7 @@ class Validator(BaseValidatorNeuron):
         # Article tracker is the only adaptive one (RFC 2026-06-28); tweet/telegram
         # stay static. Behaves identically to static until ADAPTIVE_DISPATCH_ENABLED.
         self._article_cooldown = MinerCooldownTracker(adaptive=True)
+        self._article_cooldown.set_ration_source(self._ration_for)
         # Liveness roster (adaptive dispatch). Populated off the dispatch path;
         # only consulted for selection once ADAPTIVE_DISPATCH_ENABLED is on.
         self._liveness = LivenessRoster()
@@ -813,6 +815,31 @@ class Validator(BaseValidatorNeuron):
                 f"[AUDIT] hk={miner_hotkey[:12]}.. id={obs.article_id} "
                 f"path={obs.path} score={obs.score:.3f} w={obs.weight:.2f} "
                 f"model={obs.grader_model} {obs.detail} (shadow)")
+
+    def _ration_for(self, hotkey):
+        """This UID's earned ration for the current epoch, or None to leave dispatch
+        on the adaptive batch size."""
+        if not getattr(config, "RATION_DISPATCH_ENABLED", False):
+            return None
+        profile = self._mechanism_profile.resolve(int(self.block))
+        if profile is None:
+            return None
+        plan = self._ration_plan
+        return plan.get(hotkey) if plan else None
+
+    def _refresh_ration_plan(self, hotkeys, supply):
+        """Split the articles available this tick across UIDs, once, before slicing."""
+        if not getattr(config, "RATION_DISPATCH_ENABLED", False):
+            self._ration_plan = {}
+            return
+        try:
+            profile = self._mechanism_profile.resolve(int(self.block))
+            epoch = int(self._miner_reward._get_current_epoch())
+            self._ration_plan = self._ration_store.plan(
+                list(hotkeys), epoch=epoch, supply=float(supply), profile=profile)
+        except Exception as e:
+            bt.logging.debug(f"[RATION] plan failed: {e}")
+            self._ration_plan = {}
 
     def _observe_ration(self, miner_hotkey, article_batch, floor_results):
         """Fold a batch outcome into the ration state and log what it would lease.
@@ -1630,6 +1657,8 @@ class Validator(BaseValidatorNeuron):
         bt.logging.info(f"[VALIDATION] Processing {len(articles)} articles in batch")
         for article in articles:
             self._article_store.add_article(article, set_as_processing=False, overwrite=False)
+        # Split what is available across UIDs once, before anything is sliced.
+        self._refresh_ration_plan(list(self.metagraph.hotkeys), len(articles))
         cooled_hotkeys = self._article_cooldown.get_cooled_down_hotkeys()
         cooled_uids = [
             uid for uid in range(self.metagraph.n.item())
