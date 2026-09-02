@@ -42,7 +42,7 @@ def ration_of(state, epoch=POST_BOOST_EPOCH, supply=10_000.0):
 # ---- the red-team invariant -------------------------------------------------------
 
 def test_occupying_slots_without_delivering_grows_nothing():
-    """The padding attack: fill every slot with work that fails the floor."""
+    """Filling every slot with work that fails the floor earns nothing."""
     padder = run(validated=0.0, dispatched=50.0)
     assert padder.ema == pytest.approx(0.0)
     assert want_of(padder) == pytest.approx(0.0)

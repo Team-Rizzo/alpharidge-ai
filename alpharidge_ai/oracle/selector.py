@@ -1,10 +1,7 @@
 """Keyed audit selection.
 
-Which articles a validator grades is decided by a secret it never publishes, so the
-choice cannot be predicted, observed in dispatch, or reconstructed afterwards. The
-selection keys on the article id alone: never on dispatch order, batch position,
-timestamp, or who is holding the article, because any of those would let a submitter
-shift its exposure by changing its own behaviour.
+Selection is decided by a per-validator secret and keys on the article id alone:
+never on dispatch order, batch position, timestamp, or who holds the article.
 
 Each validator holds its own key, so per-article agreement between validators is
 audited on the articles both happened to draw.
@@ -82,9 +79,8 @@ class Selector:
                grader_models: Sequence = ()) -> Selection:
         """Decide whether to grade this article, on which path, and with which grader.
 
-        The pool carries the claims, so it is sampled heavily. A thin keyed slice of
-        everything else is graded on judgment fields, which is what stops a submitter
-        treating articles outside the pool as unwatched.
+        The claim-bearing pool is sampled heavily; a thin keyed slice of everything
+        else is graded on judgment fields.
         """
         pooled = in_pool(article_text, pool_tiers)
         rate = float(keyed_rate_pool if pooled else keyed_rate_keeper)
@@ -97,7 +93,7 @@ class Selector:
         )
 
     def draw_grader(self, article_id, models: Sequence) -> str:
-        """Pick a grader by weight. Unpredictable to a submitter, reproducible here."""
+        """Pick a grader by weight, reproducibly."""
         entries = [(getattr(m, "id", None) or m.get("id"),
                     float(getattr(m, "weight", None) if hasattr(m, "weight") else m.get("weight", 0)))
                    for m in (models or [])]

@@ -43,9 +43,8 @@ def observe(state: Optional[MinerRation], *, epoch: int, validated: float,
             dispatched: float, alpha_epoch: float) -> MinerRation:
     """Fold one epoch of outcome into a UID's state.
 
-    `validated` is work that cleared the deterministic floor. Passing anything else
-    here — submissions, acknowledgements, occupied slots — reopens the padding attack
-    the rule exists to close.
+    `validated` is work that cleared the deterministic floor. Nothing else belongs
+    here: not submissions, not acknowledgements, not occupied slots.
     """
     state = state or MinerRation()
     validated = max(0.0, float(validated))

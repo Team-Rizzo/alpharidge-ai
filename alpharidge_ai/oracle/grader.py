@@ -1,7 +1,6 @@
 """The grader: the only model calls the audit makes.
 
-Two calls, both drawn from the rotation by the article's key so a submitter cannot know
-which model will see its work:
+Two calls, both against a model drawn from the rotation by the article's key:
 
   adjudicate  the claims the deterministic tiers could not settle, batched once
               per article

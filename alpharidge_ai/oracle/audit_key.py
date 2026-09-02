@@ -1,9 +1,7 @@
 """This validator's audit key.
 
-The key decides which articles get graded. It must be unique to this validator and it
-must never leave the process: served config, the miner package and log lines are all
-places it cannot appear. It is generated here on first use and persisted locally, so no
-operator has to distribute one and there is no shared value to leak.
+Unique to this validator, and never leaves the process. Generated on first use and
+persisted locally, so there is nothing for an operator to distribute.
 
 Rotating it is deleting the file, or setting AUDIT_KEY to something new.
 """

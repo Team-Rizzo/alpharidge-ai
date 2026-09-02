@@ -4,9 +4,7 @@
 placeholder, deliberately: real settings are not kept in this repository.
 
 Operating values live in the published profile, which is served to authenticated
-validators only. Keep them there. In particular the grader model list belongs nowhere
-public — knowing which models grade would let a submitter tune its output to them,
-which is the one thing the rotation exists to prevent.
+validators only. Keep them there.
 
 `version`, `publish_block` and `activation_block` are filled in by the publish command.
 

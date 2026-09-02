@@ -1,4 +1,4 @@
-"""Keyed selection: unpredictable to a submitter, reproducible for the validator."""
+"""Keyed selection and grader rotation."""
 
 import types
 
@@ -93,7 +93,7 @@ def test_a_zero_rate_grades_nothing():
 
 
 def test_selection_ignores_everything_but_the_article_id():
-    """Nothing a submitter controls may shift its own exposure."""
+    """Only the article id feeds the draw."""
     s = sel.Selector(KEY_A)
     base = _select(s, 4242, NUMBERS)
     for text in (NUMBERS, NUMBERS + " Extra trailing sentence about the quarter."):
