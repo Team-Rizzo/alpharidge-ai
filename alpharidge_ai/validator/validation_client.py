@@ -21,6 +21,7 @@ from alpharidge_ai.validator import reputation
 from alpharidge_ai.utils.validators import get_validator_hotkeys
 from alpharidge_ai.validator import deep_verify
 from alpharidge_ai.consensus import overlap_audit
+from alpharidge_ai.mechanism import settlement
 
 class ValidationClient:
     """
@@ -71,6 +72,33 @@ class ValidationClient:
         # Exponential backoff state for API errors
         self._consecutive_errors = 0
         self._max_backoff_seconds = 300  # Max 5 minutes between retries
+
+    def _shadow_settlement(self, rewards, live_weights, epoch: int) -> None:
+        """Compute what the capacity formula would pay, and log the difference.
+
+        Log-only. Weights on chain still come from the live path; this exists so the
+        two can be compared over a full window before either is switched.
+        """
+        try:
+            profile = self._validator._mechanism_profile.resolve(int(self._validator.block))
+            if profile is None:
+                return
+
+            work = {r.hotkey: float(r.reward) for r in (rewards or [])}
+            result = settlement.settle(work, profile.settlement.C)
+
+            hotkeys = list(self._validator.metagraph.hotkeys)
+            shadow = settlement.weight_vector(result.shares, result.burn, hotkeys,
+                                              int(config.BURN_UID), len(live_weights))
+            live_burn = float(live_weights[int(config.BURN_UID)]) if len(live_weights) > int(config.BURN_UID) else 0.0
+            deltas = [abs(float(a) - float(b)) for a, b in zip(live_weights, shadow)]
+
+            bt.logging.info(
+                f"[SETTLEMENT] epoch={epoch} W={result.work:.0f} C={result.capacity:.0f} "
+                f"burn={result.burn:.4f} live_burn={live_burn:.4f} "
+                f"paid={result.paid:.4f} max_weight_delta={max(deltas or [0.0]):.6f} (shadow)")
+        except Exception as e:
+            bt.logging.debug(f"[SETTLEMENT] shadow failed: {e}")
 
     def _overlap_audit(self, epoch: int) -> None:
         """Check each peer's scores against ours on the articles we both graded.
@@ -863,6 +891,7 @@ class ValidationClient:
                         )
                         bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
                         self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())
+                        self._shadow_settlement(rewards, weights, int(target_epoch))
                         self._last_weight_epoch = target_epoch
                         self._log_shadow_window(target_epoch)
 
