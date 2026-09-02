@@ -65,6 +65,7 @@ from alpharidge_ai.protocol import ValidatorReputationObs
 from alpharidge_ai.analyzer.scoring import validate_miner_batch, validate_miner_telegram_batch, validate_miner_article_batch, validate_miner_article_intelligence_batch, classify_article_batch_failure
 from alpharidge_ai.validator.reputation_store import ReputationStore
 from alpharidge_ai.validator.reputation import emission as _rep_emission
+from alpharidge_ai.validator.profile_client import ProfileClient
 from alpharidge_ai.triage import TRIAGE_SCHEMA_VERSION, gazetteer_assets
 from alpharidge_ai.models.article_intelligence import SCHEMA_VERSION
 from alpharidge_ai.utils.api_models import NewsArticleAnalysisBase
@@ -134,6 +135,12 @@ class Validator(BaseValidatorNeuron):
 
         self._reputation_store = ReputationStore()
         self._reputation_store.load()
+
+        # Mechanism profile: every economic value resolves from here, by block height.
+        # Nothing reads it yet; it is fetched and logged so activation can be observed
+        # before anything depends on it.
+        self._mechanism_profile = ProfileClient()
+        self._mechanism_profile.load()
         self._graded_scorer = None  # lazy; built on first use when scoring is served on
         # Transient per-item verdict metadata (resource_id -> {miner_signature, nonce,
         # validator_verdict, epoch}); populated during validation, drained at submission.

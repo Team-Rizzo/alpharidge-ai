@@ -595,6 +595,16 @@ class ValidationClient:
                 except Exception as e:
                     bt.logging.debug(f"[ValidationClient.run] Failed to persist article store: {e}")
 
+                # ---- Periodic mechanism profile refresh ----
+                try:
+                    profile_client = getattr(self._validator, "_mechanism_profile", None)
+                    if profile_client is not None:
+                        block = int(self._validator.block)
+                        profile_client.refresh(block)
+                        profile_client.resolve(block)
+                except Exception as e:
+                    bt.logging.debug(f"[PROFILE] refresh failed: {e}")
+
                 # ---- Periodic remote config refresh ----
                 try:
                     config.refresh_remote_config()

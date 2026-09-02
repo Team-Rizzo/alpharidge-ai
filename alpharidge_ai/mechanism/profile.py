@@ -254,6 +254,7 @@ class Controller:
 @dataclass(frozen=True)
 class MechanismProfile:
     version: int
+    publish_block: int
     activation_block: int
     schema_version: str
     settlement: Settlement
@@ -282,6 +283,7 @@ def parse(raw: dict) -> MechanismProfile:
 
     return MechanismProfile(
         version=_int("profile", raw, "version", 1, 2**63 - 1),
+        publish_block=_int("profile", raw, "publish_block", 0, 2**63 - 1),
         activation_block=_int("profile", raw, "activation_block", 0, 2**63 - 1),
         schema_version=schema_version,
         settlement=Settlement.parse(raw["settlement"]),
@@ -317,11 +319,15 @@ class ProfileResolver:
     def min_lead(self) -> int:
         return min_lead_blocks(self.refresh_seconds)
 
-    def offer(self, raw: dict, *, publish_block: int,
-              verify: Optional[VerifyFn] = None) -> Tuple[bool, str]:
+    def offer(self, raw: dict, verify: Optional[VerifyFn] = None) -> Tuple[bool, str]:
         """Consider a fetched profile. Returns (accepted, reason).
 
         A rejected profile changes nothing; whatever is in force stays in force.
+
+        The lead is measured from the profile's own signed publish block, not from
+        whenever this validator happened to fetch it. Measuring from the fetch would
+        make an already-active profile unadoptable, which is exactly what a restarting
+        or previously-offline validator needs to pick up.
         """
         try:
             candidate = parse(raw)
@@ -339,7 +345,7 @@ class ProfileResolver:
         if candidate.version <= highest:
             return False, f"stale_version(have={highest}, got={candidate.version})"
 
-        lead = candidate.activation_block - int(publish_block)
+        lead = candidate.activation_block - candidate.publish_block
         if lead < self.min_lead:
             return False, (f"insufficient_lead(blocks={lead}, "
                            f"required={self.min_lead})")

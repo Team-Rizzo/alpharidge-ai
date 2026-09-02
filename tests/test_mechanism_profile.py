@@ -10,6 +10,7 @@ from alpharidge_ai.mechanism import profile as mp
 def _valid() -> dict:
     return {
         "version": 2,
+        "publish_block": 9_000,
         "activation_block": 10_000,
         "schema_version": "1.2.0",
         "settlement": {"C": 301_743.0},
@@ -137,7 +138,7 @@ def test_profile_activates_only_at_its_block():
     nxt["activation_block"] = 20_000
     nxt["settlement"]["C"] = 400_000.0
 
-    assert r.offer(nxt, publish_block=19_000)[0]
+    assert r.offer(nxt)[0]
     assert r.resolve(19_999).settlement.C == pytest.approx(301_743.0)
     assert r.resolve(20_000).settlement.C == pytest.approx(400_000.0)
 
@@ -146,8 +147,9 @@ def test_a_publish_without_enough_lead_is_rejected():
     r = _resolver_with_current()
     nxt = _valid()
     nxt["version"] = 3
+    nxt["publish_block"] = 19_800
     nxt["activation_block"] = 20_000
-    ok, reason = r.offer(nxt, publish_block=19_800)  # 200 blocks of lead, needs 300
+    ok, reason = r.offer(nxt)  # 200 blocks of lead, needs 300
     assert not ok and "insufficient_lead" in reason
     assert r.next is None
 
@@ -157,7 +159,7 @@ def test_a_lower_version_is_rejected():
     older = _valid()
     older["version"] = 1
     older["activation_block"] = 20_000
-    ok, reason = r.offer(older, publish_block=19_000)
+    ok, reason = r.offer(older)
     assert not ok and "stale_version" in reason
 
 
@@ -165,7 +167,7 @@ def test_the_same_version_is_rejected():
     r = _resolver_with_current()
     same = _valid()
     same["activation_block"] = 20_000
-    ok, reason = r.offer(same, publish_block=19_000)
+    ok, reason = r.offer(same)
     assert not ok and "stale_version" in reason
 
 
@@ -175,13 +177,13 @@ def test_rollback_is_a_forward_publish():
     bad["version"] = 3
     bad["activation_block"] = 20_000
     bad["settlement"]["C"] = 999_999.0
-    r.offer(bad, publish_block=19_000)
+    r.offer(bad)
     assert r.resolve(20_000).settlement.C == pytest.approx(999_999.0)
 
     restore = _valid()
     restore["version"] = 4
     restore["activation_block"] = 30_000
-    assert r.offer(restore, publish_block=29_000)[0]
+    assert r.offer(restore)[0]
     assert r.resolve(30_000).settlement.C == pytest.approx(301_743.0)
 
 
@@ -191,9 +193,20 @@ def test_an_invalid_profile_leaves_the_current_one_in_force():
     broken["version"] = 3
     broken["activation_block"] = 20_000
     broken["emission"]["gain"] = 500.0
-    ok, reason = r.offer(broken, publish_block=19_000)
+    ok, reason = r.offer(broken)
     assert not ok and "invalid" in reason
     assert r.resolve(20_000).emission.gain == 15.0
+
+
+def test_the_lead_is_measured_from_the_signed_publish_block():
+    """An already-active profile must still be adoptable, however late it is fetched."""
+    r = mp.ProfileResolver(refresh_seconds=3600)
+    old = _valid()
+    old["version"] = 9
+    old["publish_block"] = 1_000
+    old["activation_block"] = 1_400
+    assert r.offer(old)[0]
+    assert r.resolve(9_000_000).version == 9
 
 
 def test_resolution_is_deterministic_across_repeated_calls():
@@ -201,7 +214,7 @@ def test_resolution_is_deterministic_across_repeated_calls():
     nxt = _valid()
     nxt["version"] = 3
     nxt["activation_block"] = 20_000
-    r.offer(nxt, publish_block=19_000)
+    r.offer(nxt)
     first = r.resolve(20_000)
     for _ in range(5):
         assert r.resolve(20_000) is first
@@ -217,10 +230,10 @@ def test_signature_is_checked_when_a_verifier_is_supplied():
     nxt["activation_block"] = 20_000
     nxt["signature"] = "deadbeef"
 
-    ok, reason = r.offer(nxt, publish_block=19_000, verify=lambda m, s: False)
+    ok, reason = r.offer(nxt, verify=lambda m, s: False)
     assert not ok and reason == "bad_signature"
 
-    ok, _ = r.offer(nxt, publish_block=19_000, verify=lambda m, s: True)
+    ok, _ = r.offer(nxt, verify=lambda m, s: True)
     assert ok
 
 
@@ -229,7 +242,7 @@ def test_unsigned_profile_is_rejected_when_verification_is_on():
     nxt = _valid()
     nxt["version"] = 3
     nxt["activation_block"] = 20_000
-    ok, reason = r.offer(nxt, publish_block=19_000, verify=lambda m, s: True)
+    ok, reason = r.offer(nxt, verify=lambda m, s: True)
     assert not ok and reason == "unsigned"
 
 
