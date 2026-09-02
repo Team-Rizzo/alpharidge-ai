@@ -389,6 +389,9 @@ EMISSION_BONUS_FULL         = float(os.getenv("EMISSION_BONUS_FULL", "0.75"))
 # Observations required before reputation may move a hotkey's multiplier. Below it the
 # multiplier is neutral 1.0 (see reputation.emission).
 EMISSION_N_MIN              = int(os.getenv("EMISSION_N_MIN", "100"))
+# Credit volume per article that clears the deterministic floor, instead of on one
+# verdict for the whole batch. Off = log the difference only.
+FLOOR_GATING_ENABLED        = _as_bool(os.getenv("FLOOR_GATING_ENABLED", "false"))
 VALIDATION_SAMPLE_SIZE      = int(os.getenv("VALIDATION_SAMPLE_SIZE", "1"))
 SUMMARY_AGREEMENT_FLOOR     = float(os.getenv("SUMMARY_AGREEMENT_FLOOR", "0.4"))
 SAMPLING_SUBSTANTIVE_WEIGHT = float(os.getenv("SAMPLING_SUBSTANTIVE_WEIGHT", "2.0"))
@@ -453,6 +456,7 @@ _REMOTE_CONFIG_KEYS = {
     "EMISSION_BONUS_START":       (float, "EMISSION_BONUS_START"),
     "EMISSION_BONUS_FULL":        (float, "EMISSION_BONUS_FULL"),
     "EMISSION_N_MIN":             (int,   "EMISSION_N_MIN"),
+    "FLOOR_GATING_ENABLED":       (_as_bool, "FLOOR_GATING_ENABLED"),
     "VALIDATION_SAMPLE_SIZE":     (int,   "VALIDATION_SAMPLE_SIZE"),
     "SAMPLING_SUBSTANTIVE_WEIGHT":(float, "SAMPLING_SUBSTANTIVE_WEIGHT"),
     "SUMMARY_AGREEMENT_FLOOR":    (float, "SUMMARY_AGREEMENT_FLOOR"),
@@ -484,6 +488,7 @@ _CONSENSUS_KEYS = {
     "EMISSION_BONUS_FULL",
     "EMISSION_N_MIN",
     "SAMPLING_SUBSTANTIVE_WEIGHT",
+    "FLOOR_GATING_ENABLED",
 }
 
 REMOTE_CONFIG_REFRESH_SECONDS = int(os.getenv("REMOTE_CONFIG_REFRESH_SECONDS", "3600"))

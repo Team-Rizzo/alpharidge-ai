@@ -1431,6 +1431,14 @@ class Validator(BaseValidatorNeuron):
                                        {int(a.id): a for a in sent_batch},
                                        full_push=full_push)
         else:
+            floor_results = (validation_result or {}).get("floor_results") or {}
+            floor_gating = bool(getattr(config, "FLOOR_GATING_ENABLED", False))
+            floor_failed = [aid for aid, ok in floor_results.items() if not ok]
+            if floor_failed:
+                bt.logging.info(
+                    f"[FLOOR] hk={miner_hotkey} failed={len(floor_failed)}/"
+                    f"{len(floor_results)} gating={'on' if floor_gating else 'shadow'}")
+
             for article in article_batch:
                 if self._canary_pool.label_of(int(article.id)) is not None:
                     # Canaries are graded only, in every lane and era.
@@ -1450,6 +1458,10 @@ class Validator(BaseValidatorNeuron):
                     pass
 
                 if not self._article_store.is_rewarded(article.id):
+                    if floor_gating and floor_results.get(int(article.id)) is False:
+                        # Cleared validation as part of the batch, but this article did
+                        # not clear the floor on its own, so it earns nothing.
+                        continue
                     content_len = len(article.content or "") if article.content else 0
                     if content_len >= 2000:
                         weight = 3

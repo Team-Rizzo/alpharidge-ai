@@ -411,6 +411,7 @@ class FloorResult:
 
 def evaluate(intel, article_text: str, *,
              claimed_hash: Optional[str] = None,
+             expected_hash: Optional[str] = None,
              claimed_stats: Optional[Dict[str, int]] = None,
              claim_cap: int = 40) -> FloorResult:
     """Run the floor over one submission. Deterministic, no model, no network.
@@ -422,8 +423,12 @@ def evaluate(intel, article_text: str, *,
     if not article.text:
         return FloorResult(False, "empty_article")
 
-    if claimed_hash is not None and claimed_hash != content_hash(article_text):
-        return FloorResult(False, "content_hash_mismatch")
+    if claimed_hash is not None:
+        # `expected_hash` lets the caller supply the canonical hash for its own schema;
+        # comparing two different hash definitions would fail every honest article.
+        wanted = expected_hash if expected_hash is not None else content_hash(article_text)
+        if claimed_hash != wanted:
+            return FloorResult(False, "content_hash_mismatch")
     if claimed_stats is not None and not stats_within_tolerance(claimed_stats,
                                                                text_stats(article_text)):
         return FloorResult(False, "text_stats_mismatch")

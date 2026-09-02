@@ -26,6 +26,7 @@ from .relevance import AssetRelevanceAnalyzer, PostClassification
 from .telegram_relevance import TelegramRelevanceAnalyzer, MessageGroupClassification
 from .news_relevance import NewsRelevanceAnalyzer, ArticleClassification
 from alpharidge_ai.utils.api_models import NewsArticleForScoring
+from alpharidge_ai.oracle import floor as oracle_floor
 from alpharidge_ai.models.article_intelligence import ArticleIntelligence
 
 
@@ -1500,6 +1501,48 @@ def _reference_clearly_irrelevant(intel) -> bool:
     return sector not in _MARKET_ADJACENT_SECTORS
 
 
+def _floor_sweep(miner_batch, reference_by_id=None) -> Dict[int, bool]:
+    """Run the deterministic floor over every article in a batch.
+
+    Returns {article_id: passed}. An article whose analysis will not even load fails;
+    an article the validator has no reference text for is left out rather than failed,
+    since that is the validator's own gap.
+    """
+    results: Dict[int, bool] = {}
+    for article in miner_batch or []:
+        try:
+            aid = int(getattr(article, "id", 0))
+        except (TypeError, ValueError):
+            continue
+
+        ref = (reference_by_id or {}).get(str(getattr(article, "id", "")))
+        text = getattr(ref or article, "content", None)
+        if not text:
+            continue
+
+        blob = getattr(getattr(article, "analysis", None), "analysis_data", None)
+        if not blob or not isinstance(blob, dict):
+            results[aid] = False
+            continue
+        try:
+            intel = ArticleIntelligence(**blob)
+        except Exception:
+            results[aid] = False
+            continue
+
+        title = getattr(ref or article, "title", None) or ""
+        claimed_hash = getattr(getattr(intel, "event_fingerprint", None),
+                               "content_hash", None)
+        try:
+            result = oracle_floor.evaluate(
+                intel, text, claimed_hash=claimed_hash,
+                expected_hash=ArticleIntelligence.compute_content_hash(title, text))
+            results[aid] = bool(result.floor_pass)
+        except Exception as e:
+            bt.logging.debug(f"[FLOOR] evaluation failed id={aid}: {e}")
+    return results
+
+
 def validate_miner_article_intelligence_batch(
     miner_batch: List[NewsArticleForScoring],
     analyzer,
@@ -1542,6 +1585,11 @@ def validate_miner_article_intelligence_batch(
     sampled = random.sample(miner_batch, sample_size)
 
     bt.logging.info(f"[V2_VALIDATE] Sampling {sample_size} article(s) from batch of {len(miner_batch)}")
+
+    # Per-article floor over the WHOLE batch, not just the sample. Cheap and
+    # deterministic, so volume can be credited per article that clears it rather
+    # than on one verdict for the batch.
+    floor_results = _floor_sweep(miner_batch, reference_by_id)
 
     matches = 0
     total_composite = 0.0
@@ -1695,6 +1743,7 @@ def validate_miner_article_intelligence_batch(
         "observations": observations,
         "faithfulness_scores": faithfulness_scores,
         "reference_irrelevant": reference_irrelevant,
+        "floor_results": floor_results,
     }
 
     if batch_valid:
