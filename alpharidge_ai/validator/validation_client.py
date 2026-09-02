@@ -20,6 +20,7 @@ from alpharidge_ai.protocol import Score
 from alpharidge_ai.validator import reputation
 from alpharidge_ai.utils.validators import get_validator_hotkeys
 from alpharidge_ai.validator import deep_verify
+from alpharidge_ai.consensus import overlap_audit
 
 class ValidationClient:
     """
@@ -70,6 +71,38 @@ class ValidationClient:
         # Exponential backoff state for API errors
         self._consecutive_errors = 0
         self._max_backoff_seconds = 300  # Max 5 minutes between retries
+
+    def _overlap_audit(self, epoch: int) -> None:
+        """Check each peer's scores against ours on the articles we both graded.
+
+        Keyed selection means two validators no longer grade identical sets, so
+        agreement is measured on the intersection. Log-only: a report accuses another
+        validator, which should not start happening off an unwatched first run.
+        """
+        store = getattr(self._validator, "_reputation_store", None)
+        if store is None:
+            return
+        self_hk = str(self._validator.wallet.hotkey.ss58_address)
+        mine = overlap_audit.flatten(store.sender_observations(epoch, self_hk))
+        if not mine:
+            return
+
+        for sender in store.senders(epoch):
+            if sender == self_hk:
+                continue
+            theirs = overlap_audit.flatten(store.sender_observations(epoch, sender))
+            verdict = overlap_audit.assess(mine, theirs)
+            if not verdict.comparable:
+                bt.logging.debug(
+                    f"[OVERLAP] {sender[:12]}.. epoch={epoch} {verdict.reason}")
+            elif verdict.flagged:
+                bt.logging.warning(
+                    f"[OVERLAP] {sender[:12]}.. epoch={epoch} overlap={verdict.overlap} "
+                    f"{verdict.reason} (log-only)")
+            else:
+                bt.logging.info(
+                    f"[OVERLAP] {sender[:12]}.. epoch={epoch} overlap={verdict.overlap} "
+                    f"{verdict.reason}")
 
     # ---- Display-only penalty attribution (decoupled from consensus) ----
 
@@ -868,6 +901,13 @@ class ValidationClient:
                                 bt.logging.debug(f"[DEEP_VERIFY] fetch/recompute failed for {sender[:12]}..: {e}")
                     except Exception as e:
                         bt.logging.debug(f"[DEEP_VERIFY] pass failed: {e}")
+
+                    # Overlap audit: compare a sender against us on the articles both
+                    # of us graded. Log-only for now; it does not post reports.
+                    try:
+                        self._overlap_audit(int(target_epoch))
+                    except Exception as e:
+                        bt.logging.debug(f"[OVERLAP] pass failed: {e}")
                     finally:
                         self._last_deep_verify_epoch = target_epoch
 

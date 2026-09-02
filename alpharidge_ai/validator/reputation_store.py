@@ -176,6 +176,13 @@ class ReputationStore:
     def samples(self, hotkey: str) -> int:
         return int(self.state.get(hotkey, {}).get("n", 0))
 
+    def sender_observations(self, epoch: int, sender: str) -> Dict[str, List[Obs]]:
+        """One sender's buffered observations for an epoch, by target."""
+        return dict((self.obs.get(int(epoch), {}) or {}).get(str(sender), {}))
+
+    def senders(self, epoch: int) -> List[str]:
+        return sorted((self.obs.get(int(epoch), {}) or {}).keys())
+
     def snapshot(self) -> Dict[str, Dict[str, float]]:
         """Per-hotkey {r, n} for telemetry / emission."""
         return {k: dict(v) for k, v in self.state.items()}
