@@ -198,3 +198,22 @@ def test_a_replayed_older_version_cannot_displace_a_newer_one(client, monkeypatc
     client._last_fetch = 0
     assert not client.refresh(block=1_000, force=True)
     assert client.resolve(2_000).settlement.C == pytest.approx(301_743.0)
+
+
+# ---- epoch length ------------------------------------------------------------------
+
+def test_a_mismatched_epoch_length_is_reported(monkeypatch, caplog):
+    """The conversion constant is fleet-wide, so a local disagreement must be visible."""
+    monkeypatch.setattr(config, "BLOCK_LENGTH", 10, raising=False)
+    warnings = []
+    monkeypatch.setattr(pc.bt.logging, "warning", lambda msg: warnings.append(msg))
+    pc.ProfileClient._check_epoch_length()
+    assert warnings and "BLOCK_LENGTH" in warnings[0]
+
+
+def test_a_matching_epoch_length_is_silent(monkeypatch):
+    monkeypatch.setattr(config, "BLOCK_LENGTH", mp.BLOCKS_PER_EPOCH, raising=False)
+    warnings = []
+    monkeypatch.setattr(pc.bt.logging, "warning", lambda msg: warnings.append(msg))
+    pc.ProfileClient._check_epoch_length()
+    assert warnings == []

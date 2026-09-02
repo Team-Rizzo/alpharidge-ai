@@ -46,6 +46,22 @@ class ProfileClient:
             refresh_seconds=int(getattr(config, "REMOTE_CONFIG_REFRESH_SECONDS", 3600)))
         self._last_fetch = 0.0
         self._lock = threading.Lock()
+        self._check_epoch_length()
+
+    @staticmethod
+    def _check_epoch_length() -> None:
+        """Day-quoted constants convert to epochs against a fixed epoch length.
+
+        That length is a mechanism constant, identical fleet-wide, so it is not read
+        from local config. If this box disagrees, every ration converts wrongly here
+        and nowhere else, which is worth saying out loud.
+        """
+        local = int(getattr(config, "BLOCK_LENGTH", mp.BLOCKS_PER_EPOCH))
+        if local != mp.BLOCKS_PER_EPOCH:
+            bt.logging.warning(
+                f"[PROFILE] BLOCK_LENGTH={local} differs from the mechanism's "
+                f"{mp.BLOCKS_PER_EPOCH} blocks per epoch; per-epoch conversions "
+                f"assume {mp.EPOCHS_PER_DAY} epochs/day")
 
     # ---- persistence ----
 
