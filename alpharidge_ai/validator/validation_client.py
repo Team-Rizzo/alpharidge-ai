@@ -73,6 +73,29 @@ class ValidationClient:
         self._consecutive_errors = 0
         self._max_backoff_seconds = 300  # Max 5 minutes between retries
 
+    async def _run_capacity_controller(self, epoch: int) -> None:
+        """Measure the return, and report a step when the rule arms.
+
+        Reporting is informational by design: capacity moves when an operator publishes
+        a profile carrying the new value, so there is no path from here to anyone's pay.
+        """
+        ctrl = getattr(self._validator, "_capacity_controller", None)
+        if ctrl is None:
+            return
+        profile = self._validator._mechanism_profile.resolve(int(self._validator.block))
+        if profile is None:
+            return
+
+        proposal = ctrl.observe(epoch, profile)
+        if proposal is None:
+            return
+        try:
+            await self.api_client.post_controller_proposal(
+                epoch=epoch, roi_ema=proposal.roi_ema, direction=proposal.direction,
+                magnitude=abs(proposal.to_capacity / proposal.from_capacity - 1.0))
+        except Exception as e:
+            bt.logging.warning(f"[CONTROLLER] Could not report the step: {e}")
+
     def _shadow_settlement(self, rewards, live_weights, epoch: int) -> None:
         """Compute what the capacity formula would pay, and log the difference.
 
@@ -937,6 +960,11 @@ class ValidationClient:
                         self._overlap_audit(int(target_epoch))
                     except Exception as e:
                         bt.logging.debug(f"[OVERLAP] pass failed: {e}")
+
+                    try:
+                        await self._run_capacity_controller(int(target_epoch))
+                    except Exception as e:
+                        bt.logging.debug(f"[CONTROLLER] pass failed: {e}")
                     finally:
                         self._last_deep_verify_epoch = target_epoch
 

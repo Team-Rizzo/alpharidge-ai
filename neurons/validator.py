@@ -67,6 +67,7 @@ from alpharidge_ai.validator.reputation_store import ReputationStore
 from alpharidge_ai.validator.reputation import emission as _rep_emission
 from alpharidge_ai.validator.profile_client import ProfileClient
 from alpharidge_ai.market.ration_store import RationStore
+from alpharidge_ai.validator.capacity_controller import CapacityController
 from alpharidge_ai.triage import TRIAGE_SCHEMA_VERSION, gazetteer_assets
 from alpharidge_ai.models.article_intelligence import SCHEMA_VERSION
 from alpharidge_ai.utils.api_models import NewsArticleAnalysisBase
@@ -147,6 +148,11 @@ class Validator(BaseValidatorNeuron):
         # observed and logged beside today's batch size, which still drives dispatch.
         self._ration_store = RationStore()
         self._ration_store.load()
+
+        # Capacity controller. Measures the return and reports a step when the rule
+        # arms; capacity itself only ever moves by a published profile.
+        self._capacity_controller = CapacityController()
+        self._capacity_controller.load()
         self._graded_scorer = None  # lazy; built on first use when scoring is served on
         self._auditor = None        # lazy; built on first use when shadow auditing is on
         # Transient per-item verdict metadata (resource_id -> {miner_signature, nonce,
