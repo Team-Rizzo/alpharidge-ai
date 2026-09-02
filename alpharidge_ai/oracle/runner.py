@@ -183,6 +183,26 @@ class Auditor:
         self._profile_reader = profile_reader
         self._grader = grader
 
+    def selects(self, article_id, article_text, block: int) -> bool:
+        """Whether this article is watched, without doing the audit.
+
+        Lets the caller decide which articles are worth a reference analysis before
+        paying for one.
+        """
+        try:
+            profile = self._profile_reader(block)
+            if profile is None:
+                return False
+            oracle = profile.oracle
+            return self._selector.select(
+                article_id, article_text,
+                pool_tiers=oracle.pool_tiers,
+                keyed_rate_pool=oracle.keyed_rate_pool,
+                keyed_rate_keeper=oracle.keyed_rate_keeper,
+                grader_models=oracle.grader_models).graded
+        except Exception:
+            return False
+
     def audit(self, article_id, article_text, miner_intel, grader_intel,
               floor_result, block: int) -> Optional[Observation]:
         try:

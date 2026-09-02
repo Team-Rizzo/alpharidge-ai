@@ -1702,6 +1702,59 @@ def validate_miner_article_intelligence_batch(
                 bt.logging.debug(
                     f"[FAITHFULNESS] skipped id={getattr(src, 'id', '?')} — content too short")
 
+    # Keyed audit over the rest of the batch. The random sample above decides whether
+    # the batch is accepted; which articles are watched for QUALITY is decided by the
+    # key instead, because a random draw settles a reputation more slowly than a hotkey
+    # tends to last. Capped per batch so one batch cannot run unbounded analyses.
+    if auditor is not None:
+        already = {int(getattr(a, "id", 0)) for a in sampled}
+        cap = int(_cfg_get("AUDIT_MAX_PER_BATCH", 4))
+        picked = 0
+        for article in miner_batch:
+            if picked >= cap:
+                bt.logging.debug(
+                    f"[AUDIT] per-batch cap {cap} reached; "
+                    f"{len(miner_batch) - len(already)} article(s) left unwatched")
+                break
+            try:
+                aid = int(getattr(article, "id", 0))
+            except (TypeError, ValueError):
+                continue
+            if aid in already:
+                continue
+
+            ref = (reference_by_id or {}).get(str(getattr(article, "id", "")))
+            src = ref or article
+            text = getattr(src, "content", None) or ""
+            if not text or not auditor.selects(aid, text, int(block)):
+                continue
+
+            blob = getattr(getattr(article, "analysis", None), "analysis_data", None)
+            if not blob or not isinstance(blob, dict):
+                continue
+            try:
+                miner_intel = ArticleIntelligence(**blob)
+            except Exception:
+                continue
+            if not _floor_sweep([article], reference_by_id).get(aid):
+                continue
+
+            picked += 1
+            try:
+                validator_intel = analyzer.analyze(
+                    article_id=article.id, url=src.url, title=src.title,
+                    source=src.source, published=src.published, summary=src.summary,
+                    content=src.content, raw_html=getattr(src, "raw_html", None))
+                if validator_intel is None:
+                    continue
+                result = oracle_floor.evaluate(miner_intel, text)
+                observed = auditor.audit(aid, text, miner_intel, validator_intel,
+                                         result, int(block))
+                if observed is not None:
+                    audit_observations.append(observed)
+            except Exception as e:
+                bt.logging.debug(f"[AUDIT] keyed pass failed on {aid}: {e}")
+
     # Cross-article adversarial detection: cloned embeddings.
     # Legacy rule (default): flag any within-batch title-embedding pair with cosine
     # above the threshold. When CLONE_DIFFERENTIAL_ENABLED is served on, a candidate

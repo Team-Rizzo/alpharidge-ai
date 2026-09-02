@@ -398,6 +398,9 @@ AUDIT_SHADOW_ENABLED        = _as_bool(os.getenv("AUDIT_SHADOW_ENABLED", "false"
 # Lease dispatch on earned rations instead of the adaptive batch size. Local policy:
 # rations set no weights, so validators may differ without splitting consensus.
 RATION_DISPATCH_ENABLED     = _as_bool(os.getenv("RATION_DISPATCH_ENABLED", "false"))
+# Reference analyses the audit may run per batch beyond the acceptance sample. Bounds
+# both the grader spend and how long one batch can take to validate.
+AUDIT_MAX_PER_BATCH         = int(os.getenv("AUDIT_MAX_PER_BATCH", "4"))
 VALIDATION_SAMPLE_SIZE      = int(os.getenv("VALIDATION_SAMPLE_SIZE", "1"))
 SUMMARY_AGREEMENT_FLOOR     = float(os.getenv("SUMMARY_AGREEMENT_FLOOR", "0.4"))
 SAMPLING_SUBSTANTIVE_WEIGHT = float(os.getenv("SAMPLING_SUBSTANTIVE_WEIGHT", "2.0"))
@@ -465,6 +468,7 @@ _REMOTE_CONFIG_KEYS = {
     "FLOOR_GATING_ENABLED":       (_as_bool, "FLOOR_GATING_ENABLED"),
     "AUDIT_SHADOW_ENABLED":       (_as_bool, "AUDIT_SHADOW_ENABLED"),
     "RATION_DISPATCH_ENABLED":    (_as_bool, "RATION_DISPATCH_ENABLED"),
+    "AUDIT_MAX_PER_BATCH":        (int,   "AUDIT_MAX_PER_BATCH"),
     "VALIDATION_SAMPLE_SIZE":     (int,   "VALIDATION_SAMPLE_SIZE"),
     "SAMPLING_SUBSTANTIVE_WEIGHT":(float, "SAMPLING_SUBSTANTIVE_WEIGHT"),
     "SUMMARY_AGREEMENT_FLOOR":    (float, "SUMMARY_AGREEMENT_FLOOR"),
