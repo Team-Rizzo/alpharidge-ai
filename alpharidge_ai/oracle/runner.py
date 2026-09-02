@@ -168,3 +168,30 @@ def _keeper(article_id, article_text, miner_intel, choice, grader,
                        weight=float(keeper_weight), path=selector.KEEPER,
                        grader_model=choice.grader_model,
                        detail=f"agreement={agreement:.2f}")
+
+
+class Auditor:
+    """Carries what an audit needs: this validator's key, the profile, the grader.
+
+    Shadow: observations are returned to the caller to log, never written to the
+    reputation store. Anything written there propagates fleet-wide within an epoch and
+    cannot be taken back, so it waits for the flip rather than a first unwatched run.
+    """
+
+    def __init__(self, key: bytes, profile_reader, grader=None):
+        self._selector = selector.Selector(key)
+        self._profile_reader = profile_reader
+        self._grader = grader
+
+    def audit(self, article_id, article_text, miner_intel, grader_intel,
+              floor_result, block: int) -> Optional[Observation]:
+        try:
+            profile = self._profile_reader(block)
+            if profile is None:
+                return None
+            return audit_article(article_id, article_text, miner_intel, grader_intel,
+                                 floor_result, audit_selector=self._selector,
+                                 profile=profile, grader=self._grader, block=block)
+        except Exception as e:
+            bt.logging.debug(f"[AUDIT] article {article_id} failed: {e}")
+            return None

@@ -1551,6 +1551,8 @@ def validate_miner_article_intelligence_batch(
     graded_scorer=None,
     reference_by_id=None,
     miner_hotkey=None,
+    auditor=None,
+    block=0,
 ) -> Tuple[bool, Dict]:
     """Validate a miner's article batch using V2 4-tier validation.
 
@@ -1595,6 +1597,7 @@ def validate_miner_article_intelligence_batch(
     total_composite = 0.0
     discrepancies = []
     observations = []  # (article_id, graded, weight) when graded_scorer is set
+    audit_observations = []  # keyed-audit results, shadow only
     faithfulness_scores = []  # reference-free faithfulness per sampled article
     reference_irrelevant = []  # (article_id, bool) — True when our own reference
     # says the article is clearly outside the rubric; feeds triage FP events
@@ -1663,6 +1666,22 @@ def validate_miner_article_intelligence_batch(
                 "resource_id": str(getattr(article, "id", "")),
                 "composite_score": composite, "details": details,
             })
+
+        if auditor is not None:
+            # Runs only on articles already analysed here, so it adds no reference
+            # analysis of its own. Full keyed coverage needs selection to drive the
+            # analysis, which is the change that carries the grader load.
+            try:
+                text = getattr(src, "content", None) or ""
+                seen = _floor_sweep([article], reference_by_id).get(int(article.id))
+                if seen:
+                    result = oracle_floor.evaluate(miner_intel, text)
+                    observed = auditor.audit(int(article.id), text, miner_intel,
+                                             validator_intel, result, int(block))
+                    if observed is not None:
+                        audit_observations.append(observed)
+            except Exception as e:
+                bt.logging.debug(f"[AUDIT] failed on {getattr(article, 'id', '?')}: {e}")
 
         if graded_scorer is not None:
             try:
@@ -1744,6 +1763,7 @@ def validate_miner_article_intelligence_batch(
         "faithfulness_scores": faithfulness_scores,
         "reference_irrelevant": reference_irrelevant,
         "floor_results": floor_results,
+        "audit_observations": audit_observations,
     }
 
     if batch_valid:

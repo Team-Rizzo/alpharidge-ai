@@ -148,6 +148,7 @@ class Validator(BaseValidatorNeuron):
         self._ration_store = RationStore()
         self._ration_store.load()
         self._graded_scorer = None  # lazy; built on first use when scoring is served on
+        self._auditor = None        # lazy; built on first use when shadow auditing is on
         # Transient per-item verdict metadata (resource_id -> {miner_signature, nonce,
         # validator_verdict, epoch}); populated during validation, drained at submission.
         self._verdict_meta = {}
@@ -784,6 +785,29 @@ class Validator(BaseValidatorNeuron):
             collect_verdict_meta(message_batch, miner_signatures, nonces, "valid", current_epoch))
         return True
 
+    def _get_auditor(self):
+        """The keyed auditor, built on first use. None unless shadow auditing is on."""
+        if not getattr(config, "AUDIT_SHADOW_ENABLED", False):
+            return None
+        if self._auditor is None:
+            from alpharidge_ai.oracle import audit_key
+            from alpharidge_ai.oracle.grader import Grader
+            from alpharidge_ai.oracle.runner import Auditor
+            self._auditor = Auditor(audit_key.load(),
+                                    self._mechanism_profile.resolve,
+                                    grader=Grader())
+            bt.logging.info("[AUDIT] shadow auditing enabled")
+        return self._auditor
+
+    def _log_audit(self, miner_hotkey, observations):
+        """Log what the audit saw. Deliberately does not record it: an observation
+        written here propagates fleet-wide within an epoch and cannot be undone."""
+        for obs in observations or []:
+            bt.logging.info(
+                f"[AUDIT] hk={miner_hotkey[:12]}.. id={obs.article_id} "
+                f"path={obs.path} score={obs.score:.3f} w={obs.weight:.2f} "
+                f"model={obs.grader_model} {obs.detail} (shadow)")
+
     def _observe_ration(self, miner_hotkey, article_batch, floor_results):
         """Fold a batch outcome into the ration state and log what it would lease.
 
@@ -1323,8 +1347,10 @@ class Validator(BaseValidatorNeuron):
                 self._validation_executor,
                 validate_miner_article_intelligence_batch,
                 track_batch, self._article_intel_analyzer, sample_size, None, gscorer,
-                reference_by_id, miner_hotkey,
+                reference_by_id, miner_hotkey, self._get_auditor(), int(self.block),
             )
+            self._log_audit(miner_hotkey,
+                            (validation_result or {}).get("audit_observations"))
             if gscorer is not None:
                 # Merged with triage grades below when grading succeeded
                 # (first-obs-wins dedup in the reputation store).
