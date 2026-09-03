@@ -83,6 +83,18 @@ _WORD_SCALES = {
 
 _JOINERS = {"and", "y", "e", "et", "und", "-"}
 
+# CJK scale marks. These follow a digit with no space — 3억 is three hundred million,
+# not three — so a digits-only reading is wrong by a factor of the scale rather than
+# merely incomplete. Korean is the corpus's highest gold-rate language.
+_CJK_SCALES = {
+    "십": 1e1, "百": 1e2, "백": 1e2, "千": 1e3, "천": 1e3,
+    "万": 1e4, "萬": 1e4, "만": 1e4,
+    "億": 1e8, "亿": 1e8, "억": 1e8,
+    "兆": 1e12, "조": 1e12,
+}
+
+_CJK_CURRENCY = {"원": "KRW", "円": "JPY", "元": "CNY", "圓": "CNY", "위안": "CNY"}
+
 _CURRENCY_WORDS = {
     "dollar": "USD", "dollars": "USD", "usd": "USD", "dolar": "USD", "dolares": "USD",
     "euro": "EUR", "euros": "EUR", "eur": "EUR",
@@ -162,8 +174,20 @@ class ParsedNumber:
     offset: int
 
 
+def _cjk_scale_after(text: str, end: int) -> Tuple[float, int]:
+    """A run of CJK scale marks immediately after a number, multiplied together."""
+    scale, i = 1.0, end
+    while i < len(text) and text[i] in _CJK_SCALES:
+        scale *= _CJK_SCALES[text[i]]
+        i += 1
+    return scale, i
+
+
 def _magnitude_after(text: str, end: int) -> Tuple[float, int]:
     """Magnitude word within the next two tokens, and where it ends."""
+    cjk, cjk_end = _cjk_scale_after(text, end)
+    if cjk != 1.0:
+        return cjk, cjk_end
     tail = text[end:end + 32]
     tokens = list(_WORD_RE.finditer(tail))[:2]
     for tok in tokens:
@@ -181,6 +205,9 @@ def _currency_near(text: str, start: int, end: int) -> Optional[str]:
     for sym, code in _CURRENCY_SYMBOLS.items():
         if sym in left or sym in right:
             return code
+    for char in left + right:
+        if char in _CJK_CURRENCY:
+            return _CJK_CURRENCY[char]
     for word in _WORD_RE.findall(left) + _WORD_RE.findall(right):
         if word in _CURRENCY_CODES:
             return word.upper()
@@ -322,6 +349,15 @@ def parse_numbers(normalized_text: str) -> List[ParsedNumber]:
     for value, start, end in _word_numbers(normalized_text):
         emit(value, start, end)
 
+    # Descending scaled parts written next to each other are one figure: 1조 2천억 is
+    # 1.2 trillion, not a one and a two. The parts stay as candidates; the sum joins
+    # them rather than replacing them.
+    scaled = [n for n in found if n.unit != "pct"]
+    for a, b in zip(scaled, scaled[1:]):
+        gap = normalized_text[a.offset:b.offset]
+        if 0 < len(gap) <= 8 and a.value > b.value > 0:
+            found.append(ParsedNumber(value=a.value + b.value, unit=a.unit,
+                                      offset=a.offset))
     return found
 
 

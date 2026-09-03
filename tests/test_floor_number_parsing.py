@@ -131,3 +131,50 @@ def test_the_extra_readings_do_not_ground_arbitrary_values():
     for wrong in (12.03, 120.3, 1_203_000.0, 99.0):
         assert not floor.ground_claim(
             types.SimpleNamespace(value=wrong, unit="count"), numbers), wrong
+
+
+# ---- CJK scale marks ---------------------------------------------------------------
+# These attach to a digit with no space, so a digits-only reading is wrong by the scale
+# rather than merely short: 3억 is three hundred million, not three. Korean is the
+# corpus's highest gold-rate language.
+
+@pytest.mark.parametrize("text,expected,unit", [
+    ("매출은 3억 원을 기록했다.", 300_000_000, "currency:KRW"),
+    ("지난해 12만 명이 방문했다.", 120_000, "count"),
+    ("売上高は3億円だった。", 300_000_000, "currency:JPY"),
+    ("营收达 5亿元。", 500_000_000, "currency:CNY"),
+])
+def test_cjk_scaled_numbers_are_read(text, expected, unit):
+    assert expected in values(text)
+    assert unit in units(text)
+
+
+def test_chained_cjk_scales_multiply():
+    assert 200_000_000_000 in values("거래액 2천억 원")
+
+
+def test_a_compound_figure_offers_its_sum():
+    """1조 2천억 is one figure written in descending parts."""
+    got = values("거래액 1조 2천억 원")
+    assert 1_200_000_000_000 in got
+    assert 1_000_000_000_000 in got          # the parts remain candidates too
+
+
+def test_a_cjk_claim_grounds():
+    import types
+    numbers = floor.parse_numbers(floor.normalize("매출은 3억 원을 기록했다.").text)
+    assert floor.ground_claim(
+        types.SimpleNamespace(value=300_000_000.0, unit="KRW"), numbers)
+
+
+def test_the_unscaled_digit_no_longer_stands_alone():
+    """Reading 3억 as 3 would ground a claim of three against a figure of 300 million."""
+    import types
+    numbers = floor.parse_numbers(floor.normalize("매출은 3억 원을 기록했다.").text)
+    assert not floor.ground_claim(
+        types.SimpleNamespace(value=3.0, unit="KRW"), numbers)
+
+
+def test_ascii_numbers_are_unaffected_by_the_cjk_path():
+    got = values("Revenue was $1.2 billion, up 12.5%.")
+    assert 1_200_000_000 in got and 12.5 in got
