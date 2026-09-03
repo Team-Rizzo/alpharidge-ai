@@ -1389,6 +1389,7 @@ class Validator(BaseValidatorNeuron):
 
         # Resolved once, before the branches: the triage path below reads it too, and
         # binding it inside one branch would leave it undefined on the others.
+        _profile = self._mechanism_profile.resolve(int(self.block))
         oracle_live = self._oracle_is_live()
         # The old scorer stands down only when something is actually replacing it. A
         # published flip with no working auditor must not leave reputation unfed.
@@ -1415,6 +1416,7 @@ class Validator(BaseValidatorNeuron):
                 validate_miner_article_intelligence_batch,
                 track_batch, self._article_intel_analyzer, sample_size, None, gscorer,
                 reference_by_id, miner_hotkey, self._get_auditor(), int(self.block),
+                (_profile.oracle.schema_cutover_block if _profile else 0),
             )
             self._log_audit(miner_hotkey,
                             (validation_result or {}).get("audit_observations"),
@@ -1561,7 +1563,6 @@ class Validator(BaseValidatorNeuron):
                                        full_push=full_push)
         else:
             floor_results = (validation_result or {}).get("floor_results") or {}
-            _profile = self._mechanism_profile.resolve(int(self.block))
             floor_gating = bool(_profile.settlement.floor_gating) if _profile else False
             floor_failed = [aid for aid, ok in floor_results.items() if not ok]
             if floor_failed:

@@ -27,6 +27,7 @@ from .telegram_relevance import TelegramRelevanceAnalyzer, MessageGroupClassific
 from .news_relevance import NewsRelevanceAnalyzer, ArticleClassification
 from alpharidge_ai.utils.api_models import NewsArticleForScoring
 from alpharidge_ai.oracle import floor as oracle_floor
+from alpharidge_ai.oracle import schema_gate
 from alpharidge_ai.models.article_intelligence import ArticleIntelligence
 
 
@@ -1501,7 +1502,8 @@ def _reference_clearly_irrelevant(intel) -> bool:
     return sector not in _MARKET_ADJACENT_SECTORS
 
 
-def _floor_sweep(miner_batch, reference_by_id=None) -> Dict[int, bool]:
+def _floor_sweep(miner_batch, reference_by_id=None, *, block: int = 0,
+                 schema_cutover_block: int = 0) -> Dict[int, bool]:
     """Run the deterministic floor over every article in a batch.
 
     Returns {article_id: passed}. An article whose analysis will not even load fails;
@@ -1530,6 +1532,19 @@ def _floor_sweep(miner_batch, reference_by_id=None) -> Dict[int, bool]:
             results[aid] = False
             continue
 
+        # After the cutover block a submission on the old schema earns nothing. Merely
+        # declining to audit it would freeze its reputation while volume kept paying,
+        # which rewards not upgrading.
+        if schema_cutover_block:
+            verdict = schema_gate.evaluate(
+                getattr(intel, "schema_version", None), block=int(block),
+                cutover_block=int(schema_cutover_block), intel=intel)
+            if not verdict.accepted:
+                bt.logging.info(
+                    f"[FLOOR] id={aid} rejected: {verdict.reason}")
+                results[aid] = False
+                continue
+
         title = getattr(ref or article, "title", None) or ""
         claimed_hash = getattr(getattr(intel, "event_fingerprint", None),
                                "content_hash", None)
@@ -1553,6 +1568,7 @@ def validate_miner_article_intelligence_batch(
     miner_hotkey=None,
     auditor=None,
     block=0,
+    schema_cutover_block=0,
 ) -> Tuple[bool, Dict]:
     """Validate a miner's article batch using V2 4-tier validation.
 
@@ -1591,7 +1607,8 @@ def validate_miner_article_intelligence_batch(
     # Per-article floor over the WHOLE batch, not just the sample. Cheap and
     # deterministic, so volume can be credited per article that clears it rather
     # than on one verdict for the batch.
-    floor_results = _floor_sweep(miner_batch, reference_by_id)
+    floor_results = _floor_sweep(miner_batch, reference_by_id, block=block,
+                                 schema_cutover_block=schema_cutover_block)
 
     matches = 0
     total_composite = 0.0
@@ -1736,7 +1753,8 @@ def validate_miner_article_intelligence_batch(
                 miner_intel = ArticleIntelligence(**blob)
             except Exception:
                 continue
-            if not _floor_sweep([article], reference_by_id).get(aid):
+            if not _floor_sweep([article], reference_by_id, block=block,
+                                schema_cutover_block=schema_cutover_block).get(aid):
                 continue
 
             picked += 1
