@@ -43,7 +43,53 @@ _PUNCT_MAP = {
     "…": "...",
 }
 
-_NUMBER_RE = re.compile(r"[-+]?\d{1,3}(?:[,\s]\d{3})+(?:\.\d+)?|[-+]?\d+(?:\.\d+)?")
+# A numeric run: digits with any mix of grouping and decimal marks. The marks are
+# interpreted afterwards, because their meaning depends on the writer's locale.
+_NUMBER_RE = re.compile(r"[-+]?\d[\d.,\u00a0 ]*\d|[-+]?\d")
+
+# Number words. English in full; other languages carry the units and scales that appear
+# in financial copy. The corpus's best-served articles are not English, so a
+# digits-only parser reads them worst.
+_WORD_UNITS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+    "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+    "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40,
+    "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+    # es / pt
+    "uno": 1, "una": 1, "um": 1, "uma": 1, "dos": 2, "dois": 2, "duas": 2,
+    "tres": 3, "tris": 3, "cuatro": 4, "quatro": 4, "cinco": 5, "seis": 6,
+    "siete": 7, "sete": 7, "ocho": 8, "oito": 8, "nueve": 9, "nove": 9,
+    "diez": 10, "dez": 10, "veinte": 20, "vinte": 20, "treinta": 30, "trinta": 30,
+    # fr
+    "un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5, "sept": 7,
+    "huit": 8, "neuf": 9, "dix": 10, "vingt": 20, "trente": 30, "quarante": 40,
+    "cinquante": 50,
+    # de / it
+    "eins": 1, "zwei": 2, "drei": 3, "vier": 4, "funf": 5, "sechs": 6, "sieben": 7,
+    "acht": 8, "neun": 9, "zehn": 10, "zwanzig": 20, "dreissig": 30,
+    "due": 2, "tre": 3, "quattro": 4, "cinque": 5, "sei": 6, "otto": 8, "nove_it": 9,
+}
+
+_WORD_SCALES = {
+    "hundred": 100, "thousand": 1e3, "million": 1e6, "billion": 1e9, "trillion": 1e12,
+    "cien": 100, "ciento": 100, "cem": 100, "cento": 100, "cent": 100, "hundert": 100,
+    "mil": 1e3, "mille": 1e3, "tausend": 1e3,
+    "millon": 1e6, "millones": 1e6, "milhao": 1e6, "milhoes": 1e6, "million_fr": 1e6,
+    "millions": 1e6, "millionen": 1e6, "milione": 1e6, "milioni": 1e6,
+    "billon": 1e9, "bilhao": 1e9, "bilhoes": 1e9, "milliard": 1e9, "milliards": 1e9,
+    "miliardi": 1e9, "billions": 1e9,
+}
+
+_JOINERS = {"and", "y", "e", "et", "und", "-"}
+
+_CURRENCY_WORDS = {
+    "dollar": "USD", "dollars": "USD", "usd": "USD", "dolar": "USD", "dolares": "USD",
+    "euro": "EUR", "euros": "EUR", "eur": "EUR",
+    "pound": "GBP", "pounds": "GBP", "sterling": "GBP", "libras": "GBP",
+    "yen": "JPY", "yuan": "CNY", "renminbi": "CNY", "won": "KRW",
+    "real": "BRL", "reais": "BRL", "franc": "CHF", "francs": "CHF",
+}
 _QUOTED_RE = re.compile(r'"[^"]+"')
 _SENTENCE_END = re.compile(r"[.!?]")
 _WORD_RE = re.compile(r"\w+", re.UNICODE)
@@ -124,6 +170,8 @@ def _magnitude_after(text: str, end: int) -> Tuple[float, int]:
         word = tok.group(0)
         if word in _MAGNITUDES:
             return _MAGNITUDES[word], end + tok.end()
+        if word in _WORD_SCALES and _WORD_SCALES[word] >= 1e3:
+            return float(_WORD_SCALES[word]), end + tok.end()
     return 1.0, end
 
 
@@ -136,30 +184,144 @@ def _currency_near(text: str, start: int, end: int) -> Optional[str]:
     for word in _WORD_RE.findall(left) + _WORD_RE.findall(right):
         if word in _CURRENCY_CODES:
             return word.upper()
+        if word in _CURRENCY_WORDS:
+            return _CURRENCY_WORDS[word]
     return None
+
+
+def _readings(token: str) -> List[float]:
+    """Every plausible value for a numeric run.
+
+    `1,203` is one thousand two hundred and three to an English writer and one point
+    two zero three to a French one, and the text does not say which. The floor asks
+    whether a claim appears in the article, so it takes both: a wrong reading adds a
+    candidate nobody claims, while a missing one denies an honest claim.
+    """
+    raw = token.strip().replace("\u00a0", " ").replace(" ", "")
+    sign = -1.0 if raw.startswith("-") else 1.0
+    raw = raw.lstrip("+-")
+    if not raw or not raw[0].isdigit():
+        return []
+
+    dots, commas = raw.count("."), raw.count(",")
+    out: List[float] = []
+
+    def add(value: Optional[float]) -> None:
+        if value is not None and value == value and value not in out:
+            out.append(value)
+
+    def grouped(text: str, group: str, decimal: str) -> Optional[float]:
+        """Read `text` treating `group` as the thousands mark and `decimal` as the point."""
+        body, _, fraction = (text.rpartition(decimal) if decimal and decimal in text
+                             else (text, "", ""))
+        body = body or text
+        if decimal and decimal in text and (not fraction.isdigit() or not body):
+            return None
+        parts = body.split(group) if group else [body]
+        if len(parts) > 1:
+            if not parts[0] or len(parts[0]) > 3:
+                return None
+            if any(len(p) != 3 or not p.isdigit() for p in parts[1:]):
+                return None
+        if not "".join(parts).isdigit():
+            return None
+        try:
+            return float("".join(parts) + ("." + fraction if fraction else ""))
+        except ValueError:
+            return None
+
+    if dots and commas:
+        # The rightmost mark is the decimal point; the other groups.
+        if raw.rfind(".") > raw.rfind(","):
+            add(grouped(raw, ",", "."))
+        else:
+            add(grouped(raw, ".", ","))
+    elif commas:
+        add(grouped(raw, ",", ""))          # grouping: 1,203 -> 1203
+        add(grouped(raw, "", ","))          # decimal:  17,99 -> 17.99
+    elif dots:
+        add(grouped(raw, "", "."))          # decimal:  17.99 -> 17.99
+        add(grouped(raw, ".", ""))          # grouping: 1.203 -> 1203
+    else:
+        try:
+            add(float(raw))
+        except ValueError:
+            return []
+
+    return [sign * v for v in out]
+
+
+def _word_numbers(normalized_text: str) -> List[Tuple[float, int, int]]:
+    """Spelled-out numbers, as (value, start, end) over the normalised text."""
+    tokens = list(_WORD_RE.finditer(normalized_text))
+    found: List[Tuple[float, int, int]] = []
+    i = 0
+    while i < len(tokens):
+        word = tokens[i].group(0)
+        if word not in _WORD_UNITS and word not in _WORD_SCALES:
+            i += 1
+            continue
+
+        total = current = 0.0
+        used = False
+        saw_unit = False
+        start = tokens[i].start()
+        end = tokens[i].end()
+        j = i
+        while j < len(tokens):
+            w = tokens[j].group(0)
+            if w in _WORD_UNITS:
+                current += _WORD_UNITS[w]
+                used = saw_unit = True
+            elif w in _WORD_SCALES:
+                # A scale word with nothing in front of it is a figure of speech, not a
+                # number. Reading "billion" alone as 1e9 would ground that exact claim
+                # against any article that merely uses the word.
+                if not saw_unit:
+                    break
+                scale = _WORD_SCALES[w]
+                if scale == 100:
+                    current *= 100
+                else:
+                    total += current * scale
+                    current = 0.0
+                used = True
+            elif w in _JOINERS and used:
+                pass                         # "two hundred and five"
+            else:
+                break
+            end = tokens[j].end()
+            j += 1
+
+        value = total + current
+        if used and value:
+            found.append((value, start, end))
+        i = max(j, i + 1)
+    return found
 
 
 def parse_numbers(normalized_text: str) -> List[ParsedNumber]:
     """Every numeric token in the text, with its magnitude, unit class and offset."""
     found: List[ParsedNumber] = []
-    for m in _NUMBER_RE.finditer(normalized_text):
-        raw = m.group(0).replace(",", "").replace(" ", "")
-        try:
-            value = float(raw)
-        except ValueError:
-            continue
 
-        mag, mag_end = _magnitude_after(normalized_text, m.end())
+    def emit(value: float, start: int, end: int) -> None:
+        mag, mag_end = _magnitude_after(normalized_text, end)
         value *= mag
-
         after = normalized_text[mag_end:mag_end + 2]
         if after.startswith("%") or after.strip().startswith("%"):
             unit = "pct"
         else:
-            code = _currency_near(normalized_text, m.start(), mag_end)
+            code = _currency_near(normalized_text, start, mag_end)
             unit = f"currency:{code}" if code else "count"
+        found.append(ParsedNumber(value=value, unit=unit, offset=start))
 
-        found.append(ParsedNumber(value=value, unit=unit, offset=m.start()))
+    for m in _NUMBER_RE.finditer(normalized_text):
+        for value in _readings(m.group(0)):
+            emit(value, m.start(), m.end())
+
+    for value, start, end in _word_numbers(normalized_text):
+        emit(value, start, end)
+
     return found
 
 
