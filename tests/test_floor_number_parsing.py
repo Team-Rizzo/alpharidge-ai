@@ -178,3 +178,74 @@ def test_the_unscaled_digit_no_longer_stands_alone():
 def test_ascii_numbers_are_unaffected_by_the_cjk_path():
     got = values("Revenue was $1.2 billion, up 12.5%.")
     assert 1_200_000_000 in got and 12.5 in got
+
+
+# ---- Slavic and Germanic, the third round ------------------------------------------
+# The 2026-09-03 re-grounding put the remaining parser residue at ~5-6% of claims,
+# dominated by Slavic spelled-out numbers, with a smaller Germanic magnitude gap.
+
+@pytest.mark.parametrize("text,expected", [
+    ("Три человека погибли.", 3),
+    ("Выручка два миллиона рублей.", 2_000_000),
+    ("Около пять тысяч человек.", 5000),
+    ("Tři lidé byli zraněni.", 3),
+    ("Dwa miliony klientow.", 2_000_000),
+    ("Две хиляди души.", 2000),
+])
+def test_slavic_number_words_are_read(text, expected):
+    assert expected in values(text)
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Ongeveer 25,7 miljoen euro.", 25_700_000),
+    ("Een miljard klanten.", 1_000_000_000),
+    ("Rund 20 Millionen Barrel.", 20_000_000),
+    ("Etwa 3 Milliarden Euro.", 3_000_000_000),
+])
+def test_germanic_magnitude_words_are_read(text, expected):
+    assert expected in values(text)
+
+
+def test_the_english_billion_keeps_its_english_value():
+    """Billion is 1e12 in German and 1e9 in English; the shared spelling stays English."""
+    assert 1_200_000_000 in values("Revenue was $1.2 billion.")
+    assert 1_200_000_000_000 not in values("Revenue was $1.2 billion.")
+
+
+# ---- a magnitude named inside the claim's own unit ---------------------------------
+
+def test_a_claim_scaled_by_its_unit_grounds():
+    """Models split a figure across the fields: value 25.7, unit "million euros"."""
+    import types
+    numbers = floor.parse_numbers(floor.normalize("Omzet van 25,7 miljoen euro.").text)
+    assert floor.ground_claim(
+        types.SimpleNamespace(value=25.7, unit="million euros"), numbers)
+
+
+def test_the_unscaled_reading_still_grounds():
+    import types
+    numbers = floor.parse_numbers(floor.normalize("Precies 25.7 procent.").text)
+    assert floor.ground_claim(types.SimpleNamespace(value=25.7, unit="count"), numbers)
+
+
+def test_unit_magnitude_reads_the_scale():
+    assert floor.unit_magnitude("million euros") == 1e6
+    assert floor.unit_magnitude("billion USD") == 1e9
+    assert floor.unit_magnitude("USD") == 1.0
+    assert floor.unit_magnitude(None) == 1.0
+
+
+def test_a_scaled_unit_still_carries_its_currency():
+    import types
+    numbers = floor.parse_numbers(floor.normalize("Omzet van 25,7 miljoen euro.").text)
+    assert floor.ground_claim(
+        types.SimpleNamespace(value=25.7, unit="million euros"), numbers)
+    assert not floor.ground_claim(
+        types.SimpleNamespace(value=25.7, unit="million dollars"), numbers)
+
+
+def test_scaling_does_not_ground_an_unrelated_value():
+    import types
+    numbers = floor.parse_numbers(floor.normalize("Omzet van 25,7 miljoen euro.").text)
+    assert not floor.ground_claim(
+        types.SimpleNamespace(value=99.9, unit="million euros"), numbers)

@@ -77,6 +77,8 @@ JUDGMENT_TOOL = {
 
 ADJUDICATION_PROMPT = (
     "Check each numeric claim against the article below.\n\n"
+    "Dates, times, years and article timestamps are not numeric claims; mark any of "
+    "them unsupported.\n"
     "A claim is supported only if the article states it. Copy the supporting span "
     "verbatim into `evidence`; a span that is not in the article does not count, so "
     "do not paraphrase it. Do not compute, infer, or use outside knowledge: a figure "

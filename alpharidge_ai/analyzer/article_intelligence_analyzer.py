@@ -338,7 +338,10 @@ EXTRACT_CLASSIFY_TOOL = {
                         "0-1: how certain this claim is stated in the article. Be "
                         "honest; a high number on a claim that is not there costs "
                         "more than a low one."},
-                }, "required": ["metric_name", "value", "unit", "confidence"]}},
+                }, "required": ["metric_name", "value", "unit", "confidence"],
+                }, "description":
+                    "Measured quantities only. NOT dates, times, article timestamps, "
+                    "years, quarters, page or channel numbers."},
                 "event_type": {"type": "string", "enum": [e.value for e in EventType]},
                 "event_title": {"type": "string"},
                 "event_date": {"type": "string", "description": "YYYY-MM-DD or null"},
@@ -903,6 +906,39 @@ class ArticleIntelligenceAnalyzer:
                 pass
         return points
 
+    # A claim that is really a date. Dates were 7.2% of extracted claims and no floor
+    # should ground one. Deliberately conservative: dropping an honest measurement
+    # costs a miner credit, while a date that slips through only costs it precision,
+    # so every rule here needs an explicit date signal rather than a resemblance.
+    _DATE_UNITS = {"date", "datetime", "time", "year", "month", "day", "timestamp",
+                   "hour", "hours", "week", "quarter", "yyyy", "dd/mm/yyyy"}
+    _DATE_METRICS = {"date", "datum", "fecha", "data", "time", "hora", "uhrzeit",
+                     "year", "jahr", "ano", "month", "day", "timestamp", "deadline",
+                     "quarter"}
+    _DATE_METRIC_TAIL = ("date", "datum", "fecha", "timestamp", "time")
+    _QUARTER = re.compile(r"^q[1-4](\s|$)", re.I)
+    # A written date needs two separators (28.08.2026) or ISO order (2026-09-03).
+    _DATE_STRING = re.compile(
+        r"^\s*(?:\d{1,4}[./-]\d{1,2}[./-]\d{1,4}|\d{4}-\d{2}-\d{2})\s*$")
+
+    @classmethod
+    def _is_date_claim(cls, raw: dict) -> bool:
+        if str(raw.get("unit") or "").strip().lower() in cls._DATE_UNITS:
+            return True
+
+        metric = str(raw.get("metric_name") or "").strip().lower()
+        words = re.findall(r"[a-z\u00c0-\u024f]+", metric)
+        if cls._QUARTER.match(metric):
+            return True
+        if words and (words[-1] in cls._DATE_METRIC_TAIL
+                      or (len(words) <= 2 and set(words) <= cls._DATE_METRICS)):
+            return True
+
+        # Only a value still written as a date; a float is indistinguishable from a
+        # decimal and is left alone.
+        value = raw.get("value")
+        return isinstance(value, str) and bool(cls._DATE_STRING.match(value))
+
     @staticmethod
     def _confidence(raw, default: float = 0.5) -> float:
         """A stated confidence in [0, 1]. Missing or unusable becomes the neutral value
@@ -914,7 +950,11 @@ class ArticleIntelligenceAnalyzer:
 
     def _build_numeric_claims(self, raw: list) -> List[NumericClaim]:
         claims = []
-        for c in (raw or [])[:MAX_NUMERIC_CLAIMS]:
+        for c in (raw or []):
+            if len(claims) >= MAX_NUMERIC_CLAIMS:
+                break
+            if not isinstance(c, dict) or self._is_date_claim(c):
+                continue
             try:
                 claims.append(NumericClaim(
                     metric_name=c["metric_name"], value=c["value"],

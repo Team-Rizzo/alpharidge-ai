@@ -69,6 +69,18 @@ _WORD_UNITS = {
     "eins": 1, "zwei": 2, "drei": 3, "vier": 4, "funf": 5, "sechs": 6, "sieben": 7,
     "acht": 8, "neun": 9, "zehn": 10, "zwanzig": 20, "dreissig": 30,
     "due": 2, "tre": 3, "quattro": 4, "cinque": 5, "sei": 6, "otto": 8, "nove_it": 9,
+    # ru / uk / bg
+    "один": 1, "одна": 1, "одно": 1, "два": 2, "две": 2, "три": 3, "чотири": 4,
+    "четыре": 4, "пять": 5, "шесть": 6, "семь": 7, "восемь": 8, "девять": 9,
+    "десять": 10, "двадцать": 20, "тридцать": 30, "сорок": 40, "пятьдесят": 50,
+    "едно": 1, "двама": 2, "трима": 3, "чотири_uk": 4, "п'ять": 5,
+    # cs / sk / pl
+    "jedna": 1, "jeden": 1, "dva": 2, "dvě": 2, "dwa": 2, "tři": 3, "trzy": 3,
+    "čtyři": 4, "cztery": 4, "pět": 5, "pięć": 5, "šest": 6, "sześć": 6,
+    "sedm": 7, "siedem": 7, "osm": 8, "osiem": 8, "devět": 9, "dziewięć": 9,
+    "deset": 10, "dziesięć": 10,
+    # nl / de indefinite-article numerals: "een miljard" is "a billion".
+    "een": 1, "ein": 1, "eine": 1,
 }
 
 _WORD_SCALES = {
@@ -79,9 +91,28 @@ _WORD_SCALES = {
     "millions": 1e6, "millionen": 1e6, "milione": 1e6, "milioni": 1e6,
     "billon": 1e9, "bilhao": 1e9, "bilhoes": 1e9, "milliard": 1e9, "milliards": 1e9,
     "miliardi": 1e9, "billions": 1e9,
+    # nl
+    "duizend": 1e3, "miljoen": 1e6, "miljard": 1e9,
+    # de. "Billion" is 1e12 in German and 1e9 in English, so only the unambiguous
+    # German plural is listed; the shared spelling keeps its English value.
+    "billionen": 1e12,
+    # ru / uk / bg
+    "сто": 100, "тысяча": 1e3, "тысячи": 1e3, "тысяч": 1e3, "тисяча": 1e3,
+    "хиляда": 1e3, "хиляди": 1e3,
+    "миллион": 1e6, "миллиона": 1e6, "миллионов": 1e6, "мільйон": 1e6, "милион": 1e6,
+    "миллиард": 1e9, "миллиарда": 1e9, "миллиардов": 1e9, "мільярд": 1e9,
+    "милиард": 1e9,
+    # cs / sk / pl
+    "sto": 100, "tisíc": 1e3, "tysiąc": 1e3, "tysiące": 1e3, "tysięcy": 1e3,
+    "milion": 1e6, "milionů": 1e6, "milionów": 1e6, "miliona": 1e6,
+    "miliarda": 1e9, "miliard": 1e9, "miliardy": 1e9,
+    # Slavic and Germanic decline; the inflected forms are what appears in copy.
+    "miliony": 1e6, "milionu": 1e6, "miliardů": 1e9, "miliardów": 1e9,
+    "milionami": 1e6, "milionach": 1e6,
+    "milliarden": 1e9, "millionens": 1e6, "miljoenen": 1e6, "miljarden": 1e9,
 }
 
-_JOINERS = {"and", "y", "e", "et", "und", "-"}
+_JOINERS = {"and", "y", "e", "et", "und", "en", "i", "а", "и", "-"}
 
 # CJK scale marks. These follow a digit with no space — 3억 is three hundred million,
 # not three — so a digits-only reading is wrong by a factor of the scale rather than
@@ -361,6 +392,22 @@ def parse_numbers(normalized_text: str) -> List[ParsedNumber]:
     return found
 
 
+def unit_magnitude(unit: Optional[str]) -> float:
+    """The scale named inside a unit string.
+
+    Models commonly split a figure between the fields, reporting `value: 25.7` with
+    `unit: "million euros"`. The article says 25,700,000, so the claim has to be scaled
+    by its own unit before it can be matched.
+    """
+    scale = 1.0
+    for word in _WORD_RE.findall((unit or "").lower()):
+        if word in _MAGNITUDES:
+            scale *= _MAGNITUDES[word]
+        elif word in _WORD_SCALES and _WORD_SCALES[word] >= 1e3:
+            scale *= _WORD_SCALES[word]
+    return scale
+
+
 def _unit_class(unit: Optional[str]) -> str:
     u = (unit or "").strip().lower()
     if not u:
@@ -372,6 +419,12 @@ def _unit_class(unit: Optional[str]) -> str:
     for sym, code in _CURRENCY_SYMBOLS.items():
         if sym in u:
             return f"currency:{code}"
+    # "million euros" names a scale and a currency; the currency is the unit.
+    for word in _WORD_RE.findall(u):
+        if word in _CURRENCY_CODES:
+            return f"currency:{word.upper()}"
+        if word in _CURRENCY_WORDS:
+            return f"currency:{_CURRENCY_WORDS[word]}"
     return "count"
 
 
@@ -416,9 +469,16 @@ def ground_claim(claim, numbers: Sequence[ParsedNumber]) -> bool:
         value = float(getattr(claim, "value", None))
     except (TypeError, ValueError):
         return False
-    unit = _unit_class(getattr(claim, "unit", None))
+    raw_unit = getattr(claim, "unit", None)
+    unit = _unit_class(raw_unit)
+
+    scale = unit_magnitude(raw_unit)
+    candidates = [value] if scale == 1.0 else [value, value * scale]
+
     for n in numbers:
-        if _units_compatible(unit, n.unit) and value_grounded(value, n.value):
+        if not _units_compatible(unit, n.unit):
+            continue
+        if any(value_grounded(c, n.value) for c in candidates):
             return True
     return False
 
