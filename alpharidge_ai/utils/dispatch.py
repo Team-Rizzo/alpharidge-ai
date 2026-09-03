@@ -36,6 +36,12 @@ def _slot_limit(tracker, hotkey: str) -> int:
     ration = getattr(tracker, "ration_for", None)
     if ration is not None and ration(hotkey) is not None:
         return max(1, int(tracker.batches_per_epoch(hotkey)))
+    # Selection and reservation have to reach the same number in every combination, or
+    # work is offered and then refused, or offered short. Ask the tracker for its own
+    # limit rather than reconstructing it here from one of the inputs.
+    limit = getattr(tracker, "inflight_limit", None)
+    if limit is not None:
+        return max(1, int(limit(hotkey)))
     return max(1, int(tracker.window(hotkey)))
 
 

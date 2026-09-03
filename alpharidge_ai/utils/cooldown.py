@@ -108,6 +108,18 @@ class MinerCooldownTracker:
 
     # ---- In-flight tracking ----
 
+    def inflight_limit(self, hotkey: str) -> int:
+        """How many dispatches this miner may hold at once.
+
+        One definition, read by both the selector and the reservation. Keeping two
+        copies is how they came to disagree.
+        """
+        if self.ration_for(hotkey) is not None:
+            return max(1, int(self.batches_per_epoch(hotkey)))
+        if self._adaptive_active():
+            return max(1, int(math.floor(self._get_window(hotkey))))
+        return MAX_INFLIGHT_PER_MINER
+
     def try_acquire(self, hotkey: str) -> bool:
         """Returns True if the miner has capacity for another dispatch.
 
@@ -116,12 +128,7 @@ class MinerCooldownTracker:
         cap. Selection and reservation must agree, or work is offered and then refused.
         """
         count = self._inflight.get(hotkey, 0)
-        if self.ration_for(hotkey) is not None:
-            limit = max(1, int(self.batches_per_epoch(hotkey)))
-        elif self._adaptive_active():
-            limit = max(1, int(math.floor(self._get_window(hotkey))))
-        else:
-            limit = MAX_INFLIGHT_PER_MINER
+        limit = self.inflight_limit(hotkey)
         if count >= limit:
             return False
         self._inflight[hotkey] = count + 1

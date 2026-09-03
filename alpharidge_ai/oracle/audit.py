@@ -34,14 +34,23 @@ def _values_match(a: float, b: float) -> bool:
 
 
 def claims_match(left, right) -> bool:
-    """Two claims describe the same fact: same metric, same unit class, same value."""
+    """Two claims describe the same fact: same metric, same unit, same magnitude.
+
+    The unit's *class* is not enough. "1 million" and "1" share the class `count`, so
+    comparing only that let a submitter match a reference claim of one while asserting a
+    million — the same free-validity path the floor closes, reached through the
+    reference route instead.
+    """
     try:
         lv, rv = float(getattr(left, "value")), float(getattr(right, "value"))
     except (TypeError, ValueError):
         return False
-    if floor._unit_class(getattr(left, "unit", None)) != \
-            floor._unit_class(getattr(right, "unit", None)):
+    lu, ru = getattr(left, "unit", None), getattr(right, "unit", None)
+    if floor._unit_class(lu) != floor._unit_class(ru):
         return False
+    # Compare what each claim actually asserts, scale included.
+    lv *= floor.unit_magnitude(lu)
+    rv *= floor.unit_magnitude(ru)
     if _metric(getattr(left, "metric_name", None)) != \
             _metric(getattr(right, "metric_name", None)):
         return False
