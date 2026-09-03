@@ -5,7 +5,7 @@ import types
 import pytest
 
 from alpharidge_ai.mechanism import profile as mp
-from alpharidge_ai.oracle import floor, runner
+from alpharidge_ai.oracle import audit, floor, runner
 from tests.test_profile_client import valid
 
 TEXT = "NVDA rose sharply after the quarterly report was published today."
@@ -72,14 +72,14 @@ def test_the_real_asset_model_is_read():
     assert "ticker" in AssetSentiment.model_fields
     assert "symbol" not in AssetSentiment.model_fields
     a = asset("NVDA", ["NVDA"])
-    assert floor._surface_form(a) == "NVDA"
+    assert floor.asset_form(a) == "NVDA"
 
 
 def test_the_real_entity_model_is_read():
     """The production model carries name, not canonical_name."""
     assert "name" in ExtractedEntity.model_fields
     assert "canonical_name" not in ExtractedEntity.model_fields
-    assert floor._surface_form(entity("Nvidia", [])) == "Nvidia"
+    assert floor.entity_form(entity("Nvidia", [])) == "Nvidia"
 
 
 def test_production_assets_reach_keeper_scoring_at_all():
@@ -150,3 +150,39 @@ def test_it_is_still_rejected_when_it_is_not_a_boolean():
     raw["settlement"]["floor_gating"] = "yes"
     with pytest.raises(mp.ProfileError):
         mp.parse(raw)
+
+
+def test_an_entity_with_a_ticker_is_named_by_its_name():
+    """ExtractedEntity has an optional ticker; the grader answers with names, so the
+    name is the identity. Naming it by ticker scored honest submissions at zero."""
+    e = ExtractedEntity.model_construct(name="Nvidia", entity_type="organization",
+                                        ticker="NVDA")
+    assert floor.entity_form(e) == "Nvidia"
+    sub = intel(entities=[e])
+    assert runner._judgment_fields(sub, None)["entities"] == ["nvidia"]
+
+
+def test_an_asset_is_named_by_its_ticker():
+    a = AssetSentiment.model_construct(ticker="NVDA", asset_name="Nvidia Corp")
+    assert floor.asset_form(a) == "NVDA"
+    assert runner._judgment_fields(intel([a]), None)["assets"] == ["NVDA"]
+
+
+def _claim(value, unit):
+    return types.SimpleNamespace(value=value, unit=unit, metric_name="margin",
+                                 context="")
+
+
+def test_basis_points_do_not_ground_against_a_percentage():
+    text = "Margin expanded 12.5% in the quarter."
+    sub = types.SimpleNamespace(numeric_claims=[_claim(12.5, "bps")])
+    result = floor.evaluate(sub, text)
+    assert result.grounded == set()
+    assert audit.adjudicate(sub.numeric_claims, [], result.grounded,
+                            text, None).valid == set()
+
+
+def test_basis_points_still_match_the_percentage_they_equal():
+    assert audit.claims_match(_claim(50, "bps"), _claim(0.5, "%"))
+    assert not audit.claims_match(_claim(50, "bps"), _claim(50, "%"))
+    assert not audit.claims_match(_claim(12.5, "basis_points"), _claim(12.5, "pct"))

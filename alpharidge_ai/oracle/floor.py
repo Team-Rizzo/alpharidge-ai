@@ -31,6 +31,8 @@ _MAGNITUDES = {
     "t": 1e12, "tn": 1e12, "trillion": 1e12,
 }
 
+BASIS_POINT = 0.01  # of a percentage point
+
 _CURRENCY_SYMBOLS = {"$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY", "₹": "INR"}
 _CURRENCY_CODES = {"usd", "eur", "gbp", "jpy", "cny", "inr", "chf", "cad", "aud", "krw"}
 _CURRENCY_PROXIMITY = 12
@@ -413,13 +415,20 @@ def unit_magnitude(unit: Optional[str]) -> float:
     Models commonly split a figure between the fields, reporting `value: 25.7` with
     `unit: "million euros"`. The article says 25,700,000, so the claim has to be scaled
     by its own unit before it can be matched.
+
+    A basis point is a hundredth of a percentage point, and both sit in the same unit
+    class, so the scale has to be carried here or the two compare equal.
     """
+    text = (unit or "").lower().replace("_", " ")
     scale = 1.0
-    for word in _WORD_RE.findall((unit or "").lower()):
+    for word in _WORD_RE.findall(text):
         if word in _MAGNITUDES:
             scale *= _MAGNITUDES[word]
         elif word in _WORD_SCALES and _WORD_SCALES[word] >= 1e3:
             scale *= _WORD_SCALES[word]
+    words = set(_WORD_RE.findall(text))
+    if words & {"bps", "bp"} or "basis point" in text:
+        scale *= BASIS_POINT
     return scale
 
 
@@ -629,13 +638,23 @@ def _overlap_fraction(a: Tuple[int, int], b: Tuple[int, int]) -> float:
 
 # ---- evidence spans ---------------------------------------------------------------
 
-def _surface_form(item) -> Optional[str]:
-    """The name an asset or entity goes by, whichever field carries it."""
-    for attr in ("ticker", "asset_name", "name", "symbol", "canonical_name"):
+def _first_attr(item, attrs) -> Optional[str]:
+    for attr in attrs:
         value = getattr(item, attr, None)
         if value:
             return str(value)
     return None
+
+
+def asset_form(item) -> Optional[str]:
+    """What an asset is called. AssetSentiment carries ticker and asset_name."""
+    return _first_attr(item, ("ticker", "asset_name", "symbol", "name"))
+
+
+def entity_form(item) -> Optional[str]:
+    """What an entity is called. ExtractedEntity carries name, and optionally a
+    ticker — the name is the identity, since that is what a grader returns."""
+    return _first_attr(item, ("name", "canonical_name", "asset_name", "ticker"))
 
 
 def span_supported(article: Normalized, span: Optional[str],
@@ -773,10 +792,7 @@ def evaluate(intel, article_text: str, *,
             spans = [single] if single else []
         if not spans:
             continue
-        # Production field names first: AssetSentiment carries ticker/asset_name and
-        # ExtractedEntity carries name. The others are accepted so the helper works on
-        # either shape rather than silently returning nothing on one of them.
-        surface = _surface_form(item)
+        surface = asset_form(item) if i < len(assets) else entity_form(item)
         # One span that carries context is enough to evidence the item.
         if not any(span_supported(article, s, surface) for s in spans):
             result.span_failures.add(i)
