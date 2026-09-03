@@ -937,11 +937,13 @@ class ArticleIntelligenceAnalyzer:
         # metric is called: "delivery time: 2 weeks" measures a span, not an instant.
         # The unit settles it, so this comes before the metric-name rules.
         if unit in cls._CALENDAR_UNITS:
-            value = raw.get("value")
-            looks_like_a_year = (isinstance(value, (int, float))
-                                 and 1900 <= float(value) <= 2100
-                                 and float(value) == int(float(value)))
-            return bool(looks_like_a_year)
+            # Models send years as numbers and as strings; pydantic coerces the
+            # string later, so checking only the numeric form lets half of them past.
+            try:
+                number = float(str(raw.get("value")).strip())
+            except (TypeError, ValueError):
+                return False
+            return 1900 <= number <= 2100 and number == int(number)
         words = re.findall(r"[a-z\u00c0-\u024f]+", metric)
         if cls._QUARTER.match(metric):
             return True

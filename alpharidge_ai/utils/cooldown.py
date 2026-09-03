@@ -111,11 +111,14 @@ class MinerCooldownTracker:
     def try_acquire(self, hotkey: str) -> bool:
         """Returns True if the miner has capacity for another dispatch.
 
-        Static limit (``MAX_INFLIGHT_PER_MINER``) unless this is the adaptive tracker
-        and the flag is on, in which case the per-miner window governs.
+        Under an earned ration the limit is the ration, matching what dispatch
+        selection already allowed. Otherwise the adaptive window governs, or the static
+        cap. Selection and reservation must agree, or work is offered and then refused.
         """
         count = self._inflight.get(hotkey, 0)
-        if self._adaptive_active():
+        if self.ration_for(hotkey) is not None:
+            limit = max(1, int(self.batches_per_epoch(hotkey)))
+        elif self._adaptive_active():
             limit = max(1, int(math.floor(self._get_window(hotkey))))
         else:
             limit = MAX_INFLIGHT_PER_MINER

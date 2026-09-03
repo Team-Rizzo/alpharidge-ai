@@ -208,6 +208,15 @@ class ParsedNumber:
     # so an inferred candidate must not confer automatic validity — it only says the
     # claim is worth adjudicating instead of being rejected outright.
     literal: bool = True
+    # True when this value came from a digit carrying a CJK scale mark. Only such
+    # components may be summed into a compound; a scale mark merely sitting nearby is
+    # not evidence that these two numbers are one figure.
+    scaled: bool = False
+
+
+def _has_cjk_scale_at(text: str, end: int) -> bool:
+    """Whether a number ending at `end` is immediately followed by a scale mark."""
+    return end < len(text) and text[end] in _CJK_SCALES
 
 
 def _cjk_scale_after(text: str, end: int) -> Tuple[float, int]:
@@ -368,6 +377,7 @@ def parse_numbers(normalized_text: str) -> List[ParsedNumber]:
     found: List[ParsedNumber] = []
 
     def emit(value: float, start: int, end: int, literal: bool = True) -> None:
+        cjk_scaled = _has_cjk_scale_at(normalized_text, end)
         mag, mag_end = _magnitude_after(normalized_text, end)
         value *= mag
         after = normalized_text[mag_end:mag_end + 2]
@@ -377,7 +387,7 @@ def parse_numbers(normalized_text: str) -> List[ParsedNumber]:
             code = _currency_near(normalized_text, start, mag_end)
             unit = f"currency:{code}" if code else "count"
         found.append(ParsedNumber(value=value, unit=unit, offset=start,
-                                  literal=literal))
+                                  literal=literal, scaled=cjk_scaled))
 
     for m in _NUMBER_RE.finditer(normalized_text):
         for i, value in enumerate(_readings(m.group(0))):
@@ -389,12 +399,10 @@ def parse_numbers(normalized_text: str) -> List[ParsedNumber]:
     # Descending CJK-scaled parts written next to each other are one figure: 1조 2천억
     # is 1.2 trillion. Only where scale marks are actually present — otherwise "100 and
     # 20" would offer 120, which is in no sense in the text. Inferred either way.
-    scaled = [n for n in found if n.unit != "pct" and n.literal]
+    scaled = [n for n in found if n.unit != "pct" and n.literal and n.scaled]
     for a, b in zip(scaled, scaled[1:]):
         span = normalized_text[a.offset:b.offset]
         if not (0 < len(span) <= 8 and a.value > b.value > 0):
-            continue
-        if not any(c in _CJK_SCALES for c in normalized_text[a.offset:b.offset + 8]):
             continue
         found.append(ParsedNumber(value=a.value + b.value, unit=a.unit,
                                   offset=a.offset, literal=False))
@@ -492,14 +500,19 @@ def ground_kind(claim, numbers: Sequence[ParsedNumber]):
     unit = _unit_class(raw_unit)
 
     scale = unit_magnitude(raw_unit)
-    candidates = [value] if scale == 1.0 else [value, value * scale]
+    # A unit naming a scale leaves the claim ambiguous: "25.7" with unit "million
+    # euros" is either 25.7 million or 25.7 labelled loosely. Which one the submitter
+    # meant is a guess, and the submitter wrote the unit — so neither reading is
+    # evidence, and both are adjudicated.
+    ambiguous = scale != 1.0
+    candidates = [value] if not ambiguous else [value, value * scale]
 
     best = None
     for n in numbers:
         if not _units_compatible(unit, n.unit):
             continue
         if any(value_grounded(c, n.value) for c in candidates):
-            if n.literal:
+            if n.literal and not ambiguous:
                 return "literal"
             best = "inferred"
     return best

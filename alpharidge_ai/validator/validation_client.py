@@ -126,7 +126,8 @@ class ValidationClient:
             f"{context}")
         return np.array(vector, dtype=np.float64)
 
-    def _shadow_settlement(self, rewards, live_weights, epoch: int) -> None:
+    def _shadow_settlement(self, rewards, live_weights, epoch: int,
+                           window_blocks: int = None) -> None:
         """Compute what the capacity formula would pay, and log the difference.
 
         Log-only. Weights on chain still come from the live path; this exists so the
@@ -137,9 +138,14 @@ class ValidationClient:
             if profile is None or profile.settlement.live:
                 return
 
-            window_k = config.weight_window_epochs(self._validator.block)
+            # The same populated span the live path used. The configured window can be
+            # wider than the epochs actually present, and scaling by it would report a
+            # burn that the live calculation never saw.
+            epochs = (max(1.0, float(window_blocks) / float(config.BLOCK_LENGTH))
+                      if window_blocks
+                      else float(max(1, config.weight_window_epochs(self._validator.block))))
             work = {r.hotkey: float(r.reward) for r in (rewards or [])}
-            result = settlement.settle(work, profile.settlement.C * max(1, window_k))
+            result = settlement.settle(work, profile.settlement.C * epochs)
 
             hotkeys = list(self._validator.metagraph.hotkeys)
             shadow = settlement.weight_vector(result.shares, result.burn, hotkeys,
@@ -943,7 +949,8 @@ class ValidationClient:
                         weights = self._weights_for(rewards, window_blocks, context)
                         bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
                         self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())
-                        self._shadow_settlement(rewards, weights, int(target_epoch))
+                        self._shadow_settlement(rewards, weights, int(target_epoch),
+                                                window_blocks)
                         self._last_weight_epoch = target_epoch
                         self._log_shadow_window(target_epoch)
 
