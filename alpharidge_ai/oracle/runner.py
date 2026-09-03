@@ -35,14 +35,25 @@ def _enum(value) -> Optional[str]:
     return str(getattr(value, "value", value)).lower()
 
 
-def _judgment_fields(intel) -> Dict:
+def _judgment_fields(intel, floor_result=None) -> Dict:
+    """The fields a keeper article is scored on.
+
+    Items whose evidence span did not hold are left out: an asset a submission cannot
+    point to in the text is not something it found.
+    """
+    dropped_assets = getattr(floor_result, "unevidenced_assets", set()) or set()
+    dropped_entities = getattr(floor_result, "unevidenced_entities", set()) or set()
+
     fields = {f: _enum(getattr(intel, f, None)) for f in JUDGMENT_FIELDS}
     fields["assets"] = sorted({str(getattr(a, "symbol", "") or "").upper()
                                for a in (getattr(intel, "assets", None) or [])
-                               if getattr(a, "symbol", None)})
+                               if getattr(a, "symbol", None)
+                               and str(a.symbol).strip().lower() not in dropped_assets})
     fields["entities"] = sorted({str(getattr(e, "canonical_name", "") or "").lower()
                                  for e in (getattr(intel, "entities", None) or [])
-                                 if getattr(e, "canonical_name", None)})
+                                 if getattr(e, "canonical_name", None)
+                                 and str(e.canonical_name).strip().lower()
+                                 not in dropped_entities})
     return fields
 
 
@@ -122,7 +133,7 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
 
     if choice.slice == selector.KEEPER:
         return _keeper(article_id, article_text, miner_intel, choice, grader,
-                       oracle.keeper_weight)
+                       oracle.keeper_weight, floor_result)
 
     adjudicator = None
     if grader is not None and choice.grader_model:
@@ -156,7 +167,7 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
 
 
 def _keeper(article_id, article_text, miner_intel, choice, grader,
-            keeper_weight: float) -> Optional[Observation]:
+            keeper_weight: float, floor_result=None) -> Optional[Observation]:
     """Judgment agreement, for articles with no claims to check.
 
     Not rescaled by how well models agree with themselves: the same ceiling applies to
@@ -166,7 +177,8 @@ def _keeper(article_id, article_text, miner_intel, choice, grader,
     if grader is None or not choice.grader_model:
         return None
     reply = _normalise_reply(grader.judge(article_text, choice.grader_model) or {})
-    agreement = scoring.keeper_agreement(_judgment_fields(miner_intel), reply)
+    agreement = scoring.keeper_agreement(
+        _judgment_fields(miner_intel, floor_result), reply)
     if agreement is None:
         return None
     return Observation(article_id=int(article_id), score=float(agreement),

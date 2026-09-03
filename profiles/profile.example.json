@@ -4,7 +4,9 @@
   "activation_block": 0,
   "schema_version": "1.2.0",
   "settlement": {
-    "C": 1.0
+    "C": 1.0,
+    "floor_gating": true,
+    "live": false
   },
   "emission": {
     "midpoint": 0.5,

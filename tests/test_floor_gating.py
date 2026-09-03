@@ -78,15 +78,16 @@ def test_the_sweep_never_raises_on_a_malformed_article():
 
 # ---- the flag ---------------------------------------------------------------------
 
-def test_gating_is_a_profile_field_and_defaults_off():
-    """It changes credited volume, so it lands with everything else at one block."""
+def test_gating_is_a_profile_field_and_defaults_on():
+    """Unlike the other switches this withholds pay for work that failed a check, so it
+    does not wait for the flip. Turning it off is possible but must be deliberate."""
     from alpharidge_ai.mechanism import profile as mp
     from tests.test_profile_client import valid
-    assert mp.parse(valid()).settlement.floor_gating is False
+    assert mp.parse(valid()).settlement.floor_gating is True
 
     raw = valid()
-    raw["settlement"]["floor_gating"] = True
-    assert mp.parse(raw).settlement.floor_gating is True
+    raw["settlement"]["floor_gating"] = False
+    assert mp.parse(raw).settlement.floor_gating is False
 
 
 def test_gating_has_no_local_switch():

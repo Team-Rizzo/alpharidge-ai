@@ -695,6 +695,10 @@ class FloorResult:
     aligned_quotes: Dict[int, Tuple[int, int]] = field(default_factory=dict)
     rejected_quotes: Set[int] = field(default_factory=set)
     span_failures: Set[int] = field(default_factory=set)
+    # Surface forms whose evidence did not hold. Excluded from the scored sets, so a
+    # claimed asset with no proof earns nothing rather than being recorded and ignored.
+    unevidenced_assets: Set[str] = field(default_factory=set)
+    unevidenced_entities: Set[str] = field(default_factory=set)
 
     @property
     def quote_keys(self) -> Set[Tuple[int, int]]:
@@ -752,8 +756,8 @@ def evaluate(intel, article_text: str, *,
         accepted.append(span)
         result.aligned_quotes[i] = span
 
-    for i, item in enumerate(list(getattr(intel, "assets", None) or []) +
-                             list(getattr(intel, "entities", None) or [])):
+    assets = list(getattr(intel, "assets", None) or [])
+    for i, item in enumerate(assets + list(getattr(intel, "entities", None) or [])):
         spans = getattr(item, "evidence_spans", None)
         if spans is None:
             single = getattr(item, "evidence_span", None) or getattr(item, "evidence", None)
@@ -765,5 +769,10 @@ def evaluate(intel, article_text: str, *,
         # One span that carries context is enough to evidence the item.
         if not any(span_supported(article, s, surface) for s in spans):
             result.span_failures.add(i)
+            if surface:
+                # E18: a failed span fails that item's correctness gate, not the
+                # article. Recorded by surface form so the scorer can drop it.
+                (result.unevidenced_assets if i < len(assets)
+                 else result.unevidenced_entities).add(str(surface).strip().lower())
 
     return result

@@ -13,11 +13,16 @@ def _profile(**switches):
     return mp.parse(raw)
 
 
-def test_every_switch_defaults_off():
+def test_the_switches_that_change_economics_default_off():
     p = mp.parse(valid())
     assert p.oracle.live is False
-    assert p.settlement.floor_gating is False
+    assert p.settlement.live is False
     assert p.rations.dispatch is False
+
+
+def test_floor_gating_is_the_exception_and_defaults_on():
+    """It only stops paying for work that failed a check, so it ships early and alone."""
+    assert mp.parse(valid()).settlement.floor_gating is True
 
 
 def test_the_switches_arrive_together_at_one_block():
@@ -28,18 +33,18 @@ def test_the_switches_arrive_together_at_one_block():
     raw["publish_block"] = 19_000
     raw["activation_block"] = 20_000
     raw["oracle"]["live"] = True
-    raw["settlement"]["floor_gating"] = True
+    raw["settlement"]["live"] = True
     raw["rations"]["dispatch"] = True
 
     resolver = mp.ProfileResolver(current=before, refresh_seconds=3600)
     assert resolver.offer(raw)[0]
 
     at = resolver.resolve(19_999)
-    assert (at.oracle.live, at.settlement.floor_gating, at.rations.dispatch) == \
+    assert (at.oracle.live, at.settlement.live, at.rations.dispatch) == \
         (False, False, False)
 
     after = resolver.resolve(20_000)
-    assert (after.oracle.live, after.settlement.floor_gating, after.rations.dispatch) == \
+    assert (after.oracle.live, after.settlement.live, after.rations.dispatch) == \
         (True, True, True)
 
 

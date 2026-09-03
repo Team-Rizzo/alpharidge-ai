@@ -94,14 +94,18 @@ def _int(section: str, d: dict, key: str, lo: int, hi: int) -> int:
 @dataclass(frozen=True)
 class Settlement:
     C: float
-    floor_gating: bool = False
+    # Credit volume per article that clears the floor. Unlike the other switches this
+    # withholds pay for work that failed a check rather than changing how pay is
+    # computed, so it belongs on early and on its own — there is no operating state in
+    # which paying for articles that failed the floor is wanted.
+    floor_gating: bool = True
     live: bool = False
 
     @staticmethod
     def parse(d: dict) -> "Settlement":
         return Settlement(
             C=_num("settlement", d, "C", 0.0, 1e15, lo_open=True),
-            floor_gating=_bool("settlement", d, "floor_gating"),
+            floor_gating=_bool("settlement", d, "floor_gating", default=True),
             live=_bool("settlement", d, "live"),
         )
 
