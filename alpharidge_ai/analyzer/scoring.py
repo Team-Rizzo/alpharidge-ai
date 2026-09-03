@@ -1532,9 +1532,7 @@ def _floor_sweep(miner_batch, reference_by_id=None, *, block: int = 0,
             results[aid] = False
             continue
 
-        # After the cutover block a submission on the old schema earns nothing. Merely
-        # declining to audit it would freeze its reputation while volume kept paying,
-        # which rewards not upgrading.
+        # After the cutover block a submission on the old schema earns nothing.
         if schema_cutover_block:
             verdict = schema_gate.evaluate(
                 getattr(intel, "schema_version", None), block=int(block),
@@ -1719,10 +1717,8 @@ def validate_miner_article_intelligence_batch(
                 bt.logging.debug(
                     f"[FAITHFULNESS] skipped id={getattr(src, 'id', '?')} — content too short")
 
-    # Keyed audit over the rest of the batch. The random sample above decides whether
-    # the batch is accepted; which articles are watched for QUALITY is decided by the
-    # key instead, because a random draw settles a reputation more slowly than a hotkey
-    # tends to last. Capped per batch so one batch cannot run unbounded analyses.
+    # The random sample above decides batch acceptance; quality auditing is selected
+    # by key. Capped per batch so one batch cannot run unbounded analyses.
     if auditor is not None:
         already = {int(getattr(a, "id", 0)) for a in sampled}
         cap = int(_cfg_get("AUDIT_MAX_PER_BATCH", 4))

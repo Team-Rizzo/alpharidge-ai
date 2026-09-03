@@ -1,9 +1,4 @@
-"""Fixes for the fourth review.
-
-Finding 1 is the same exploit class for the fourth consecutive pass: a submitter-chosen
-value reaching validity without a grader. The floor route was closed; the reference-match
-route beside it was not.
-"""
+"""Claim matching compares magnitude, and the dispatch limit has one definition."""
 
 import types
 
@@ -21,7 +16,7 @@ def claim(value, unit, metric="revenue"):
 # ---- 1. the reference route compares magnitude, not just unit class ----------------
 
 def test_a_scaled_unit_cannot_match_an_unscaled_reference():
-    """"1 million" and "1" share the class `count`; only one of them is a million."""
+    """"1 million" and "1" share the unit class `count`."""
     assert not audit.claims_match(claim(1.0, "million"), claim(1.0, "count"))
 
 

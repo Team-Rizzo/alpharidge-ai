@@ -39,7 +39,7 @@ def ration_of(state, epoch=POST_BOOST_EPOCH, supply=10_000.0):
                       explore_epoch=EXPLORE_E, boost_tranche_max=0.05)["m"]
 
 
-# ---- the red-team invariant -------------------------------------------------------
+# ---- standing advances on validated delivery ---------------------------------------
 
 def test_occupying_slots_without_delivering_grows_nothing():
     """Filling every slot with work that fails the floor earns nothing."""

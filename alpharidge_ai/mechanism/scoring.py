@@ -1,8 +1,8 @@
 """Per-article scoring: F1 against an independent claim set, times calibration.
 
-The recall denominator is the grader's own claim set, so it is not something the
-submission can shrink. Precision is measured against that set plus whatever the grader
-separately accepted, so finding something the grader missed is not punished.
+Recall is measured against the grader's own claim set. Precision is measured against
+that set plus whatever the grader separately accepted, so finding something the grader
+missed is not punished.
 
 Confidence is scored under a proper rule: a high number on a claim that does not hold
 costs more than an honest low one. Knowing which of your own claims are solid is the

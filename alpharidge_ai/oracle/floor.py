@@ -204,9 +204,8 @@ class ParsedNumber:
     unit: str          # "pct" | "currency:XXX" | "count" | "none"
     offset: int
     # False when the value was inferred rather than read: a compound sum, or the
-    # second reading of an ambiguous grouping mark. A submitter chooses what to claim,
-    # so an inferred candidate must not confer automatic validity — it only says the
-    # claim is worth adjudicating instead of being rejected outright.
+    # second reading of an ambiguous grouping mark. Inferred candidates are adjudicated
+    # rather than granted.
     literal: bool = True
     # True when this value came from a digit carrying a CJK scale mark. Only such
     # components may be summed into a compound; a scale mark merely sitting nearby is
@@ -265,9 +264,8 @@ def _readings(token: str) -> List[float]:
     """Every plausible value for a numeric run.
 
     `1,203` is one thousand two hundred and three to an English writer and one point
-    two zero three to a French one, and the text does not say which. The floor asks
-    whether a claim appears in the article, so it takes both: a wrong reading adds a
-    candidate nobody claims, while a missing one denies an honest claim.
+    two zero three to a French one, and the text does not say which, so both are
+    emitted. Readings beyond the first are marked inferred.
     """
     raw = token.strip().replace("\u00a0", " ").replace(" ", "")
     sign = -1.0 if raw.startswith("-") else 1.0

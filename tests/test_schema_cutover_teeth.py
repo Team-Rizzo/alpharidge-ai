@@ -1,9 +1,6 @@
-"""The cutover has to cost something, or ignoring it is the better strategy.
+"""After the cutover block, a submission on the old schema earns nothing.
 
-Declining to audit an old submission while still paying it for volume freezes its
-reputation and stops its work being checked. A miner with a good score would be
-rewarded for not upgrading. §E5 says the old schema fails the floor after the block;
-this is that.
+§E5: the old schema fails the floor, not merely the audit.
 """
 
 import types

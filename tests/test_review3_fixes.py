@@ -1,5 +1,4 @@
-"""Fixes for the third review. Each of these was a fix that repaired the reported
-example without covering the category it belonged to."""
+"""Unit-scaled claims, CJK compound sums, dispatch limits, and year handling."""
 
 import types
 
@@ -23,8 +22,7 @@ def values(text):
 # ---- 1. a scale named in the unit makes the claim ambiguous ------------------------
 
 def test_a_unit_scale_never_grants_automatic_validity():
-    """value=1 unit="million" against a bare 1 asserts a million and would have been
-    granted with no grader."""
+    """value=1 with unit "million" asserts a million; a bare 1 is not that."""
     assert kind("There was about 1 person.", 1.0, "million") == "inferred"
 
 

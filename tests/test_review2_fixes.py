@@ -99,7 +99,7 @@ def test_a_quote_that_cannot_be_located_is_not_emitted():
 
 
 def test_an_unaligned_quote_still_counts_against_precision():
-    """Dropping it from the denominator would make a fabricated quote free."""
+    """Every submitted quote stays in the denominator."""
     miner = types.SimpleNamespace(quotes=[
         types.SimpleNamespace(text="margins should recover", confidence=0.9),
         types.SimpleNamespace(text="invented entirely", confidence=0.9)])

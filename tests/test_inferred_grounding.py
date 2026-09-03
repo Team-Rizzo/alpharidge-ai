@@ -1,9 +1,7 @@
 """A reading the parser inferred is not evidence the article states the figure.
 
-The parser emits derived candidates — the second reading of an ambiguous grouping mark,
-and CJK compound sums — to keep honest claims from being denied. But a submitter chooses
-what to claim, so granting automatic validity to a derived candidate hands it a value it
-can aim at. Derived matches are adjudicated instead.
+Derived candidates — the second reading of an ambiguous grouping mark, and CJK compound
+sums — keep honest claims from being denied. They are adjudicated, not granted.
 """
 
 import types

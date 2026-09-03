@@ -34,12 +34,9 @@ def _values_match(a: float, b: float) -> bool:
 
 
 def claims_match(left, right) -> bool:
-    """Two claims describe the same fact: same metric, same unit, same magnitude.
+    """Two claims describe the same fact: same metric, same unit class, same magnitude.
 
-    The unit's *class* is not enough. "1 million" and "1" share the class `count`, so
-    comparing only that let a submitter match a reference claim of one while asserting a
-    million — the same free-validity path the floor closes, reached through the
-    reference route instead.
+    Magnitude, not just class: "1 million" and "1" share the class `count`.
     """
     try:
         lv, rv = float(getattr(left, "value")), float(getattr(right, "value"))
@@ -142,9 +139,8 @@ def adjudicate(miner_claims: Sequence, grader_claims: Sequence,
         if i in grounded:
             result.valid.add(key)
         else:
-            # Includes claims that matched only an inferred reading. Plausible, but the
-            # reading rested on a guess this parser made, and the submitter chose what
-            # to claim — so it is adjudicated rather than granted.
+            # Includes claims that matched only an inferred reading; those are
+            # adjudicated rather than granted.
             residual.append(i)
 
     if residual and adjudicator is not None:

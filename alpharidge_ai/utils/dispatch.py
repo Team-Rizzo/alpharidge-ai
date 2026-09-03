@@ -31,14 +31,12 @@ def _slot_limit(tracker, hotkey: str) -> int:
     adaptive window, so a UID whose ration exceeds one batch can hold several.
     """
     # Only when a ration is actually in force. The source is installed at startup and
-    # returns None until its switch is published, so its mere presence says nothing —
-    # keying on that capped every miner at one batch before the switch was ever set.
+    # returns None until its switch is published, so its presence says nothing.
     ration = getattr(tracker, "ration_for", None)
     if ration is not None and ration(hotkey) is not None:
         return max(1, int(tracker.batches_per_epoch(hotkey)))
-    # Selection and reservation have to reach the same number in every combination, or
-    # work is offered and then refused, or offered short. Ask the tracker for its own
-    # limit rather than reconstructing it here from one of the inputs.
+    # Selection and reservation must reach the same number, so ask the tracker for its
+    # limit rather than reconstructing it from one of the inputs.
     limit = getattr(tracker, "inflight_limit", None)
     if limit is not None:
         return max(1, int(limit(hotkey)))

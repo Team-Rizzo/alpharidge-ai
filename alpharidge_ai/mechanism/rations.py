@@ -2,7 +2,7 @@
 
 A ration is per-UID and identity-agnostic, driven only by that UID's own demonstrated
 delivery. It advances on work that cleared the floor, never on what was submitted or on
-how many slots were occupied: submission is chosen by the sender, delivery is not.
+how many slots were occupied.
 
 Every UID keeps a floor, so a UID with no history is treated as small rather than as
 failed, and a new one starts above that floor and decays to it.
