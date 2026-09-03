@@ -338,6 +338,33 @@ class ProfileResolver:
     def min_lead(self) -> int:
         return min_lead_blocks(self.refresh_seconds)
 
+    def adopt(self, raw: dict, block: int,
+              verify: Optional[VerifyFn] = None) -> Tuple[bool, str]:
+        """Take a profile already in force, rather than staging it as the next one.
+
+        A validator starting up is handed both the active profile and any staged
+        successor. Routing both through offer() would put the active one in the single
+        `next` slot and then overwrite it, leaving nothing in force at all.
+        """
+        try:
+            candidate = parse(raw)
+        except ProfileError as e:
+            return False, f"invalid: {e}"
+        if verify is not None:
+            if not candidate.signature:
+                return False, "unsigned"
+            if not verify(signing_payload(raw), candidate.signature):
+                return False, "bad_signature"
+        if candidate.activation_block > int(block):
+            return False, f"not_yet_active(at={candidate.activation_block})"
+        if self.current is not None and candidate.version <= self.current.version:
+            return False, f"stale_version(have={self.current.version})"
+
+        self.current = candidate
+        if self.next is not None and self.next.version <= candidate.version:
+            self.next = None
+        return True, f"adopted(version={candidate.version})"
+
     def offer(self, raw: dict, verify: Optional[VerifyFn] = None) -> Tuple[bool, str]:
         """Consider a fetched profile. Returns (accepted, reason).
 

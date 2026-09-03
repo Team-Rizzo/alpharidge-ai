@@ -30,9 +30,12 @@ def _slot_limit(tracker, hotkey: str) -> int:
     Under earned rations the cap comes from what the UID has delivered, not from the
     adaptive window, so a UID whose ration exceeds one batch can hold several.
     """
-    per_epoch = getattr(tracker, "batches_per_epoch", None)
-    if per_epoch is not None and getattr(tracker, "_ration_source", None) is not None:
-        return max(1, int(per_epoch(hotkey)))
+    # Only when a ration is actually in force. The source is installed at startup and
+    # returns None until its switch is published, so its mere presence says nothing —
+    # keying on that capped every miner at one batch before the switch was ever set.
+    ration = getattr(tracker, "ration_for", None)
+    if ration is not None and ration(hotkey) is not None:
+        return max(1, int(tracker.batches_per_epoch(hotkey)))
     return max(1, int(tracker.window(hotkey)))
 
 

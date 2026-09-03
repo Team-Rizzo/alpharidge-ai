@@ -109,15 +109,21 @@ class ValidationClient:
             return calculate_weights(rewards, self._validator.metagraph,
                                      window_blocks, context=context)
 
+        # Capacity is points per epoch; the rewards span the whole weight window. The
+        # legacy path divides by the window too. Comparing a window total against one
+        # epoch of capacity would make burn a function of window length rather than of
+        # work, so capacity is scaled to the same span.
+        epochs = max(1.0, float(window_blocks) / float(config.BLOCK_LENGTH))
         work = {r.hotkey: float(r.reward) for r in (rewards or [])}
-        result = settlement.settle(work, profile.settlement.C)
+        result = settlement.settle(work, profile.settlement.C * epochs)
         hotkeys = list(self._validator.metagraph.hotkeys)
         size = int(getattr(self._validator.metagraph, "n", len(hotkeys)))
         vector = settlement.weight_vector(result.shares, result.burn, hotkeys,
                                           int(config.BURN_UID), size)
         bt.logging.info(
             f"[SETTLEMENT] live W={result.work:.0f} C={result.capacity:.0f} "
-            f"burn={result.burn:.4f} paid={result.paid:.4f} {context}")
+            f"({epochs:.0f} epochs) burn={result.burn:.4f} paid={result.paid:.4f} "
+            f"{context}")
         return np.array(vector, dtype=np.float64)
 
     def _shadow_settlement(self, rewards, live_weights, epoch: int) -> None:
@@ -131,8 +137,9 @@ class ValidationClient:
             if profile is None or profile.settlement.live:
                 return
 
+            window_k = config.weight_window_epochs(self._validator.block)
             work = {r.hotkey: float(r.reward) for r in (rewards or [])}
-            result = settlement.settle(work, profile.settlement.C)
+            result = settlement.settle(work, profile.settlement.C * max(1, window_k))
 
             hotkeys = list(self._validator.metagraph.hotkeys)
             shadow = settlement.weight_vector(result.shares, result.burn, hotkeys,

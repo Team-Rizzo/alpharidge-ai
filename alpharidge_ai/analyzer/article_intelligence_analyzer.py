@@ -910,8 +910,13 @@ class ArticleIntelligenceAnalyzer:
     # should ground one. Deliberately conservative: dropping an honest measurement
     # costs a miner credit, while a date that slips through only costs it precision,
     # so every rule here needs an explicit date signal rather than a resemblance.
-    _DATE_UNITS = {"date", "datetime", "time", "year", "month", "day", "timestamp",
-                   "hour", "hours", "week", "quarter", "yyyy", "dd/mm/yyyy"}
+    # Units that only ever name a point in time. Durations ("3 hours of outage") are
+    # measurements and are kept; a date needs a date-shaped value or metric to go with
+    # a calendar unit.
+    _DATE_UNITS = {"date", "datetime", "timestamp", "yyyy", "dd/mm/yyyy"}
+    _CALENDAR_UNITS = {"year", "years", "month", "months", "day", "days",
+                       "week", "weeks", "quarter", "quarters", "time",
+                       "hour", "hours", "minute", "minutes"}
     _DATE_METRICS = {"date", "datum", "fecha", "data", "time", "hora", "uhrzeit",
                      "year", "jahr", "ano", "month", "day", "timestamp", "deadline",
                      "quarter"}
@@ -923,10 +928,20 @@ class ArticleIntelligenceAnalyzer:
 
     @classmethod
     def _is_date_claim(cls, raw: dict) -> bool:
-        if str(raw.get("unit") or "").strip().lower() in cls._DATE_UNITS:
+        unit = str(raw.get("unit") or "").strip().lower()
+        if unit in cls._DATE_UNITS:
             return True
 
         metric = str(raw.get("metric_name") or "").strip().lower()
+        # A calendar unit carrying anything but a year is a duration, whatever the
+        # metric is called: "delivery time: 2 weeks" measures a span, not an instant.
+        # The unit settles it, so this comes before the metric-name rules.
+        if unit in cls._CALENDAR_UNITS:
+            value = raw.get("value")
+            looks_like_a_year = (isinstance(value, (int, float))
+                                 and 1900 <= float(value) <= 2100
+                                 and float(value) == int(float(value)))
+            return bool(looks_like_a_year)
         words = re.findall(r"[a-z\u00c0-\u024f]+", metric)
         if cls._QUARTER.match(metric):
             return True
@@ -979,11 +994,16 @@ class ArticleIntelligenceAnalyzer:
         for q in (raw or [])[:MAX_QUOTES]:
             try:
                 text = q["text"][:1000]
-                start = end = None
-                if article.text:
-                    hit = oracle_floor.align_quote(article, text, None, None)
-                    if hit is not None:
-                        start, end = hit.start, hit.end
+                if not article.text:
+                    continue
+                hit = oracle_floor.align_quote(article, text, None, None)
+                if hit is None:
+                    # A quote we cannot locate cannot carry offsets, and a 1.2.0
+                    # submission missing them fails the cutover gate for the whole
+                    # article. Dropping the one quote costs a little recall; keeping it
+                    # would cost the article.
+                    continue
+                start, end = hit.start, hit.end
                 quotes.append(QuoteExtraction(
                     speaker=q["speaker"], speaker_title=q.get("speaker_title"),
                     text=text,

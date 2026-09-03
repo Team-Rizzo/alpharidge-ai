@@ -61,16 +61,26 @@ def test_offsets_are_computed_not_taken_from_the_model():
     assert TEXT[q.start_offset:q.end_offset].startswith("margins should recover")
 
 
-def test_a_quote_not_in_the_article_carries_no_offsets():
-    q = quotes([{"speaker": "CEO", "text": "we will double the dividend",
-                 "confidence": 0.9}])[0]
-    assert q.start_offset is None and q.end_offset is None
+def test_a_quote_not_in_the_article_is_not_emitted():
+    """It cannot carry offsets, and a 1.2.0 submission missing them fails the cutover
+    gate for the whole article. Dropping the quote costs less than the article."""
+    assert quotes([{"speaker": "CEO", "text": "we will double the dividend",
+                    "confidence": 0.9}]) == []
+
+
+def test_every_emitted_quote_carries_offsets():
+    out = quotes([{"speaker": "CEO", "text": "margins should recover in the second half",
+                   "confidence": 0.9},
+                  {"speaker": "CFO", "text": "not in the article at all",
+                   "confidence": 0.9}])
+    assert out and all(q.start_offset is not None and q.end_offset is not None
+                       for q in out)
 
 
 def test_no_article_text_is_survivable():
-    q = quotes([{"speaker": "CEO", "text": "anything", "confidence": 0.5}],
-               content="")[0]
-    assert q.start_offset is None
+    """Nothing can be located against nothing, so nothing is emitted."""
+    assert quotes([{"speaker": "CEO", "text": "anything", "confidence": 0.5}],
+                  content="") == []
 
 
 def test_the_miner_and_validator_agree_on_the_span():

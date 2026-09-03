@@ -133,6 +133,9 @@ def adjudicate(miner_claims: Sequence, grader_claims: Sequence,
         if i in grounded:
             result.valid.add(key)
         else:
+            # Includes claims that matched only an inferred reading. Plausible, but the
+            # reading rested on a guess this parser made, and the submitter chose what
+            # to claim — so it is adjudicated rather than granted.
             residual.append(i)
 
     if residual and adjudicator is not None:

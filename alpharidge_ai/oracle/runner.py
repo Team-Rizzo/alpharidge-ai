@@ -80,13 +80,15 @@ def _quote_keys(miner_intel, grader_intel, article_text, aligned, claim_cap: int
     """Quote keys, on both sides, from the spans this validator matched."""
     miner_quotes = list(getattr(miner_intel, "quotes", None) or [])[:claim_cap]
     keys, confidences = [], {}
-    for i, span in sorted(aligned.items()):
-        key = ("q", span)
+    for i in range(len(miner_quotes)):
+        # A quote that did not align is still something the submission asserted, so it
+        # stays in the denominator as an unsupported key. Dropping it would let a
+        # fabricated quote cost nothing.
+        key = ("q", aligned[i]) if i in aligned else ("qx", i)
         keys.append(key)
-        if i < len(miner_quotes):
-            value = getattr(miner_quotes[i], "confidence", None)
-            if value is not None:
-                confidences[key] = float(value)
+        value = getattr(miner_quotes[i], "confidence", None)
+        if value is not None:
+            confidences[key] = float(value)
 
     grader_spans = audit.grader_quote_keys(
         article_text, list(getattr(grader_intel, "quotes", None) or [])[:claim_cap])
@@ -127,6 +129,8 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
         def adjudicator(text, claims, _model=choice.grader_model):
             return grader.adjudicate(text, claims, _model)
 
+    # Only literally grounded claims are granted; an inferred match joins the residual
+    # and is adjudicated like anything else.
     miner_keys, grader_keys, valid, confidences, decided = _claim_keys(
         miner_intel, grader_intel, floor_result.grounded, article_text,
         adjudicator, oracle.claim_cap)

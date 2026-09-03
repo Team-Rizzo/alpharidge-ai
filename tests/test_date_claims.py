@@ -22,10 +22,16 @@ def claim(metric="revenue", value=1.2e9, unit="USD"):
 
 # ---- what gets dropped -------------------------------------------------------------
 
-@pytest.mark.parametrize("unit", ["date", "time", "year", "month", "day",
-                                  "timestamp", "quarter"])
-def test_a_date_unit_is_dropped(unit):
+@pytest.mark.parametrize("unit", ["date", "datetime", "timestamp"])
+def test_a_unit_that_only_names_an_instant_is_dropped(unit):
     assert kept([claim(unit=unit)]) == []
+
+
+@pytest.mark.parametrize("unit", ["year", "month", "day", "week", "quarter", "hours"])
+def test_a_calendar_unit_is_a_date_only_when_the_value_is_a_year(unit):
+    """"3 hours" is a duration; "2026 years" is a date wearing a unit."""
+    assert kept([claim(value=2026, unit=unit)]) == []
+    assert kept([claim(value=3.0, unit=unit)]) != []
 
 
 @pytest.mark.parametrize("metric", [

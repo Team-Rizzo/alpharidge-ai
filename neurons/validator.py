@@ -1393,7 +1393,13 @@ class Validator(BaseValidatorNeuron):
         oracle_live = self._oracle_is_live()
         # The old scorer stands down only when something is actually replacing it. A
         # published flip with no working auditor must not leave reputation unfed.
-        audit_supersedes = oracle_live and self._get_auditor() is not None
+        try:
+            audit_supersedes = oracle_live and self._get_auditor() is not None
+        except Exception as e:
+            # Building it can fail on a missing key or a bad dependency. The point of
+            # the fallback is that reputation keeps moving when it does.
+            bt.logging.error(f"[AUDIT] could not build the auditor: {e}")
+            audit_supersedes = False
         if oracle_live and not audit_supersedes:
             bt.logging.error(
                 "[AUDIT] oracle.live is published but no auditor could be built; "
@@ -1415,7 +1421,9 @@ class Validator(BaseValidatorNeuron):
                 self._validation_executor,
                 validate_miner_article_intelligence_batch,
                 track_batch, self._article_intel_analyzer, sample_size, None, gscorer,
-                reference_by_id, miner_hotkey, self._get_auditor(), int(self.block),
+                reference_by_id, miner_hotkey,
+                (self._auditor if audit_supersedes or self._auditor else None),
+                int(self.block),
                 (_profile.oracle.schema_cutover_block if _profile else 0),
             )
             self._log_audit(miner_hotkey,

@@ -203,6 +203,11 @@ class ParsedNumber:
     value: float
     unit: str          # "pct" | "currency:XXX" | "count" | "none"
     offset: int
+    # False when the value was inferred rather than read: a compound sum, or the
+    # second reading of an ambiguous grouping mark. A submitter chooses what to claim,
+    # so an inferred candidate must not confer automatic validity — it only says the
+    # claim is worth adjudicating instead of being rejected outright.
+    literal: bool = True
 
 
 def _cjk_scale_after(text: str, end: int) -> Tuple[float, int]:
@@ -362,7 +367,7 @@ def parse_numbers(normalized_text: str) -> List[ParsedNumber]:
     """Every numeric token in the text, with its magnitude, unit class and offset."""
     found: List[ParsedNumber] = []
 
-    def emit(value: float, start: int, end: int) -> None:
+    def emit(value: float, start: int, end: int, literal: bool = True) -> None:
         mag, mag_end = _magnitude_after(normalized_text, end)
         value *= mag
         after = normalized_text[mag_end:mag_end + 2]
@@ -371,24 +376,28 @@ def parse_numbers(normalized_text: str) -> List[ParsedNumber]:
         else:
             code = _currency_near(normalized_text, start, mag_end)
             unit = f"currency:{code}" if code else "count"
-        found.append(ParsedNumber(value=value, unit=unit, offset=start))
+        found.append(ParsedNumber(value=value, unit=unit, offset=start,
+                                  literal=literal))
 
     for m in _NUMBER_RE.finditer(normalized_text):
-        for value in _readings(m.group(0)):
-            emit(value, m.start(), m.end())
+        for i, value in enumerate(_readings(m.group(0))):
+            emit(value, m.start(), m.end(), literal=(i == 0))
 
     for value, start, end in _word_numbers(normalized_text):
         emit(value, start, end)
 
-    # Descending scaled parts written next to each other are one figure: 1조 2천억 is
-    # 1.2 trillion, not a one and a two. The parts stay as candidates; the sum joins
-    # them rather than replacing them.
-    scaled = [n for n in found if n.unit != "pct"]
+    # Descending CJK-scaled parts written next to each other are one figure: 1조 2천억
+    # is 1.2 trillion. Only where scale marks are actually present — otherwise "100 and
+    # 20" would offer 120, which is in no sense in the text. Inferred either way.
+    scaled = [n for n in found if n.unit != "pct" and n.literal]
     for a, b in zip(scaled, scaled[1:]):
-        gap = normalized_text[a.offset:b.offset]
-        if 0 < len(gap) <= 8 and a.value > b.value > 0:
-            found.append(ParsedNumber(value=a.value + b.value, unit=a.unit,
-                                      offset=a.offset))
+        span = normalized_text[a.offset:b.offset]
+        if not (0 < len(span) <= 8 and a.value > b.value > 0):
+            continue
+        if not any(c in _CJK_SCALES for c in normalized_text[a.offset:b.offset + 8]):
+            continue
+        found.append(ParsedNumber(value=a.value + b.value, unit=a.unit,
+                                  offset=a.offset, literal=False))
     return found
 
 
@@ -464,7 +473,17 @@ def value_grounded(claim_value: float, text_value: float) -> bool:
 # ---- claims -----------------------------------------------------------------------
 
 def ground_claim(claim, numbers: Sequence[ParsedNumber]) -> bool:
-    """True when some parsed text number matches the claim in value and unit class."""
+    """True when the claim matches any parsed number, literal or inferred."""
+    return ground_kind(claim, numbers) is not None
+
+
+def ground_kind(claim, numbers: Sequence[ParsedNumber]):
+    """How a claim grounds: "literal", "inferred", or None.
+
+    Only a literal match is evidence the article states the figure. An inferred match
+    means the reading depended on a guess this parser made — a locale convention or a
+    compound — so it earns adjudication rather than automatic validity.
+    """
     try:
         value = float(getattr(claim, "value", None))
     except (TypeError, ValueError):
@@ -475,12 +494,15 @@ def ground_claim(claim, numbers: Sequence[ParsedNumber]) -> bool:
     scale = unit_magnitude(raw_unit)
     candidates = [value] if scale == 1.0 else [value, value * scale]
 
+    best = None
     for n in numbers:
         if not _units_compatible(unit, n.unit):
             continue
         if any(value_grounded(c, n.value) for c in candidates):
-            return True
-    return False
+            if n.literal:
+                return "literal"
+            best = "inferred"
+    return best
 
 
 # ---- quotes -----------------------------------------------------------------------
@@ -657,6 +679,7 @@ class FloorResult:
     floor_pass: bool
     reason: str = ""
     grounded: Set[int] = field(default_factory=set)
+    inferred: Set[int] = field(default_factory=set)
     ungrounded: Set[int] = field(default_factory=set)
     aligned_quotes: Dict[int, Tuple[int, int]] = field(default_factory=dict)
     rejected_quotes: Set[int] = field(default_factory=set)
@@ -695,7 +718,13 @@ def evaluate(intel, article_text: str, *,
     numbers = parse_numbers(article.text)
 
     for i, claim in enumerate(list(getattr(intel, "numeric_claims", None) or [])[:claim_cap]):
-        (result.grounded if ground_claim(claim, numbers) else result.ungrounded).add(i)
+        kind = ground_kind(claim, numbers)
+        if kind == "literal":
+            result.grounded.add(i)
+        elif kind == "inferred":
+            result.inferred.add(i)      # plausible, but adjudicated rather than granted
+        else:
+            result.ungrounded.add(i)
 
     accepted: List[Tuple[int, int]] = []
     for i, quote in enumerate(list(getattr(intel, "quotes", None) or [])[:claim_cap]):

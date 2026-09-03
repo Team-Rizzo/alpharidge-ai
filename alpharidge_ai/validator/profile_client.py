@@ -128,14 +128,26 @@ class ProfileClient:
                 bt.logging.warning(f"[PROFILE] Fetch failed: {e}")
                 return False
 
-            staged = False
-            for slot in ("current", "next"):
-                raw = body.get(slot)
-                if isinstance(raw, dict) and self._offer(raw):
-                    staged = True
-            if staged:
+            changed = False
+            active = body.get("current")
+            if isinstance(active, dict) and self._adopt(active, block):
+                changed = True
+            staged = body.get("next")
+            if isinstance(staged, dict) and self._offer(staged):
+                changed = True
+            if changed:
                 self.save()
-            return staged
+            return changed
+
+    def _adopt(self, raw: dict, block: int) -> bool:
+        """Take the profile the API says is already active."""
+        verify = verify_signature if self.require_signature else None
+        accepted, reason = self.resolver.adopt(raw, int(block), verify=verify)
+        if accepted:
+            bt.logging.info(f"[PROFILE] {reason}")
+        elif not reason.startswith(("stale_version", "not_yet_active")):
+            bt.logging.warning(f"[PROFILE] Rejected active profile: {reason}")
+        return accepted
 
     def _offer(self, raw: dict) -> bool:
         verify = verify_signature if self.require_signature else None
