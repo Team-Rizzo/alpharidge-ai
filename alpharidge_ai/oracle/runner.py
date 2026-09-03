@@ -44,16 +44,18 @@ def _judgment_fields(intel, floor_result=None) -> Dict:
     dropped_assets = getattr(floor_result, "unevidenced_assets", set()) or set()
     dropped_entities = getattr(floor_result, "unevidenced_entities", set()) or set()
 
+    def kept(items, dropped, upper):
+        out = set()
+        for item in items or ():
+            name = floor._surface_form(item)
+            if not name or name.strip().lower() in dropped:
+                continue
+            out.add(name.strip().upper() if upper else name.strip().lower())
+        return sorted(out)
+
     fields = {f: _enum(getattr(intel, f, None)) for f in JUDGMENT_FIELDS}
-    fields["assets"] = sorted({str(getattr(a, "symbol", "") or "").upper()
-                               for a in (getattr(intel, "assets", None) or [])
-                               if getattr(a, "symbol", None)
-                               and str(a.symbol).strip().lower() not in dropped_assets})
-    fields["entities"] = sorted({str(getattr(e, "canonical_name", "") or "").lower()
-                                 for e in (getattr(intel, "entities", None) or [])
-                                 if getattr(e, "canonical_name", None)
-                                 and str(e.canonical_name).strip().lower()
-                                 not in dropped_entities})
+    fields["assets"] = kept(getattr(intel, "assets", None), dropped_assets, True)
+    fields["entities"] = kept(getattr(intel, "entities", None), dropped_entities, False)
     return fields
 
 

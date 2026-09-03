@@ -11,12 +11,20 @@ from tests.test_profile_client import valid
 TEXT = "NVDA rose sharply after the quarterly report was published today."
 
 
-def asset(symbol, spans):
-    return types.SimpleNamespace(symbol=symbol, evidence_spans=list(spans))
+# Real models, not stand-ins. The first version of this file invented `symbol` and
+# `canonical_name`, which do not exist on either model — so the code passed its tests
+# and did nothing on production data.
+from alpharidge_ai.models.article_intelligence import AssetSentiment, ExtractedEntity
+
+
+def asset(ticker, spans):
+    return AssetSentiment.model_construct(ticker=ticker, asset_name=ticker,
+                                          evidence_spans=list(spans))
 
 
 def entity(name, spans):
-    return types.SimpleNamespace(canonical_name=name, evidence_spans=list(spans))
+    return ExtractedEntity.model_construct(name=name, entity_type="organization",
+                                           evidence_spans=list(spans))
 
 
 def intel(assets=(), entities=()):
@@ -39,12 +47,58 @@ def test_the_article_itself_still_passes():
     assert floor.evaluate(sub, TEXT).floor_pass
 
 
-def test_entities_are_gated_the_same_way():
-    sub = intel(entities=[entity("Nvidia", ["Nvidia"]),
-                          entity("Report", ["quarterly report was published"])])
+def test_the_entity_path_gates_once_spans_exist():
+    """The code gates entities, but the shipped ExtractedEntity has no evidence_spans
+    field, so nothing reaches it today. This uses a shape that carries them, to show
+    the path works if the schema gains the field — see the schema note in DEVIATIONS.
+    """
+    with_spans = [types.SimpleNamespace(name="Nvidia", evidence_spans=["Nvidia"]),
+                  types.SimpleNamespace(name="Report",
+                                        evidence_spans=["quarterly report was published"])]
+    sub = intel(entities=with_spans)
     result = floor.evaluate(sub, TEXT)
-    assert "nvidia" in result.unevidenced_assets | result.unevidenced_entities
+    assert "nvidia" in result.unevidenced_entities
     assert runner._judgment_fields(sub, result)["entities"] == ["report"]
+
+
+def test_the_shipped_entity_model_cannot_express_a_failed_span():
+    """Recorded rather than worked around: E18 asks for entity spans and the schema
+    does not carry them. Adding the field is a schema decision, not a code fix."""
+    assert "evidence_spans" not in ExtractedEntity.model_fields
+
+
+def test_the_real_asset_model_is_read():
+    """The production model carries ticker, not symbol."""
+    assert "ticker" in AssetSentiment.model_fields
+    assert "symbol" not in AssetSentiment.model_fields
+    a = asset("NVDA", ["NVDA"])
+    assert floor._surface_form(a) == "NVDA"
+
+
+def test_the_real_entity_model_is_read():
+    """The production model carries name, not canonical_name."""
+    assert "name" in ExtractedEntity.model_fields
+    assert "canonical_name" not in ExtractedEntity.model_fields
+    assert floor._surface_form(entity("Nvidia", [])) == "Nvidia"
+
+
+def test_production_assets_reach_keeper_scoring_at_all():
+    """They were absent entirely: two of the six judgment fields scored nothing."""
+    sub = intel([asset("NVDA", ["NVDA rose sharply after"])],
+                [entity("Nvidia", ["NVDA rose sharply after"])])
+    fields = runner._judgment_fields(sub, floor.evaluate(sub, TEXT))
+    assert fields["assets"] == ["NVDA"]
+    assert fields["entities"] == ["nvidia"]
+
+
+def test_an_entity_without_the_span_field_is_not_failed():
+    """ExtractedEntity has no evidence_spans in the shipped schema; absent is not
+    failed, so such an entity is scored rather than dropped."""
+    bare = ExtractedEntity.model_construct(name="Nvidia", entity_type="organization")
+    sub = intel(entities=[bare])
+    result = floor.evaluate(sub, TEXT)
+    assert result.unevidenced_entities == set()
+    assert runner._judgment_fields(sub, result)["entities"] == ["nvidia"]
 
 
 def test_an_item_with_no_spans_at_all_is_left_alone():

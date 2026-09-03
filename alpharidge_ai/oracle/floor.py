@@ -629,6 +629,15 @@ def _overlap_fraction(a: Tuple[int, int], b: Tuple[int, int]) -> float:
 
 # ---- evidence spans ---------------------------------------------------------------
 
+def _surface_form(item) -> Optional[str]:
+    """The name an asset or entity goes by, whichever field carries it."""
+    for attr in ("ticker", "asset_name", "name", "symbol", "canonical_name"):
+        value = getattr(item, attr, None)
+        if value:
+            return str(value)
+    return None
+
+
 def span_supported(article: Normalized, span: Optional[str],
                    surface_form: Optional[str] = None) -> bool:
     """An evidence span must be in the article and carry enough context to be evidence.
@@ -764,8 +773,10 @@ def evaluate(intel, article_text: str, *,
             spans = [single] if single else []
         if not spans:
             continue
-        surface = (getattr(item, "symbol", None) or getattr(item, "name", None)
-                   or getattr(item, "canonical_name", None))
+        # Production field names first: AssetSentiment carries ticker/asset_name and
+        # ExtractedEntity carries name. The others are accepted so the helper works on
+        # either shape rather than silently returning nothing on one of them.
+        surface = _surface_form(item)
         # One span that carries context is enough to evidence the item.
         if not any(span_supported(article, s, surface) for s in spans):
             result.span_failures.add(i)
