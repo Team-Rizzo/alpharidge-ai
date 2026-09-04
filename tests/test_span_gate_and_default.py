@@ -186,3 +186,21 @@ def test_basis_points_still_match_the_percentage_they_equal():
     assert audit.claims_match(_claim(50, "bps"), _claim(0.5, "%"))
     assert not audit.claims_match(_claim(50, "bps"), _claim(50, "%"))
     assert not audit.claims_match(_claim(12.5, "basis_points"), _claim(12.5, "pct"))
+
+
+def test_every_spelling_of_a_basis_point_is_treated_alike():
+    for unit in ("bps", "bp", "basis points", "basis_points", "BP"):
+        assert floor._unit_class(unit) == "pct", unit
+        assert floor.unit_magnitude(unit) == floor.BASIS_POINT, unit
+        assert audit.claims_match(_claim(50, unit), _claim(0.5, "%")), unit
+        assert not audit.claims_match(_claim(50, unit), _claim(50, "%")), unit
+
+
+def test_a_blank_identity_field_does_not_become_a_blank_name():
+    e = ExtractedEntity.model_construct(name="   ", entity_type="organization",
+                                        ticker="NVDA")
+    assert floor.entity_form(e) == "NVDA"
+    assert runner._judgment_fields(intel(entities=[e]), None)["entities"] == ["nvda"]
+    blank = ExtractedEntity.model_construct(name="  ", entity_type="organization")
+    assert floor.entity_form(blank) is None
+    assert runner._judgment_fields(intel(entities=[blank]), None)["entities"] == []

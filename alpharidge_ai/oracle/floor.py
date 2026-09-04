@@ -436,7 +436,8 @@ def _unit_class(unit: Optional[str]) -> str:
     u = (unit or "").strip().lower()
     if not u:
         return "none"
-    if u in ("%", "pct", "percent", "percentage", "bps", "basis_points"):
+    if u.replace("_", " ") in ("%", "pct", "percent", "percentage", "bps", "bp",
+                              "basis point", "basis points"):
         return "pct"
     if u in _CURRENCY_CODES:
         return f"currency:{u.upper()}"
@@ -640,9 +641,9 @@ def _overlap_fraction(a: Tuple[int, int], b: Tuple[int, int]) -> float:
 
 def _first_attr(item, attrs) -> Optional[str]:
     for attr in attrs:
-        value = getattr(item, attr, None)
+        value = str(getattr(item, attr, None) or "").strip()
         if value:
-            return str(value)
+            return value
     return None
 
 
