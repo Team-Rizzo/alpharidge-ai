@@ -29,6 +29,8 @@ _MAGNITUDES = {
     "m": 1e6, "mn": 1e6, "million": 1e6,
     "b": 1e9, "bn": 1e9, "billion": 1e9,
     "t": 1e12, "tn": 1e12, "trillion": 1e12,
+    # Indian numbering, ordinary in financial copy and absent from the short scale.
+    "lakh": 1e5, "lakhs": 1e5, "crore": 1e7, "crores": 1e7,
 }
 
 BASIS_POINT = 0.01  # of a percentage point

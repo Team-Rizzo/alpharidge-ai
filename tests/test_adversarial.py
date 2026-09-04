@@ -354,3 +354,89 @@ def test_the_grounding_tolerance_is_bounded_and_deliberate():
     outside = 1203 * (1 + floor.VALUE_REL_TOLERANCE * 3)
     assert floor.ground_claim(claim(inside), numbers)
     assert not floor.ground_claim(claim(outside), numbers)
+
+
+# ---- invariants ------------------------------------------------------------------
+#
+# The cases above each name one route. Six routes have now been found by which a
+# submitter-chosen value reached validity, and each was closed where it was found.
+# These state the property the routes violate, over generated inputs, so a seventh
+# route fails here rather than being reasoned about later.
+#
+# The scale table is written out again rather than imported: a check that reads the
+# same table as the code cannot catch a wrong entry in it.
+
+SCALES = {
+    "": 1.0, "%": 1.0, "pct": 1.0, "percent": 1.0,
+    "bps": 0.01, "bp": 0.01, "basis points": 0.01, "basis_points": 0.01,
+    "thousand": 1e3, "million": 1e6, "billion": 1e9, "trillion": 1e12,
+    "lakh": 1e5, "crore": 1e7,
+    "barrels": 1.0, "users": 1.0, "vehicles": 1.0,
+}
+
+_SCALE_WORDS = ("", "thousand", "million", "billion", "crore", "lakh")
+_VALUES = (5, 12.5, 50, 250, 3.2, 1000, 1.203)
+
+
+def _asserts(value, unit):
+    """What a claim says, in one scale, computed independently of the floor."""
+    return value * SCALES[unit]
+
+
+@pytest.mark.parametrize("seed", (11, 12, 13, 14))
+def test_a_literal_grounding_means_the_article_states_that_figure(seed):
+    """The property every free-validity route has broken.
+
+    A literal grounding is the one path to validity with no grader. It may only be
+    reached when the figure the claim asserts is the figure the article states.
+    """
+    rng = random.Random(seed)
+    for _ in range(250):
+        stated = rng.choice(_VALUES)
+        article_scale = rng.choice(_SCALE_WORDS)
+        text = f"The company reported a figure of {stated} {article_scale} today."
+        article_figure = stated * SCALES[article_scale]
+
+        value = rng.choice(_VALUES)
+        unit = rng.choice(list(SCALES))
+        result = floor.evaluate(intel([claim(value, unit)]), text)
+        if not result.grounded:
+            continue
+
+        asserted = _asserts(value, unit)
+        assert abs(asserted - article_figure) <= abs(article_figure) * 0.01, (
+            f"{value} {unit!r} asserts {asserted}, article states {article_figure}")
+
+
+@pytest.mark.parametrize("seed", (21, 22, 23))
+def test_two_claims_match_only_when_they_assert_the_same_figure(seed):
+    """The same property on the reference route, which reaches validity without a
+    grader by a different door."""
+    rng = random.Random(seed)
+    units = list(SCALES)
+    for _ in range(400):
+        lv, lu = rng.choice(_VALUES), rng.choice(units)
+        rv, ru = rng.choice(_VALUES), rng.choice(units)
+        if not audit.claims_match(claim(lv, lu), claim(rv, ru)):
+            continue
+        left, right = _asserts(lv, lu), _asserts(rv, ru)
+        assert abs(left - right) <= abs(right) * 0.01, (
+            f"{lv} {lu!r} ({left}) matched {rv} {ru!r} ({right})")
+
+
+def test_a_claim_beyond_the_cap_earns_nothing():
+    """The cap bounds what one submission can put in front of the validator; claims
+    past it must not reach validity by any route."""
+    stated = [claim(v, "") for v in (5, 12.5, 50)]
+    padding = [claim(5, "") for _ in range(60)]
+    result = floor.evaluate(intel(padding + stated), ARTICLE, claim_cap=40)
+    assert max(result.grounded | result.inferred | result.ungrounded) < 40
+
+    decided, _ = granted(padding + stated)
+    assert all(key[1] < 40 for key in decided.valid if key[0] == "m")
+
+
+def test_the_cap_is_applied_before_scoring_not_after():
+    scored = scoring.article_score([("m", i) for i in range(100)], {("m", 0)},
+                                   claim_cap=40)
+    assert scored.scored_claims == 40
