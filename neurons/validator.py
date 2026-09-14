@@ -194,6 +194,7 @@ class Validator(BaseValidatorNeuron):
         # Article tracker is the only adaptive one (RFC 2026-06-28); tweet/telegram
         # stay static. Behaves identically to static until ADAPTIVE_DISPATCH_ENABLED.
         self._article_cooldown = MinerCooldownTracker(adaptive=True)
+        self._article_cooldown.load()
         self._article_cooldown.set_ration_source(self._ration_for)
         # Liveness roster (adaptive dispatch). Populated off the dispatch path;
         # only consulted for selection once ADAPTIVE_DISPATCH_ENABLED is on.

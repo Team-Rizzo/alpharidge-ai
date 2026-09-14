@@ -1,8 +1,12 @@
+import json
 import math
 import time
 import bittensor as bt
 from collections import deque
+from pathlib import Path
 from typing import Dict, Set, Tuple
+
+from alpharidge_ai import config
 
 
 BACKOFF_SCHEDULE = [30, 60, 120, 300, 600]  # seconds
@@ -58,6 +62,72 @@ class MinerCooldownTracker:
         self._events: list = []                   # display-only dispatch/cooldown events (drained on flush)
 
         self._batch_size: Dict[str, float] = {}
+
+    # ---- persistence ----
+    # Dispatch and cooldown state is carried across process restarts. Live leases
+    # (_inflight), drained events and derived values are excluded by design.
+
+    def _state_path(self) -> Path:
+        return Path(getattr(config, "DISPATCH_STATE_LOCATION",
+                            str(Path(__file__).resolve().parent.parent / ".dispatch_state.json")))
+
+    def save(self) -> None:
+        """Atomic write; never raises."""
+        try:
+            path = self._state_path()
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({
+                "version": 1,
+                "state": {k: list(v) for k, v in self._state.items()},
+                "window": self._window,
+                "batch_size": self._batch_size,
+                "consec_to": self._consec_to,
+                "consec_inv": self._consec_inv,
+                "inv_level": self._inv_level,
+                "inv_until": self._inv_until,
+                "consec_fail": self._consec_fail,
+                "covered_ep": self._covered_ep,
+            }))
+            tmp.replace(path)
+        except Exception as e:
+            try:
+                bt.logging.debug(f"[COOLDOWN] could not persist state: {e}")
+            except Exception:
+                pass
+
+    def load(self) -> None:
+        """Load persisted state. Absent or unreadable file is a cold start."""
+        try:
+            path = self._state_path()
+            if not path.exists():
+                return
+            raw = json.loads(path.read_text() or "{}")
+        except Exception as e:
+            try:
+                bt.logging.warning(f"[COOLDOWN] could not read state, starting cold: {e}")
+            except Exception:
+                pass
+            return
+        try:
+            self._state = {k: (int(v[0]), int(v[1]), float(v[2]))
+                           for k, v in (raw.get("state") or {}).items() if len(v) == 3}
+            self._window = {k: float(v) for k, v in (raw.get("window") or {}).items()}
+            self._batch_size = {k: float(v) for k, v in (raw.get("batch_size") or {}).items()}
+            self._consec_to = {k: int(v) for k, v in (raw.get("consec_to") or {}).items()}
+            self._consec_inv = {k: int(v) for k, v in (raw.get("consec_inv") or {}).items()}
+            self._inv_level = {k: int(v) for k, v in (raw.get("inv_level") or {}).items()}
+            self._inv_until = {k: float(v) for k, v in (raw.get("inv_until") or {}).items()}
+            self._consec_fail = {k: int(v) for k, v in (raw.get("consec_fail") or {}).items()}
+            self._covered_ep = {k: int(v) for k, v in (raw.get("covered_ep") or {}).items()}
+            bt.logging.info(
+                f"[COOLDOWN] restored dispatch state for {len(self._batch_size)} miner(s); "
+                f"mean batch {sum(self._batch_size.values())/max(len(self._batch_size),1):.1f}, "
+                f"mean window {sum(self._window.values())/max(len(self._window),1):.1f}")
+        except Exception as e:
+            try:
+                bt.logging.warning(f"[COOLDOWN] state malformed, starting cold: {e}")
+            except Exception:
+                pass
 
     # ---- Adaptive knobs (read live so remote-config updates apply) ----
 

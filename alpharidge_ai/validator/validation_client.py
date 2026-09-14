@@ -709,6 +709,10 @@ class ValidationClient:
                     self._validator._article_store.save_to_file()
                 except Exception as e:
                     bt.logging.debug(f"[ValidationClient.run] Failed to persist article store: {e}")
+                try:
+                    self._validator._article_cooldown.save()
+                except Exception as e:
+                    bt.logging.debug(f"[ValidationClient.run] Failed to persist dispatch state: {e}")
 
                 # ---- Periodic mechanism profile refresh ----
                 try:
