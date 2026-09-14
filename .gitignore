@@ -177,3 +177,10 @@ testing/
 .article_store.*.tmp
 # Article store runtime data (local snapshot, not code)
 article_store.json
+
+# Per-validator runtime state and secrets. Never commit these.
+alpharidge_ai/.audit_key
+alpharidge_ai/.*_state.json
+alpharidge_ai/.mechanism_profile.json
+.audit_key
+.*_state.json

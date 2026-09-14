@@ -2,8 +2,18 @@
 
 A profile applies at one activation block fleet-wide; served config does not.
 """
+import pytest
+
+from alpharidge_ai import config
 from alpharidge_ai.mechanism import profile as mp
 from alpharidge_ai.validator.reputation_store import ReputationStore
+
+
+@pytest.fixture(autouse=True)
+def _isolated_store(tmp_path, monkeypatch):
+    """The store's default path is inside the package; keep tests off it."""
+    monkeypatch.setattr(config, "REPUTATION_STATE_LOCATION",
+                        str(tmp_path / "rep.json"), raising=False)
 
 
 def test_the_profile_carries_an_ema_alpha():
