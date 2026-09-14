@@ -133,7 +133,7 @@ class Emission:
             # becomes impossible — every first publish would then carry an unintended
             # economic change.
             gain=_num("emission", d, "gain", 1.0, 200.0),
-            ceiling=_num("emission", d, "ceiling", 0.0, 3.0),
+            ceiling=_num("emission", d, "ceiling", 0.0, 20.0),
             bonus_start=start,
             bonus_full=full,
             n_min=_int("emission", d, "n_min", 0, 1_000_000),
@@ -246,7 +246,7 @@ class Oracle:
             keyed_rate_pool=_num("oracle", d, "keyed_rate_pool", 0.0, 1.0),
             keyed_rate_keeper=_num("oracle", d, "keyed_rate_keeper", 0.0, 1.0),
             claim_cap=_int("oracle", d, "claim_cap", 1, 10_000),
-            keeper_weight=_num("oracle", d, "keeper_weight", 0.0, 10.0),
+            keeper_weight=_num("oracle", d, "keeper_weight", 0.0, 100.0),
             grader_models=tuple(models),
             schema_cutover_block=_int("oracle", d, "schema_cutover_block", 0, 2**63 - 1),
             live=_bool("oracle", d, "live"),
