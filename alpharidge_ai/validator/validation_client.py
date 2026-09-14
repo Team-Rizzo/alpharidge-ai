@@ -888,8 +888,15 @@ class ValidationClient:
                 # snapshot (once per epoch, display/monitoring only).
                 if getattr(config, "REPUTATION_SCORING_ENABLED", False) and target_epoch >= 0:
                     try:
+                        # Consensus value: read from the profile so it applies at one
+                        # activation block. Served config is the fallback only while no
+                        # profile is active.
+                        _prof = self._validator._mechanism_profile.resolve(
+                            int(self._validator.block))
+                        _alpha = (float(_prof.emission.ema_alpha) if _prof is not None
+                                  else float(getattr(config, "REPUTATION_EMA_ALPHA", 0.03)))
                         self._validator._reputation_store.finalize(
-                            int(target_epoch), alpha=getattr(config, "REPUTATION_EMA_ALPHA", 0.03))
+                            int(target_epoch), alpha=_alpha)
                         self._validator._reputation_store.save()
                     except Exception as e:
                         bt.logging.debug(f"[REPUTATION] finalize failed: {e}")
