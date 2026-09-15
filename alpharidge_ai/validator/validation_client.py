@@ -414,6 +414,36 @@ class ValidationClient:
         params = emission_params.resolve(
             self._validator._mechanism_profile.resolve(int(self._validator.block))
             if hasattr(self._validator, "_mechanism_profile") else None)
+        # The multiplier is normalised so its points-weighted mean is 1.0. Settlement
+        # compares total weight against a fixed capacity, so an un-normalised curve moves
+        # total weight whenever its shape changes, and burn moves with it against a
+        # capacity calibrated for the previous shape. Normalising leaves every ratio
+        # between miners untouched and makes total weight independent of the curve.
+        mults: Dict[int, float] = {}
+        scale = 1.0
+        if rep_gating:
+            mass = 0.0
+            total_pts = 0.0
+            for uid, pts in combined_uid_rewards.items():
+                try:
+                    hk = self._validator.metagraph.hotkeys[int(uid)]
+                except Exception:
+                    continue
+                r = self._validator._reputation_store.reputation(hk)
+                n = self._validator._reputation_store.samples(hk)
+                g = reputation.emission(r, *params.as_args(), n=n, n_min=params.n_min)
+                mults[int(uid)] = g
+                mass += g * float(pts)
+                total_pts += float(pts)
+            if mass > 0.0 and total_pts > 0.0:
+                scale = total_pts / mass
+                info(f"[REWARDS] multiplier normalised: points-weighted mean "
+                     f"{mass / total_pts:.4f}, scale {scale:.4f}, uids={len(mults)}")
+            else:
+                # Every miner gated to zero, or no points. Scaling is undefined; leave the
+                # multiplier alone rather than inventing one.
+                info("[REWARDS] multiplier not normalised: zero mass or zero points")
+
         bt.logging.debug(f"[ValidationClient] Building rewards list, penalty_totals: {uid_penalty_totals}")
         for uid, pts in combined_uid_rewards.items():
             try:
@@ -425,11 +455,13 @@ class ValidationClient:
                 r = self._validator._reputation_store.reputation(hk)
                 n = self._validator._reputation_store.samples(hk)
                 n_min = params.n_min
-                g = reputation.emission(r, *params.as_args(), n=n, n_min=n_min)
-                val = int(round(g * int(pts)))
+                g = mults.get(int(uid))
+                if g is None:
+                    g = reputation.emission(r, *params.as_args(), n=n, n_min=n_min)
+                val = int(round(g * scale * int(pts)))
                 held = " neutral(under-observed)" if n_min > 0 and n < n_min else ""
                 info(f"[REWARDS] UID={uid} hk={hk[:12]}.. gated={val} "
-                     f"(rep={r:.3f} n={n} mult={g:.3f} vol={pts}){held}")
+                     f"(rep={r:.3f} n={n} mult={g:.3f} norm={g * scale:.3f} vol={pts}){held}")
                 rewards.append(Reward(hotkey=hk, reward=val, epoch=target_epoch))
                 continue
             pen = uid_penalty_totals.get(uid, 0)

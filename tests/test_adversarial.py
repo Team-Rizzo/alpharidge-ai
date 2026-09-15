@@ -72,7 +72,11 @@ def test_honest_claims_survive_all_of_it():
 
 
 def test_an_equivalent_claim_written_differently_still_matches():
-    decided, _ = granted([claim(1.0, "million", "units")], [claim(1e6, "count", "units")])
+    # Both sides name a figure the article states — 1,203 — written at different scales.
+    # A reference claim the article does not state is no longer matchable at all, so a
+    # figure absent from the text cannot be used to exercise equivalence.
+    decided, _ = granted([claim(1.203, "thousand", "headcount")],
+                         [claim(1203, "count", "headcount")])
     assert decided.miner_keys == [("g", 0)]
 
 

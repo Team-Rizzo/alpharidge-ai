@@ -105,6 +105,24 @@ def parse_adjudication(raw, expected: Sequence[int]) -> Dict[int, dict]:
     return out
 
 
+def grounded_grader_claims(grader_claims: Sequence, article_text: str) -> Set[int]:
+    """Indexes of the grader's own claims the article states.
+
+    The rule this file already applies to adjudication — a grader cannot validate a claim
+    by asserting it — applies to the reference set too. A claim the grader did not read
+    off the article is one no submission can be expected to find, and it is not evidence
+    about anyone.
+    """
+    if not grader_claims:
+        return set()
+    try:
+        numbers = floor.parse_numbers(floor.normalize(article_text).text)
+    except Exception:
+        return set()
+    return {j for j, claim in enumerate(grader_claims)
+            if floor.ground_kind(claim, numbers) is not None}
+
+
 def adjudicate(miner_claims: Sequence, grader_claims: Sequence,
                grounded: Set[int], article_text: str,
                adjudicator: Optional[Adjudicator] = None) -> Adjudication:
@@ -113,9 +131,13 @@ def adjudicate(miner_claims: Sequence, grader_claims: Sequence,
     1. The floor already found its number in the article.
     2. The validator's own reference run found the same claim.
     3. Whatever is left, in one batched call, with the evidence checked.
+
+    The reference set is held to the same standard as the submission: only grader claims
+    the article states are gold, and only those can be matched against.
     """
     result = Adjudication()
-    result.grader_keys = {("g", j) for j in range(len(grader_claims))}
+    kept = grounded_grader_claims(grader_claims, article_text)
+    result.grader_keys = {("g", j) for j in kept}
 
     taken: Set[int] = set()
     residual: List[int] = []
@@ -123,7 +145,7 @@ def adjudicate(miner_claims: Sequence, grader_claims: Sequence,
     for i, claim in enumerate(miner_claims):
         match = None
         for j, gold in enumerate(grader_claims):
-            if j in taken:
+            if j in taken or j not in kept:
                 continue
             if claims_match(claim, gold):
                 match = j

@@ -339,12 +339,17 @@ class EpochStore:
 
     Deliberately range-aware: a fixture that returns a flat total regardless of
     the span cannot tell a per-epoch gate from a pooled one.
+
+    Two miners, because the multiplier is normalised to a points-weighted mean of 1.
+    A single miner — or a field on one flat multiplier — normalises to exactly 1.0 and
+    cannot distinguish a pooled gate from a per-epoch one.
     """
     POINTS_PER_EPOCH = 3
 
     def get_rewards_range(self, start, end):
         epochs = end - start + 1
-        return {"hk0": self.POINTS_PER_EPOCH * epochs}, epochs
+        pts = self.POINTS_PER_EPOCH * epochs
+        return {"hk0": pts, "hk1": pts}, epochs
 
     def get_penalties_range(self, start, end):
         return {}, end - start + 1
@@ -359,10 +364,18 @@ class FixedBroadcasts:
 
 
 def _client_with(monkeypatch, reward_store, reward_broadcasts, multiplier=0.5):
+    """hk0 carries `multiplier`, hk1 carries its complement about 1.0.
+
+    Equal points and multipliers straddling 1.0 leave the points-weighted mean at 1.0, so
+    normalisation is a no-op here and hk0's gated value is `multiplier * points` as the
+    assertions expect — while still exercising a field the normaliser has to compute over.
+    """
     from alpharidge_ai.validator import validation_client as vc
 
+    reps = {"hk0": multiplier, "hk1": 2.0 - multiplier}
+
     monkeypatch.setattr(config, "REPUTATION_GATING_ENABLED", True)
-    monkeypatch.setattr(vc.reputation, "emission", lambda *a, **kw: multiplier)
+    monkeypatch.setattr(vc.reputation, "emission", lambda r, *a, **kw: r)
 
     validator = type("V", (), {})()
     validator.metagraph = FakeMetagraph()
@@ -371,7 +384,7 @@ def _client_with(monkeypatch, reward_store, reward_broadcasts, multiplier=0.5):
     validator._reward_broadcasts = reward_broadcasts
     validator._penalty_broadcasts = FixedBroadcasts()
     validator._reputation_store = type(
-        "R", (), {"reputation": lambda self, hk: 0.9,
+        "R", (), {"reputation": lambda self, hk: reps.get(hk, 1.0),
                   "samples": lambda self, hk: 1000})()
 
     client = object.__new__(vc.ValidationClient)
@@ -431,8 +444,9 @@ def test_reputation_gate_is_applied_once_to_the_window_not_per_epoch(monkeypatch
     rewards, present, _ = client._aggregate_window(10, 9, 10)
 
     assert present == 2, "the fixture must span two epochs or this proves nothing"
-    assert len(rewards) == 1
-    assert rewards[0].reward == 3, "gate the window total once, never each epoch then add"
+    hk0 = [r for r in rewards if r.hotkey == "hk0"]
+    assert len(hk0) == 1
+    assert hk0[0].reward == 3, "gate the window total once, never each epoch then add"
 
 
 def test_reputation_gate_sees_local_and_broadcast_pooled(monkeypatch):
@@ -441,10 +455,14 @@ def test_reputation_gate_sees_local_and_broadcast_pooled(monkeypatch):
     One epoch of 3 local points plus 3 broadcast points. Gating the pooled 6
     gives 3; gating each source gives round(1.5) + round(1.5) = 4.
     """
-    client = _client_with(monkeypatch, EpochStore(), FixedBroadcasts({0: 3}))
+    # Both miners carry the same broadcast, so the points-weighted mean multiplier stays
+    # at 1.0 and normalisation is a no-op — otherwise unequal points move the mean and the
+    # assertion below would be measuring the normaliser rather than the pooling.
+    client = _client_with(monkeypatch, EpochStore(), FixedBroadcasts({0: 3, 1: 3}))
 
     rewards, present, _ = client._aggregate_window(10, 10, 10)
 
     assert present == 1
-    assert len(rewards) == 1
-    assert rewards[0].reward == 3, "pool local and broadcast points before gating"
+    hk0 = [r for r in rewards if r.hotkey == "hk0"]
+    assert len(hk0) == 1
+    assert hk0[0].reward == 3, "pool local and broadcast points before gating"
