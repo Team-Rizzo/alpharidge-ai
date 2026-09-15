@@ -63,7 +63,8 @@ class ReputationStore:
             if not self.path.exists():
                 return
             data = json.loads(self.path.read_text())
-            self.state = {str(k): {"r": float(v["r"]), "n": int(v.get("n", 0))}
+            self.state = {str(k): {"r": float(v["r"]), "n": int(v.get("n", 0)),
+                                   **({"e": int(v["e"])} if "e" in v else {})}
                           for k, v in (data.get("state") or {}).items()}
             self.finalized = [int(e) for e in (data.get("finalized") or [])][-64:]
             self.last_seen_seq = {str(k): int(v)
@@ -159,6 +160,9 @@ class ReputationStore:
             for _aid, _sender, g, w in rows:
                 st["r"] = rep.update(st["r"], g, w, alpha)
                 st["n"] += 1
+            # Last epoch this hotkey was actually scored. Pruning needs to tell a hotkey
+            # that has gone quiet from one that is merely absent from this batch.
+            st["e"] = int(epoch)
         self.finalized.append(epoch)
         del self.obs[epoch]
         self._prune()
@@ -168,6 +172,36 @@ class ReputationStore:
         for e in sorted(self.obs)[:-self.keep_epochs]:
             del self.obs[e]
         self.finalized = self.finalized[-64:]
+
+    # Roughly thirty days at 72 epochs a day.
+    UNREGISTERED_GRACE_EPOCHS = 2160
+
+    def prune_unregistered(self, registered, epoch: int,
+                           grace_epochs: int = None) -> int:
+        """Drop state for hotkeys that have left the metagraph and gone quiet.
+
+        The store keeps every hotkey it has ever seen. On a subnet with churn that grows
+        without bound, and it makes any population statistic taken from the store describe
+        a field several times larger than the one being paid.
+
+        Dropped after a grace period rather than on departure. Reputation that vanished
+        the moment a hotkey deregistered would make leaving a way to discard a bad record
+        and return with a clean one, which is worth more than the disk space. An entry
+        with no recorded epoch is treated as current rather than ancient, so existing
+        state is never dropped on the first pass.
+        """
+        allowed = {str(h) for h in (registered or ())}
+        if not allowed:
+            return 0
+        grace = int(self.UNREGISTERED_GRACE_EPOCHS if grace_epochs is None else grace_epochs)
+        gone = [hk for hk, st in self.state.items()
+                if str(hk) not in allowed
+                and int(epoch) - int(st.get("e", epoch)) > grace]
+        for hk in gone:
+            del self.state[hk]
+        if gone:
+            self.save()
+        return len(gone)
 
     # ---- read ----
     def reputation(self, hotkey: str) -> float:

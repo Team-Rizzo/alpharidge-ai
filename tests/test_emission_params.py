@@ -66,18 +66,18 @@ def test_under_observed_hotkeys_stay_neutral_under_the_profile(profile):
 def test_the_live_median_ignores_under_observed_hotkeys():
     snapshot = {"a": {"r": 0.70, "n": 500}, "b": {"r": 0.80, "n": 500},
                 "c": {"r": 0.10, "n": 3}}
-    assert ep.live_median(snapshot, 100) == pytest.approx(0.75)
+    assert ep.live_median(snapshot, 100, ["a", "b", "c"]) == pytest.approx(0.75)
 
 
 def test_the_live_median_is_none_when_nobody_qualifies():
-    assert ep.live_median({"a": {"r": 0.7, "n": 1}}, 100) is None
-    assert ep.live_median({}, 100) is None
-    assert ep.live_median(None, 100) is None
+    assert ep.live_median({"a": {"r": 0.7, "n": 1}}, 100, ["a"]) is None
+    assert ep.live_median({}, 100, ["a"]) is None
+    assert ep.live_median(None, 100, ["a"]) is None
 
 
 def test_the_median_is_reported_not_applied(profile):
     """Moving the midpoint is a publish, so validators move together."""
     snapshot = {f"h{i}": {"r": 0.90, "n": 500} for i in range(10)}
-    median = ep.live_median(snapshot, 100)
+    median = ep.live_median(snapshot, 100, [f"h{i}" for i in range(10)])
     assert median == pytest.approx(0.90)
     assert ep.resolve(profile).midpoint == pytest.approx(0.766)
