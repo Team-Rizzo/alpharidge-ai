@@ -360,3 +360,38 @@ def test_a_profile_without_new_fields_parses_under_either_schema():
     assert mp.parse(raw)
     raw["schema_version"] = "1.3.0"
     assert mp.parse(raw)
+
+
+# ---- the broadcast path -----------------------------------------------------------
+
+def test_the_broadcast_payload_carries_the_channel(tmp_path):
+    sender = _store(tmp_path / "a")
+    receiver = _store(tmp_path / "b")
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    sender.record_local(3, "me", "m", 11, 0.4, 1.0, channel=ch.AUDIT)
+    sender.record_local(3, "me", "m", 12, 1.0, 1.0, channel=ch.TRIAGE)
+    payload = ReputationStore.wire_payload(sender.export(3, "me"))
+    assert all(len(row) == 4 for row in payload["m"])
+    accepted, _ = receiver.ingest("me", 3, {t: [tuple(r) for r in rows]
+                                            for t, rows in payload.items()}, seq=3)
+    assert accepted
+    receiver.finalize(3)
+    assert set(receiver.state["m"]["c"]) == {ch.AUDIT, ch.TRIAGE}
+
+
+def test_the_validator_builds_its_payload_with_the_store_helper():
+    import inspect
+    from alpharidge_ai.validator import validation_client
+    src = inspect.getsource(validation_client.ValidationClient.run)
+    i = src.index("ValidatorReputationObs(")
+    assert "wire_payload(" in src[max(0, i - 600):i]
+
+
+def test_the_payload_fits_the_broadcast_message(tmp_path):
+    from alpharidge_ai.protocol import ValidatorReputationObs
+    store = _store(tmp_path)
+    store.record_local(3, "me", "m", 11, 0.4, 1.0, channel=ch.FLOOR)
+    msg = ValidatorReputationObs(epoch=3, observations=ReputationStore.wire_payload(
+        store.export(3, "me")), sender_hotkey="me", seq=3)
+    assert ch.name_of(msg.observations["m"][0][3]) == ch.FLOOR

@@ -19,6 +19,7 @@ from alpharidge_ai.protocol import ValidatorReputationObs
 from alpharidge_ai.protocol import Score
 from alpharidge_ai.validator import reputation
 from alpharidge_ai.validator import emission_params
+from alpharidge_ai.validator.reputation_store import ReputationStore
 from alpharidge_ai.utils.validators import get_validator_hotkeys
 from alpharidge_ai.validator import deep_verify
 from alpharidge_ai.consensus import overlap_audit
@@ -896,8 +897,7 @@ class ValidationClient:
                                 try:
                                     self_hk = str(self._validator.wallet.hotkey.ss58_address)
                                     exp = self._validator._reputation_store.export(int(publish_epoch), self_hk)
-                                    obs_payload = {t: [[float(a), float(g), float(w)] for (a, g, w) in lst]
-                                                   for t, lst in exp.items()}
+                                    obs_payload = ReputationStore.wire_payload(exp)
                                     if obs_payload:
                                         repobs_syn = ValidatorReputationObs(
                                             epoch=int(publish_epoch), observations=obs_payload,

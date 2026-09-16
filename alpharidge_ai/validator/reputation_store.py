@@ -183,6 +183,12 @@ class ReputationStore:
             return False, "empty_payload"
         return True, f"accepted({kept})"
 
+    @staticmethod
+    def wire_payload(exported: Dict[str, List[Obs]]) -> Dict[str, List[List[float]]]:
+        """Observations as the broadcast message carries them, channel code included."""
+        return {t: [[float(x) for x in ReputationStore._as_obs(o)] for o in lst]
+                for t, lst in (exported or {}).items()}
+
     def export(self, epoch: int, self_hotkey: str) -> Dict[str, List[Obs]]:
         """Own observations for `epoch`, to broadcast to peers."""
         return dict((self.obs.get(epoch, {}) or {}).get(self_hotkey, {}))
