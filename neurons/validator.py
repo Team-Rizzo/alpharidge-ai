@@ -1223,11 +1223,21 @@ class Validator(BaseValidatorNeuron):
                                     graded_observations=(), allow_clean=True):
         """Merge triage and quality observations before recording (the store
         keeps one observation per (article_id, sender); worst score wins)."""
-        clean_id = (int(article_batch[0].id)
-                    if article_batch and allow_clean else None)
+        flagged = triage_res.flagged_ids()
+        graded = [(int(aid), 0.0 if int(aid) in flagged else float(score), weight)
+                  for aid, score, weight in graded_observations]
+        clean_id = None
+        if article_batch and allow_clean:
+            ids = [int(a.id) for a in article_batch]
+            unflagged = [aid for aid in ids if aid not in flagged]
+            taken = {aid for aid, _, _ in graded}
+            clean_id = next((aid for aid in unflagged if aid not in taken),
+                            unflagged[0] if unflagged else ids[0])
         merged = {}
-        for aid, score, weight in (list(graded_observations)
-                                   + triage_res.observations(self._triage_cfg(), clean_id)):
+        for aid, score, weight in (graded
+                                   + triage_res.observations(
+                                       self._triage_cfg(), clean_id,
+                                       avoid={aid for aid, _, _ in graded})):
             aid = int(aid)
             prev = merged.get(aid)
             merged[aid] = ((min(prev[0], float(score)), max(prev[1], float(weight)))

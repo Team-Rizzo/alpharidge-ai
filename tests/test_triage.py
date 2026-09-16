@@ -125,7 +125,8 @@ class TestGradeBatch:
         assert set(res.proof_failures) == {0, 1, 2}
         obs = res.observations(CFG, clean_article_id=0)
         assert all(s == 0.0 for _, s, _ in obs)
-        assert {aid for aid, _, w in obs if w == CFG.hard_weight} == {0, 1, 2}
+        assert sum(w for *_, w in obs) == pytest.approx(
+            CFG.clean_weight * (1 + CFG.hard_severity))
 
     def test_malformed_triage_never_gets_grace(self):
         # A present-but-broken record is not "pre-triage": graded even unenforced.
@@ -154,7 +155,8 @@ class TestGradeBatch:
         assert res.proof_failures == [1]
         # A proof-of-read failure must reach the reputation stream, not just
         # the penalty path — it is the strongest evidence the miner never read.
-        assert (1, 0.0, CFG.hard_weight) in res.observations(CFG, clean_article_id=1)
+        obs = res.observations(CFG, clean_article_id=2)
+        assert (1, 0.0, pytest.approx(CFG.clean_weight * CFG.hard_severity / 2)) in obs
 
     def test_pos_canary_missed_deterministic_is_hard(self):
         items = [make_item(1, LABEL_IRRELEVANT, "non_economic"),

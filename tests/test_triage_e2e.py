@@ -190,8 +190,16 @@ class TestEndToEnd:
         assert ("hard", "false_negative_deterministic") in codes
 
         v._record_triage_observations("hk2", res, returned)
-        assert all(score == 0.0 for _, score, _ in v.observations)
-        assert any(w == 2.0 for *_, w in v.observations)   # hard weight
+        flagged = res.flagged_ids()
+        hard = {e.article_id for e in res.events if e.kind == "hard"}
+        assert hard
+        obs = {aid: (score, w) for aid, score, w in v.observations}
+        clean = [aid for aid in obs if aid not in flagged]
+        assert len(clean) == 1
+        assert obs[clean[0]][0] == pytest.approx(1.0 - len(flagged) / len(returned))
+        penalties = [(score, w) for aid, (score, w) in obs.items() if aid in hard]
+        assert penalties == [(0.0, pytest.approx(
+            TriageConfig().hard_severity * len(hard) / len(returned)))]
 
         # The asset article is never retired despite being claimed irrelevant.
         v._apply_triage_outcome(returned, "hk2", res, fp_ids=set())
@@ -464,8 +472,8 @@ class TestDefectFixes:
         assert set(res.proof_failures) == {7, 8}
         obs = res.observations(cfg, clean_article_id=7)
         assert all(s == 0.0 for _, s, _ in obs)
-        hard_ids = {aid for aid, _, w in obs if w == cfg.hard_weight}
-        assert hard_ids == {7, 8}
+        assert sum(w for *_, w in obs) == pytest.approx(
+            cfg.clean_weight * (1 + cfg.hard_severity))
 
     def test_d5_analysis_on_nonrelevant_label_costs_something(self):
         from alpharidge_ai.triage import build_proof_of_read, build_triage_record

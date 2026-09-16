@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from alpharidge_ai.triage import (
     FLAG_VALUABLE,
@@ -22,15 +22,18 @@ from alpharidge_ai.triage import (
 )
 
 
+MAX_OBSERVATION_WEIGHT = 10.0
+
+
 @dataclass
 class TriageConfig:
     """Design constants — not runtime configuration. Changing one is a
     released code change."""
     audit_irrelevant_n: int = 1
     borderline_cap: int = 3
-    hard_weight: float = 2.0
     soft_weight: float = 0.4
     clean_weight: float = 1.0
+    hard_severity: float = 9.0
     canary_ttl_s: float = 6 * 3600.0
     canary_max_exposures: int = 30
     canary_pos_rate: float = 0.7
@@ -63,22 +66,56 @@ class TriageGradeResult:
     borderline_valuable_ids: List[int] = field(default_factory=list)
     borderline_discard_ids: List[int] = field(default_factory=list)
     grace: bool = False   # pre-triage batch before enforcement; legacy grading applies
+    batch_size: int = 0
+
+    def flagged_ids(self) -> Set[int]:
+        """Articles named by an event or a proof-of-read failure."""
+        return ({int(e.article_id) for e in self.events}
+                | {int(aid) for aid in self.proof_failures})
 
     def observations(self, cfg: TriageConfig,
-                     clean_article_id: Optional[int] = None
+                     clean_article_id: Optional[int] = None,
+                     avoid: Iterable[int] = ()
                      ) -> List[Tuple[int, float, float]]:
-        """(article_id, score, weight) triples for the reputation EMA."""
+        """(article_id, score, weight) triples for the reputation EMA.
+
+        A batch contributes one observation scored by the share of its articles that
+        raised nothing, plus one each for hard events and proof-of-read failures,
+        weighted by their share of the batch.
+        """
         if self.grace:
             return []
-        if not self.events and not self.proof_failures:
-            return ([] if clean_article_id is None
-                    else [(int(clean_article_id), 1.0, cfg.clean_weight)])
-        obs: List[Tuple[int, float, float]] = [
-            (e.article_id, 0.0, cfg.hard_weight if e.kind == "hard" else cfg.soft_weight)
-            for e in self.events
-        ]
-        obs.extend((aid, 0.0, cfg.hard_weight) for aid in self.proof_failures)
-        return obs
+        acc: Dict[int, Tuple[float, float]] = {}
+        skip = {int(a) for a in avoid}
+
+        def add(aid: int, score: float, weight: float) -> None:
+            w, mass = acc.get(aid, (0.0, 0.0))
+            acc[aid] = (w + weight, mass + score * weight)
+
+        def penalise(ids: List[int], n: int) -> None:
+            key = next((a for a in ids if a not in skip and a not in acc),
+                       next((a for a in ids if a not in skip), ids[0]))
+            add(key, 0.0, cfg.clean_weight * cfg.hard_severity * len(ids) / n)
+
+        failed = sorted({int(aid) for aid in self.proof_failures})
+        failed_set = set(failed)
+        flagged = sorted({int(e.article_id) for e in self.events} - failed_set)
+        hard = sorted({int(e.article_id) for e in self.events
+                       if e.kind == "hard"} - failed_set)
+        bad = len(flagged) + len(failed)
+        n = max(int(self.batch_size), bad, 1)
+
+        if clean_article_id is not None:
+            add(int(clean_article_id), 1.0 - bad / n, cfg.clean_weight)
+        elif bad:
+            add((flagged or failed)[0], 0.0, cfg.clean_weight * bad / n)
+        if hard:
+            penalise(hard, n)
+        if failed:
+            penalise(failed, n)
+
+        return [(aid, mass / w, min(w, MAX_OBSERVATION_WEIGHT))
+                for aid, (w, mass) in acc.items()]
 
 
 def fp_soft_event(article_id: int) -> TriageEvent:
@@ -104,7 +141,7 @@ def grade_batch(
     llm_relevant(item): audit-LLM verdict; None = no verdict.
     stage_label(item): reference TriageStage label on the validator's copy.
     """
-    res = TriageGradeResult(canary_ids=list(canary_labels))
+    res = TriageGradeResult(canary_ids=list(canary_labels), batch_size=len(items))
 
     records: Dict[int, Optional[dict]] = {}
     errors = False
