@@ -190,8 +190,12 @@ class TestEndToEnd:
         assert ("hard", "false_negative_deterministic") in codes
 
         v._record_triage_observations("hk2", res, returned)
-        assert all(score == 0.0 for _, score, _ in v.observations)
-        assert any(w == 2.0 for *_, w in v.observations)   # hard weight
+        flagged = res.flagged_ids()
+        assert flagged
+        assert len(v.observations) == 1
+        aid, score, _ = v.observations[0]
+        assert aid not in flagged
+        assert score == pytest.approx(1.0 - len(flagged) / len(returned))
 
         # The asset article is never retired despite being claimed irrelevant.
         v._apply_triage_outcome(returned, "hk2", res, fp_ids=set())

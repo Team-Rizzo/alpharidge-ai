@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from alpharidge_ai.triage import (
     FLAG_VALUABLE,
@@ -63,21 +63,33 @@ class TriageGradeResult:
     borderline_valuable_ids: List[int] = field(default_factory=list)
     borderline_discard_ids: List[int] = field(default_factory=list)
     grace: bool = False   # pre-triage batch before enforcement; legacy grading applies
+    batch_size: int = 0
+
+    def flagged_ids(self) -> Set[int]:
+        """Articles named by an event or a proof-of-read failure."""
+        return ({int(e.article_id) for e in self.events}
+                | {int(aid) for aid in self.proof_failures})
 
     def observations(self, cfg: TriageConfig,
                      clean_article_id: Optional[int] = None
                      ) -> List[Tuple[int, float, float]]:
-        """(article_id, score, weight) triples for the reputation EMA."""
+        """(article_id, score, weight) triples for the reputation EMA.
+
+        A batch contributes one observation, scored by the share of its articles that
+        raised no event. Proof-of-read failures are recorded per article.
+        """
         if self.grace:
             return []
-        if not self.events and not self.proof_failures:
-            return ([] if clean_article_id is None
-                    else [(int(clean_article_id), 1.0, cfg.clean_weight)])
+        failed = [int(aid) for aid in self.proof_failures]
         obs: List[Tuple[int, float, float]] = [
-            (e.article_id, 0.0, cfg.hard_weight if e.kind == "hard" else cfg.soft_weight)
-            for e in self.events
-        ]
-        obs.extend((aid, 0.0, cfg.hard_weight) for aid in self.proof_failures)
+            (aid, 0.0, cfg.hard_weight) for aid in failed]
+        flagged = sorted({int(e.article_id) for e in self.events} - set(failed))
+        n = max(int(self.batch_size), len(flagged) + len(failed), 1)
+        if clean_article_id is not None and not failed:
+            obs.append((int(clean_article_id), 1.0 - len(flagged) / n,
+                        cfg.clean_weight))
+        elif flagged:
+            obs.append((flagged[0], 0.0, cfg.clean_weight * len(flagged) / n))
         return obs
 
 
@@ -104,7 +116,7 @@ def grade_batch(
     llm_relevant(item): audit-LLM verdict; None = no verdict.
     stage_label(item): reference TriageStage label on the validator's copy.
     """
-    res = TriageGradeResult(canary_ids=list(canary_labels))
+    res = TriageGradeResult(canary_ids=list(canary_labels), batch_size=len(items))
 
     records: Dict[int, Optional[dict]] = {}
     errors = False
