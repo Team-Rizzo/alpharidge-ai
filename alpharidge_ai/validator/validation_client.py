@@ -948,6 +948,13 @@ class ValidationClient:
                                 f"[REPUTATION] pruned {dropped} hotkey(s) long absent "
                                 f"from the metagraph; "
                                 f"{len(self._validator._reputation_store.state)} remain")
+                        ready = self._validator._reputation_store.channel_readiness(
+                            list(getattr(self._validator.metagraph, "hotkeys", ()) or ()))
+                        bt.logging.info(
+                            "[REPUTATION] warm " + " ".join(
+                                f"{name}={warm}/{total}"
+                                for name, (warm, total) in ready.items()
+                                if name != "legacy"))
                     except Exception as e:
                         bt.logging.debug(f"[REPUTATION] finalize failed: {e}")
                     if int(target_epoch) != getattr(self, "_last_rep_snapshot_epoch", -1):

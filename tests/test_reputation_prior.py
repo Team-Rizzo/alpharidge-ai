@@ -29,13 +29,13 @@ def test_served_prior_change_applies_without_restart(store, monkeypatch):
     assert store.reputation("hk") == pytest.approx(0.65)
 
 
-def test_finalize_seeds_new_hotkey_from_served_prior(store, monkeypatch):
-    """First observation for an unseen target EMAs off the served prior, not rep.PRIOR."""
+def test_a_first_observation_is_not_blended_with_the_prior(store, monkeypatch):
+    """A new channel reads as the average of what it has seen; the prior only covers
+    hotkeys with no observations at all."""
     monkeypatch.setattr(config, "REPUTATION_PRIOR", 0.20, raising=False)
     store.record_local(7, "self-hk", "target-hk", article_id=1, graded=1.0, weight=1.0)
     store.finalize(7, alpha=0.5)
-    # one step of update(): (1-0.5)*0.20 + 0.5*1.0
-    assert store.reputation("target-hk") == pytest.approx(0.60)
+    assert store.reputation("target-hk") == pytest.approx(1.0)
     assert store.samples("target-hk") == 1
 
 

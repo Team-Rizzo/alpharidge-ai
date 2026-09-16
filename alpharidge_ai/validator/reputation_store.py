@@ -98,12 +98,23 @@ class ReputationStore:
             entry["e"] = int(v["e"])
         raw = v.get("c")
         if isinstance(raw, dict):
-            entry["c"] = {str(name): {"r": float(c["r"]), "n": int(c.get("n", 0))}
+            entry["c"] = {str(name): ReputationStore._load_channel(c)
                           for name, c in raw.items() if name in ch.CHANNELS}
         else:
             # State written before channels existed carries on as the legacy channel.
-            entry["c"] = {ch.LEGACY: {"r": entry["r"], "n": entry["n"]}}
+            entry["c"] = {ch.LEGACY: ReputationStore._settled(entry["r"], entry["n"])}
         return entry
+
+    @staticmethod
+    def _settled(r: float, n: int) -> Dict:
+        return {"r": float(r), "n": int(n), "m": float(r), "d": 1.0}
+
+    @staticmethod
+    def _load_channel(c: Dict) -> Dict:
+        if "m" not in c:
+            return ReputationStore._settled(c["r"], c.get("n", 0))
+        return {"r": float(c["r"]), "n": int(c.get("n", 0)),
+                "m": float(c["m"]), "d": float(c["d"])}
 
     @staticmethod
     def _as_obs(o) -> Obs:
@@ -202,14 +213,22 @@ class ReputationStore:
             rows.sort(key=lambda x: (x[0], x[1], x[2]))  # deterministic
             st = self.state.setdefault(target, {"r": _prior(), "n": 0, "c": {}})
             if "c" not in st:
-                st["c"] = ({ch.LEGACY: {"r": float(st["r"]), "n": int(st["n"])}}
+                st["c"] = ({ch.LEGACY: self._settled(st["r"], st["n"])}
                            if int(st.get("n", 0)) > 0 else {})
             chans = st["c"]
             for _aid, _sender, code, g, w in rows:
                 name = ch.NAMES[code]
-                cur = chans.setdefault(name, {"r": _prior(), "n": 0})
-                cur["r"] = rep.update(cur["r"], g, w,
-                                      self.channel_alphas.get(name, alpha))
+                step = self.channel_alphas.get(name, alpha)
+                cur = chans.get(name)
+                if cur is None:
+                    # Bias-corrected: a new channel reads as the average of what it has
+                    # seen, not as a blend with the prior.
+                    cur = chans[name] = {"r": _prior(), "n": 0, "m": 0.0, "d": 0.0}
+                elif "m" not in cur:
+                    cur.update(self._settled(cur["r"], cur["n"]))
+                cur["m"] = rep.update(cur["m"], g, w, step)
+                cur["d"] = rep.update(cur["d"], 1.0, w, step)
+                cur["r"] = cur["m"] / cur["d"] if cur["d"] > 0.0 else _prior()
                 cur["n"] += 1
                 st["n"] += 1
             st["r"] = ch.combine(chans, self.channel_weights, _prior(),
@@ -259,6 +278,18 @@ class ReputationStore:
     # ---- read ----
     def reputation(self, hotkey: str) -> float:
         return self.state.get(hotkey, {}).get("r", _prior())
+
+    def channel_readiness(self, among=None) -> Dict[str, Tuple[int, int]]:
+        """Per channel, (hotkeys past their warm-up, hotkeys counted)."""
+        keys = [str(h) for h in among] if among is not None else list(self.state)
+        out: Dict[str, Tuple[int, int]] = {}
+        for name in ch.CHANNELS:
+            ramp = ch.warmup(self.channel_alphas.get(name))
+            warm = sum(1 for k in keys
+                       if int(self.state.get(k, {}).get("c", {}).get(name, {}).get("n", 0))
+                       >= ramp)
+            out[name] = (warm, len(keys))
+        return out
 
     def samples(self, hotkey: str) -> int:
         return int(self.state.get(hotkey, {}).get("n", 0))

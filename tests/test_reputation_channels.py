@@ -102,7 +102,7 @@ def test_state_from_before_channels_carries_on_unchanged(tmp_path):
     store = ReputationStore(path=path)
     store.load()
     assert store.reputation("m") == 0.83
-    assert store.state["m"]["c"] == {ch.LEGACY: {"r": 0.83, "n": 250}}
+    assert store.state["m"]["c"] == {ch.LEGACY: {"r": 0.83, "n": 250, "m": 0.83, "d": 1.0}}
     store.set_channel_weights(dict(ch.DEFAULT_WEIGHTS, **{ch.TRIAGE: 1.0}))
     assert store.reputation("m") == pytest.approx(0.83)
 
@@ -218,14 +218,14 @@ def test_audit_paths_go_to_their_own_channels():
 def test_a_channel_can_move_more_slowly(tmp_path):
     store = _store(tmp_path)
     store.set_channel_weights(WEIGHTS, {ch.AUDIT: 0.1, ch.TRIAGE: 0.5})
-    _rec(store, 1, 1, 1.0, ch.TRIAGE)
-    _rec(store, 1, 1, 1.0, ch.AUDIT)
+    for aid, score in ((1, 1.0), (2, 0.0)):
+        _rec(store, 1, aid, score, ch.TRIAGE)
+        _rec(store, 1, aid, score, ch.AUDIT)
     store.finalize(1, alpha=0.5)
     c = store.state["m"]["c"]
-    from alpharidge_ai.validator.reputation_store import _prior
-    prior = _prior()
-    assert c[ch.TRIAGE]["r"] == pytest.approx(prior + 0.5 * (1.0 - prior))
-    assert c[ch.AUDIT]["r"] == pytest.approx(prior + 0.1 * (1.0 - prior))
+    # Bias-corrected EMA of 1.0 then 0.0: (1 - a) / (2 - a).
+    assert c[ch.TRIAGE]["r"] == pytest.approx(0.5 / 1.5)
+    assert c[ch.AUDIT]["r"] == pytest.approx(0.9 / 1.9)
 
 
 def test_unnamed_channels_use_the_epoch_alpha(tmp_path):
@@ -276,3 +276,48 @@ def test_profile_rejects_bad_channel_alphas(bad):
     raw["emission"]["channel_alphas"] = bad
     with pytest.raises(mp.ProfileError):
         mp.parse(raw)
+
+
+
+# ---- bias correction ----------------------------------------------------------------
+
+def test_a_new_channel_reads_as_the_average_of_what_it_has_seen(tmp_path, monkeypatch):
+    import alpharidge_ai.config as config
+    monkeypatch.setattr(config, "REPUTATION_PRIOR", 0.5, raising=False)
+    store = _store(tmp_path)
+    store.set_channel_weights(WEIGHTS, {ch.AUDIT: 0.015})
+    for i in range(10):
+        _rec(store, 1, i, 0.34, ch.AUDIT)
+    store.finalize(1)
+    assert store.state["m"]["c"][ch.AUDIT]["r"] == pytest.approx(0.34)
+
+
+def test_early_observations_are_weighted_by_their_weight(tmp_path):
+    store = _store(tmp_path)
+    _rec(store, 1, 1, 1.0, ch.TRIAGE, weight=1.0)
+    _rec(store, 1, 2, 0.0, ch.TRIAGE, weight=3.0)
+    store.finalize(1, alpha=0.01)
+    # Small steps: close to the weight-averaged score, 1/4.
+    assert store.state["m"]["c"][ch.TRIAGE]["r"] == pytest.approx(0.25, abs=0.01)
+
+
+def test_a_settled_channel_keeps_its_value_when_it_moves_on(tmp_path):
+    path = tmp_path / "rep.json"
+    path.write_text(json.dumps({"state": {"m": {"r": 0.8, "n": 500}},
+                                "finalized": [], "obs": {}, "last_seen_seq": {}}))
+    store = ReputationStore(path=path)
+    store.load()
+    store.record_local(1, "me", "m", 1, 0.0, 1.0, channel=ch.LEGACY)
+    store.finalize(1, alpha=0.1)
+    assert store.state["m"]["c"][ch.LEGACY]["r"] == pytest.approx(0.8 * 0.9)
+
+
+def test_readiness_counts_warm_channels(tmp_path):
+    store = _store(tmp_path)
+    for i in range(ch.WARMUP):
+        _rec(store, 1, i, 1.0, ch.TRIAGE, target="warm")
+    _rec(store, 1, 0, 1.0, ch.TRIAGE, target="cold")
+    store.finalize(1)
+    ready = store.channel_readiness(["warm", "cold", "absent"])
+    assert ready[ch.TRIAGE] == (1, 3)
+    assert ready[ch.AUDIT] == (0, 3)

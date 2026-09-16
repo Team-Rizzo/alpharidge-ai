@@ -25,6 +25,7 @@ def test_identical_observations_under_different_alphas_diverge():
     a, b = ReputationStore(), ReputationStore()
     for s in (a, b):
         s.record_local(5, "me", "miner", 1, 0.9, 1.0)
+        s.record_local(5, "me", "miner", 2, 0.1, 1.0)
     a.finalize(5, alpha=0.03)
     b.finalize(5, alpha=0.12)
     ra = a.snapshot()["miner"]["r"]
