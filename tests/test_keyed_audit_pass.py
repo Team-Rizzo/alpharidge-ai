@@ -143,11 +143,11 @@ def test_no_auditor_means_no_extra_analyses(monkeypatch):
 
 
 class SometimesEmpty(Recorder):
-    """Yields nothing on odd articles, as an empty reference does."""
+    """Yields nothing on the first article, as an empty reference does."""
 
     def audit(self, article_id, text, miner_intel, grader_intel, result, block):
         self.audited.append(article_id)
-        if article_id % 2:
+        if article_id == 1:
             return None
         return Observation(article_id=article_id, score=0.5, weight=1.0, path="pool")
 
@@ -177,10 +177,11 @@ def _run(monkeypatch, auditor, cap=2, size=20):
     return analyzer, result
 
 
-def test_an_empty_audit_does_not_use_a_slot(monkeypatch):
-    auditor = SometimesEmpty()
-    analyzer, result = _run(monkeypatch, auditor, cap=2)
-    sampled = auditor.audited[0]
+@pytest.mark.parametrize("sampled", [1, 2, 3])
+def test_an_empty_audit_does_not_use_a_slot(monkeypatch, sampled):
+    monkeypatch.setattr(scoring.random, "sample",
+                        lambda batch, k: [a for a in batch if a.id == sampled])
+    analyzer, result = _run(monkeypatch, SometimesEmpty(), cap=2)
     sweep = [o for o in result["audit_observations"] if o.article_id != sampled]
     assert len(sweep) == 2
 
