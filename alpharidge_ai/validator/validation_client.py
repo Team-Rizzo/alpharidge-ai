@@ -934,6 +934,17 @@ class ValidationClient:
                         self._validator._reputation_store.finalize(
                             int(target_epoch), alpha=_alpha)
                         self._validator._reputation_store.save()
+                        # Drop hotkeys long gone from the metagraph. Unbounded growth is
+                        # the lesser reason; the store being several times the size of the
+                        # paid field is what corrupts anything measured from it.
+                        dropped = self._validator._reputation_store.prune_unregistered(
+                            list(getattr(self._validator.metagraph, "hotkeys", ()) or ()),
+                            int(target_epoch))
+                        if dropped:
+                            bt.logging.info(
+                                f"[REPUTATION] pruned {dropped} hotkey(s) long absent "
+                                f"from the metagraph; "
+                                f"{len(self._validator._reputation_store.state)} remain")
                     except Exception as e:
                         bt.logging.debug(f"[REPUTATION] finalize failed: {e}")
                     if int(target_epoch) != getattr(self, "_last_rep_snapshot_epoch", -1):
@@ -943,7 +954,9 @@ class ValidationClient:
                                     int(self._validator.block)))
                             n_min = p.n_min
                             snap = self._validator._reputation_store.snapshot()
-                            median = emission_params.live_median(snap, n_min)
+                            registered = list(getattr(self._validator.metagraph,
+                                                      "hotkeys", ()) or ())
+                            median = emission_params.live_median(snap, n_min, registered)
                             if median is not None:
                                 bt.logging.info(
                                     f"[EMISSION] {p.source} midpoint={p.midpoint:.3f} "
