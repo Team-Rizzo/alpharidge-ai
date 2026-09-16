@@ -1502,6 +1502,39 @@ def _reference_clearly_irrelevant(intel) -> bool:
     return sector not in _MARKET_ADJACENT_SECTORS
 
 
+_FLOOR_STAT_KEYS = ("grounded", "inferred", "ungrounded", "aligned", "rejected",
+                    "span_fail", "evidence", "numbers")
+
+
+def _floor_stats(intel, result, text) -> Dict[str, int]:
+    """Counts behind one floor verdict. Telemetry only."""
+    try:
+        numbers = len(oracle_floor.parse_numbers(oracle_floor.normalize(text).text))
+    except Exception:
+        numbers = 0
+    evidence = (len(getattr(intel, "assets", None) or [])
+                + len(getattr(intel, "entities", None) or []))
+    return {
+        "grounded": len(result.grounded),
+        "inferred": len(result.inferred),
+        "ungrounded": len(result.ungrounded),
+        "aligned": len(result.aligned_quotes),
+        "rejected": len(result.rejected_quotes),
+        "span_fail": len(result.span_failures),
+        "evidence": evidence,
+        "numbers": numbers,
+    }
+
+
+def _log_floor_stats(miner_hotkey, stats) -> None:
+    if not stats:
+        return
+    totals = {k: sum(s.get(k, 0) for s in stats) for k in _FLOOR_STAT_KEYS}
+    bt.logging.info(
+        f"[FLOORSIG] hk={str(miner_hotkey or '')[:12]}.. n={len(stats)} "
+        + " ".join(f"{k}={v}" for k, v in totals.items()))
+
+
 def _floor_sweep(miner_batch, reference_by_id=None, *, block: int = 0,
                  schema_cutover_block: int = 0, stats=None) -> Dict[int, bool]:
     """Run the deterministic floor over every article in a batch.
@@ -1556,39 +1589,6 @@ def _floor_sweep(miner_batch, reference_by_id=None, *, block: int = 0,
         except Exception as e:
             bt.logging.debug(f"[FLOOR] evaluation failed id={aid}: {e}")
     return results
-
-
-_FLOOR_STAT_KEYS = ("grounded", "inferred", "ungrounded", "aligned", "rejected",
-                    "span_fail", "evidence", "numbers")
-
-
-def _floor_stats(intel, result, text) -> Dict[str, int]:
-    """Counts behind one floor verdict. Telemetry only."""
-    try:
-        numbers = len(oracle_floor.parse_numbers(oracle_floor.normalize(text).text))
-    except Exception:
-        numbers = 0
-    evidence = (len(getattr(intel, "assets", None) or [])
-                + len(getattr(intel, "entities", None) or []))
-    return {
-        "grounded": len(result.grounded),
-        "inferred": len(result.inferred),
-        "ungrounded": len(result.ungrounded),
-        "aligned": len(result.aligned_quotes),
-        "rejected": len(result.rejected_quotes),
-        "span_fail": len(result.span_failures),
-        "evidence": evidence,
-        "numbers": numbers,
-    }
-
-
-def _log_floor_stats(miner_hotkey, stats) -> None:
-    if not stats:
-        return
-    totals = {k: sum(s.get(k, 0) for s in stats) for k in _FLOOR_STAT_KEYS}
-    bt.logging.info(
-        f"[FLOORSIG] hk={str(miner_hotkey or '')[:12]}.. n={len(stats)} "
-        + " ".join(f"{k}={v}" for k, v in totals.items()))
 
 
 def validate_miner_article_intelligence_batch(
