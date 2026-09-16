@@ -223,6 +223,16 @@ class Auditor:
         except Exception:
             return False
 
+    def reference_model(self, article_id, block: int) -> str:
+        """The model drawn for this article, or "" to use the analyzer's own."""
+        try:
+            profile = self._profile_reader(block)
+            if profile is None:
+                return ""
+            return self._selector.draw_grader(article_id, profile.oracle.grader_models)
+        except Exception:
+            return ""
+
     def audit(self, article_id, article_text, miner_intel, grader_intel,
               floor_result, block: int) -> Optional[Observation]:
         try:

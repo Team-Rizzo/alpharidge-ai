@@ -499,9 +499,10 @@ class ArticleIntelligenceAnalyzer:
         self, article_id: int, url: str, title: str, source: str,
         published: Optional[str] = None, summary: Optional[str] = None,
         content: Optional[str] = None, miner_hotkey: Optional[str] = None,
-        raw_html: Optional[str] = None,
+        raw_html: Optional[str] = None, model: Optional[str] = None,
     ) -> Optional[ArticleIntelligence]:
         start_ms = int(time.time() * 1000)
+        model = model or self.model
         body = content or summary or ""
         # Strip the disclosure/footer tail for the EXTRACTION path only (NER, assets,
         # LLM, sectors) so a "stocks mentioned" footer doesn't inject noise tickers.
@@ -538,7 +539,8 @@ class ArticleIntelligenceAnalyzer:
                 f"Article:\n\"\"\"{article_text}\"\"\"\n\n"
                 f"Pre-detected (NER):\n{ner_hints}"
             )
-            call1 = self._llm_call(call1_prompt, EXTRACT_CLASSIFY_TOOL, "extract_and_classify")
+            call1 = self._llm_call(call1_prompt, EXTRACT_CLASSIFY_TOOL, "extract_and_classify",
+                                   model)
 
             # Merge additional tickers from LLM
             for t in call1.get("additional_tickers", []):
@@ -553,7 +555,8 @@ class ArticleIntelligenceAnalyzer:
                 f"a one-liner, and a context paragraph.\n\n"
                 f"{fact_sheet}"
             )
-            call2 = self._llm_call(call2_prompt, REASON_SUMMARIZE_TOOL, "reason_and_summarize")
+            call2 = self._llm_call(call2_prompt, REASON_SUMMARIZE_TOOL, "reason_and_summarize",
+                                   model)
 
             # ── ASSEMBLY ──
             # Contagion + per-asset sentiment are computed off-LLM from the DETERMINISTIC
@@ -608,7 +611,7 @@ class ArticleIntelligenceAnalyzer:
                 article_id=article_id, url=url, title=title,
                 published_at=published or "",
                 analyzed_at=datetime.now(timezone.utc).isoformat(),
-                miner_hotkey=miner_hotkey, analysis_model=self.model,
+                miner_hotkey=miner_hotkey, analysis_model=model,
                 analysis_latency_ms=elapsed_ms,
                 source=source_meta,
                 content_type=_safe_enum(ArticleContentType, call1.get("content_type"), ArticleContentType.OTHER),
@@ -680,10 +683,11 @@ class ArticleIntelligenceAnalyzer:
     # LLM
     # ========================================================================
 
-    def _llm_call(self, prompt: str, tool: dict, tool_name: str) -> dict:
+    def _llm_call(self, prompt: str, tool: dict, tool_name: str,
+                  model: Optional[str] = None) -> dict:
         try:
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=model or self.model,
                 messages=[{"role": "user", "content": prompt}],
                 tools=[tool],
                 tool_choice={"type": "function", "function": {"name": tool_name}},

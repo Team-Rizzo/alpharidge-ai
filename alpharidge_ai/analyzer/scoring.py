@@ -1556,6 +1556,20 @@ def _floor_sweep(miner_batch, reference_by_id=None, *, block: int = 0,
     return results
 
 
+def _reference_analysis(analyzer, auditor, article, src, block: int, default=None):
+    """The reference an audit is scored against, from the model drawn for the article."""
+    drawn = ""
+    if hasattr(auditor, "reference_model"):
+        drawn = auditor.reference_model(int(article.id), block) or ""
+    if default is not None and (not drawn or drawn == getattr(analyzer, "model", None)):
+        return default
+    kwargs = {"model": drawn} if drawn else {}
+    return analyzer.analyze(
+        article_id=article.id, url=src.url, title=src.title,
+        source=src.source, published=src.published, summary=src.summary,
+        content=src.content, raw_html=getattr(src, "raw_html", None), **kwargs)
+
+
 def validate_miner_article_intelligence_batch(
     miner_batch: List[NewsArticleForScoring],
     analyzer,
@@ -1689,10 +1703,13 @@ def validate_miner_article_intelligence_batch(
             try:
                 text = getattr(src, "content", None) or ""
                 seen = _floor_sweep([article], reference_by_id).get(int(article.id))
-                if seen:
+                if seen and auditor.selects(int(article.id), text, int(block)):
                     result = oracle_floor.evaluate(miner_intel, text)
-                    observed = auditor.audit(int(article.id), text, miner_intel,
-                                             validator_intel, result, int(block))
+                    reference = _reference_analysis(analyzer, auditor, article, src,
+                                                    int(block), validator_intel)
+                    observed = (None if reference is None else
+                                auditor.audit(int(article.id), text, miner_intel,
+                                              reference, result, int(block)))
                     if observed is not None:
                         audit_observations.append(observed)
             except Exception as e:
@@ -1758,10 +1775,8 @@ def validate_miner_article_intelligence_batch(
 
             spent += 1
             try:
-                validator_intel = analyzer.analyze(
-                    article_id=article.id, url=src.url, title=src.title,
-                    source=src.source, published=src.published, summary=src.summary,
-                    content=src.content, raw_html=getattr(src, "raw_html", None))
+                validator_intel = _reference_analysis(analyzer, auditor, article, src,
+                                                      int(block))
                 if validator_intel is None:
                     continue
                 result = oracle_floor.evaluate(miner_intel, text)
