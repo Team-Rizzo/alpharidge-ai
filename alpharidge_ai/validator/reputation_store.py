@@ -184,11 +184,10 @@ class ReputationStore:
         without bound, and it makes any population statistic taken from the store describe
         a field several times larger than the one being paid.
 
-        Dropped after a grace period rather than on departure. Reputation that vanished
-        the moment a hotkey deregistered would make leaving a way to discard a bad record
-        and return with a clean one, which is worth more than the disk space. An entry
-        with no recorded epoch is treated as current rather than ancient, so existing
-        state is never dropped on the first pass.
+        Dropped after a grace period rather than on departure. A record that does not
+        survive a brief absence is not a record, and the grace period is worth more than
+        the disk space it costs. An entry with no recorded epoch is treated as current
+        rather than ancient, so existing state is never dropped on the first pass.
         """
         allowed = {str(h) for h in (registered or ())}
         if not allowed:

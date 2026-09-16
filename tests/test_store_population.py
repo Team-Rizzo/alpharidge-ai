@@ -1,9 +1,7 @@
 """Anything measured from the reputation store must be measured over the paid field.
 
-The store keeps every hotkey it has ever seen and never dropped one. At the served n_min
-that was 754 entries against roughly 245 registered miners, so a median taken from it
-described a subnet three times the size of the real one. Four wrong conclusions this month
-came from that gap.
+The store keeps every hotkey it has ever seen and never dropped one, so a median taken
+over it describes a population several times the size of the field being paid.
 """
 import pytest
 
@@ -27,7 +25,7 @@ def test_the_median_is_taken_over_registered_hotkeys_only():
 
 
 def test_departed_hotkeys_would_otherwise_move_it():
-    """The defect, stated as a number: six entries, three miners, a median off by 0.39."""
+    """Six entries against three registered miners moves the median by 0.39."""
     everything = [k for k in SNAP]
     assert ep.live_median(SNAP, 100, everything) == pytest.approx(0.41, abs=0.02)
 
@@ -58,8 +56,7 @@ def test_a_departed_hotkey_is_dropped_once_it_has_gone_quiet(tmp_path):
 
 
 def test_a_departed_hotkey_keeps_its_record_during_the_grace_period(tmp_path):
-    """Dropping reputation the moment a hotkey leaves makes deregistering a way to
-    discard a bad record and come back clean."""
+    """A record that does not survive a brief absence is not a record."""
     s = _store(tmp_path, {"live_a": {"r": 0.9, "n": 5, "e": 1000},
                           "gone_x": {"r": 0.1, "n": 5, "e": 1000}})
     assert s.prune_unregistered(["live_a"], epoch=1050, grace_epochs=100) == 0
