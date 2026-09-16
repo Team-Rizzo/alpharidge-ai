@@ -1040,7 +1040,8 @@ class ArticleIntelligenceAnalyzer:
                 if not article.text:
                     continue
                 hit = oracle_floor.align_quote(article, text, None, None)
-                if hit is None:
+                if hit is None or not oracle_floor.quote_numbers_hold(
+                        text, content, hit.start, hit.end):
                     # A quote we cannot locate cannot carry offsets, and a 1.2.0
                     # submission missing them fails the cutover gate for the whole
                     # article. Dropping the one quote costs a little recall; keeping it

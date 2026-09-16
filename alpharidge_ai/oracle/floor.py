@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
@@ -594,6 +595,23 @@ def align_quote(article: Normalized, quote_text: str,
     return AlignedQuote(o_start, o_end, hit.score / 100.0)
 
 
+_DIGITS_RE = re.compile(r"\d+")
+
+
+def quote_numbers_hold(quote_text: Optional[str], article_text: Optional[str],
+                       start: int, end: int) -> bool:
+    """Every number a quote states is stated in the passage it aligned to."""
+    quoted = _DIGITS_RE.findall(normalize(quote_text).text)
+    if not quoted:
+        return True
+    available = Counter(_DIGITS_RE.findall(normalize((article_text or "")[start:end]).text))
+    for digits in quoted:
+        if available[digits] <= 0:
+            return False
+        available[digits] -= 1
+    return True
+
+
 def canonical_span(article: Normalized, start: int, end: int) -> Tuple[int, int]:
     """Widen a match to the passage that contains it, in normalised offsets.
 
@@ -777,7 +795,8 @@ def evaluate(intel, article_text: str, *,
         hit = align_quote(article, getattr(quote, "text", None),
                           getattr(quote, "start_offset", None),
                           getattr(quote, "end_offset", None))
-        if hit is None:
+        if hit is None or not quote_numbers_hold(getattr(quote, "text", None),
+                                                 article_text, hit.start, hit.end):
             result.rejected_quotes.add(i)
             continue
         span = (hit.start, hit.end)
