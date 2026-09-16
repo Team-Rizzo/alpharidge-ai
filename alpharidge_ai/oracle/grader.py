@@ -85,8 +85,12 @@ JUDGMENT_TOOL = {
                 "assets": {"type": "array", "items": {"type": "string"}},
                 "entities": {"type": "array", "items": {"type": "string"}},
             },
+            # Every field is required. An array left optional is one the model may omit
+            # entirely, and an omitted array reads downstream as an empty one -- so the
+            # keeper scores the miner against a reference that was never produced. An
+            # empty list is a legitimate answer here and stays available.
             "required": ["overall_sentiment", "impact_potential", "urgency",
-                         "content_type"],
+                         "content_type", "assets", "entities"],
         },
     },
 }
