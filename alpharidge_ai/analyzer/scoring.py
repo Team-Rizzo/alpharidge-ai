@@ -14,7 +14,7 @@ Validator Flow:
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import os
 import random
 import threading
@@ -1526,13 +1526,40 @@ def _floor_stats(intel, result, text) -> Dict[str, int]:
     }
 
 
+def floor_quality(stats: Dict[str, int]) -> Optional[float]:
+    """How much of what an article's submission asserts holds up against its text.
+
+    The mean of the claim, quote and evidence rates that apply, or None when the
+    submission asserts nothing the floor can check.
+    """
+    rates = []
+    claims = stats.get("grounded", 0) + stats.get("inferred", 0) + stats.get("ungrounded", 0)
+    if claims:
+        rates.append(1.0 - stats.get("ungrounded", 0) / claims)
+    quotes = stats.get("aligned", 0) + stats.get("rejected", 0)
+    if quotes:
+        rates.append(stats.get("aligned", 0) / quotes)
+    evidence = stats.get("evidence", 0)
+    if evidence:
+        rates.append(max(0.0, 1.0 - stats.get("span_fail", 0) / evidence))
+    return sum(rates) / len(rates) if rates else None
+
+
+def batch_floor_quality(stats) -> Optional[float]:
+    """Mean article quality over the articles in a batch that have one."""
+    values = [q for q in (floor_quality(s) for s in stats or ()) if q is not None]
+    return sum(values) / len(values) if values else None
+
+
 def _log_floor_stats(miner_hotkey, stats) -> None:
     if not stats:
         return
     totals = {k: sum(s.get(k, 0) for s in stats) for k in _FLOOR_STAT_KEYS}
+    quality = batch_floor_quality(stats)
     bt.logging.info(
         f"[FLOORSIG] hk={str(miner_hotkey or '')[:12]}.. n={len(stats)} "
-        + " ".join(f"{k}={v}" for k, v in totals.items()))
+        + " ".join(f"{k}={v}" for k, v in totals.items())
+        + (f" quality={quality:.3f}" if quality is not None else " quality=na"))
 
 
 def _floor_sweep(miner_batch, reference_by_id=None, *, block: int = 0,

@@ -59,3 +59,44 @@ def test_the_audit_line_says_how_the_schema_was_treated():
     assert observed
     assert all("schema=" in o.detail for o in observed)
     assert all("submitted=" in o.detail for o in observed if o.path == "pool")
+
+
+def _stats(**kw):
+    base = {k: 0 for k in scoring._FLOOR_STAT_KEYS}
+    base.update(kw)
+    return base
+
+
+def test_quality_is_none_when_nothing_is_asserted():
+    assert scoring.floor_quality(_stats(numbers=12)) is None
+
+
+def test_quality_is_one_when_everything_holds():
+    assert scoring.floor_quality(_stats(grounded=4, aligned=2, evidence=5)) == 1.0
+
+
+def test_invented_claims_lower_quality():
+    assert scoring.floor_quality(_stats(grounded=3, ungrounded=1)) == 0.75
+
+
+def test_inferred_claims_are_not_counted_against_the_submission():
+    assert scoring.floor_quality(_stats(grounded=1, inferred=3)) == 1.0
+
+
+def test_each_rate_counts_equally():
+    q = scoring.floor_quality(_stats(grounded=1, ungrounded=1, aligned=1, evidence=2,
+                                     span_fail=2))
+    assert q == (0.5 + 1.0 + 0.0) / 3
+
+
+def test_batch_quality_skips_articles_without_one():
+    stats = [_stats(grounded=1), _stats(), _stats(grounded=1, ungrounded=1)]
+    assert scoring.batch_floor_quality(stats) == 0.75
+    assert scoring.batch_floor_quality([_stats()]) is None
+
+
+def test_the_line_reports_quality(monkeypatch):
+    lines = []
+    monkeypatch.setattr(scoring.bt.logging, "info", lambda m: lines.append(m))
+    scoring._log_floor_stats("hk", [_stats(grounded=3, ungrounded=1)])
+    assert lines[0].endswith("quality=0.750")
