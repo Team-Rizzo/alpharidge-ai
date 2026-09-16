@@ -211,3 +211,68 @@ def test_audit_paths_go_to_their_own_channels():
     recorded.clear()
     Fake()._log_audit("hk-0123456789ab", obs, live=False)
     assert not recorded
+
+
+# ---- per-channel steps --------------------------------------------------------------
+
+def test_a_channel_can_move_more_slowly(tmp_path):
+    store = _store(tmp_path)
+    store.set_channel_weights(WEIGHTS, {ch.AUDIT: 0.1, ch.TRIAGE: 0.5})
+    _rec(store, 1, 1, 1.0, ch.TRIAGE)
+    _rec(store, 1, 1, 1.0, ch.AUDIT)
+    store.finalize(1, alpha=0.5)
+    c = store.state["m"]["c"]
+    from alpharidge_ai.validator.reputation_store import _prior
+    prior = _prior()
+    assert c[ch.TRIAGE]["r"] == pytest.approx(prior + 0.5 * (1.0 - prior))
+    assert c[ch.AUDIT]["r"] == pytest.approx(prior + 0.1 * (1.0 - prior))
+
+
+def test_unnamed_channels_use_the_epoch_alpha(tmp_path):
+    fast = _store(tmp_path / "a")
+    slow = _store(tmp_path / "b")
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    slow.set_channel_weights(WEIGHTS, {ch.AUDIT: 0.01})
+    for store in (fast, slow):
+        _rec(store, 1, 1, 1.0, ch.TRIAGE)
+        store.finalize(1, alpha=0.5)
+    assert fast.state["m"]["c"][ch.TRIAGE] == slow.state["m"]["c"][ch.TRIAGE]
+
+
+def test_a_slower_channel_is_phased_in_over_its_own_half_life():
+    assert ch.warmup(0.03) == ch.WARMUP
+    assert ch.warmup(0.015) > ch.WARMUP
+    chans = {ch.TRIAGE: {"r": 1.0, "n": 1000}, ch.AUDIT: {"r": 0.0, "n": ch.WARMUP}}
+    weights = {ch.TRIAGE: 1.0, ch.AUDIT: 1.0}
+    fast = ch.combine(chans, weights, 0.5)
+    slow = ch.combine(chans, weights, 0.5, {ch.AUDIT: 0.015})
+    assert slow > fast
+
+
+def test_changing_the_steps_rederives_reputation(tmp_path):
+    store = _store(tmp_path)
+    for i in range(30):
+        _rec(store, 1, i, 1.0, ch.TRIAGE)
+        _rec(store, 1, i, 0.0, ch.AUDIT)
+    store.finalize(1, alpha=0.5)
+    before = store.reputation("m")
+    store.set_channel_weights(WEIGHTS, {ch.AUDIT: 0.001})
+    assert store.reputation("m") != before
+
+
+def test_profile_reads_channel_alphas():
+    raw = valid()
+    raw["emission"]["channel_alphas"] = {ch.AUDIT: 0.015}
+    alphas = mp.parse(raw).emission.alphas()
+    assert alphas[ch.AUDIT] == 0.015
+    assert alphas[ch.TRIAGE] == raw["emission"]["ema_alpha"]
+    assert mp.parse(valid()).emission.alphas()[ch.AUDIT] == valid()["emission"]["ema_alpha"]
+
+
+@pytest.mark.parametrize("bad", [{"nonsense": 0.1}, {ch.AUDIT: 0.0}, {ch.AUDIT: 1.5}, [0.1]])
+def test_profile_rejects_bad_channel_alphas(bad):
+    raw = valid()
+    raw["emission"]["channel_alphas"] = bad
+    with pytest.raises(mp.ProfileError):
+        mp.parse(raw)

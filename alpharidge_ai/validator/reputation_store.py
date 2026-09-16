@@ -57,6 +57,7 @@ class ReputationStore:
     state: Dict[str, Dict] = field(default_factory=dict)
     channel_weights: Dict[str, float] = field(
         default_factory=lambda: dict(ch.DEFAULT_WEIGHTS))
+    channel_alphas: Dict[str, float] = field(default_factory=dict)
     # pending observations: epoch -> sender_hotkey -> target_hotkey -> [Obs]
     obs: Dict[int, Dict[str, Dict[str, List[Obs]]]] = field(default_factory=dict)
     finalized: List[int] = field(default_factory=list)
@@ -109,14 +110,19 @@ class ReputationStore:
         code = int(float(o[3])) if len(o) > 3 else ch.CODES[ch.LEGACY]
         return (int(o[0]), float(o[1]), float(o[2]), code)
 
-    def set_channel_weights(self, weights: Dict[str, float] = None) -> None:
-        """Adopt published channel weights, and re-derive every reputation if they changed."""
+    def set_channel_weights(self, weights: Dict[str, float] = None,
+                            alphas: Dict[str, float] = None) -> None:
+        """Adopt published channel weights and steps, and re-derive every reputation if
+        they changed."""
         new = dict(ch.DEFAULT_WEIGHTS if weights is None else weights)
-        if new == self.channel_weights:
+        new_alphas = dict(alphas or {})
+        if new == self.channel_weights and new_alphas == self.channel_alphas:
             return
         self.channel_weights = new
+        self.channel_alphas = new_alphas
         for st in self.state.values():
-            st["r"] = ch.combine(st.get("c", {}), self.channel_weights, _prior())
+            st["r"] = ch.combine(st.get("c", {}), self.channel_weights, _prior(),
+                                 self.channel_alphas)
 
     # ---- ingest ----
     def _add(self, epoch: int, sender: str, target: str, o) -> None:
@@ -200,11 +206,14 @@ class ReputationStore:
                            if int(st.get("n", 0)) > 0 else {})
             chans = st["c"]
             for _aid, _sender, code, g, w in rows:
-                cur = chans.setdefault(ch.NAMES[code], {"r": _prior(), "n": 0})
-                cur["r"] = rep.update(cur["r"], g, w, alpha)
+                name = ch.NAMES[code]
+                cur = chans.setdefault(name, {"r": _prior(), "n": 0})
+                cur["r"] = rep.update(cur["r"], g, w,
+                                      self.channel_alphas.get(name, alpha))
                 cur["n"] += 1
                 st["n"] += 1
-            st["r"] = ch.combine(chans, self.channel_weights, _prior())
+            st["r"] = ch.combine(chans, self.channel_weights, _prior(),
+                                 self.channel_alphas)
             # Last epoch this hotkey was actually scored. Pruning needs to tell a hotkey
             # that has gone quiet from one that is merely absent from this batch.
             st["e"] = int(epoch)

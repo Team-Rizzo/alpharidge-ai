@@ -27,7 +27,13 @@ DEFAULT_WEIGHTS: Dict[str, float] = {
 }
 
 # A channel reaches full weight once it holds about one half-life of observations.
-WARMUP = math.ceil(math.log(2) / 0.03)
+DEFAULT_ALPHA = 0.03
+WARMUP = math.ceil(math.log(2) / DEFAULT_ALPHA)
+
+
+def warmup(alpha: float = None) -> int:
+    a = DEFAULT_ALPHA if not alpha or alpha <= 0.0 else float(alpha)
+    return max(1, math.ceil(math.log(2) / min(a, 1.0)))
 
 
 def code_of(name: str) -> int:
@@ -46,13 +52,14 @@ def name_of(code) -> str:
 
 
 def combine(channels: Mapping[str, Mapping], weights: Mapping[str, float],
-            prior: float) -> float:
+            prior: float, alphas: Mapping[str, float] = None) -> float:
     """Weighted mean of the channel scores, each phased in over its first observations."""
     total = 0.0
     mass = 0.0
     for name, st in (channels or {}).items():
         n = int(st.get("n", 0))
-        w = float(weights.get(name, 0.0)) * min(1.0, n / WARMUP)
+        ramp = warmup((alphas or {}).get(name))
+        w = float(weights.get(name, 0.0)) * min(1.0, n / ramp)
         if w <= 0.0:
             continue
         total += w

@@ -127,6 +127,20 @@ def _channel_weights(d: dict) -> Tuple[Tuple[str, float], ...]:
     return tuple(sorted(weights.items()))
 
 
+def _channel_alphas(d: dict) -> Tuple[Tuple[str, float], ...]:
+    raw = d.get("channel_alphas")
+    if raw is None:
+        return ()
+    if not isinstance(raw, dict):
+        raise ProfileError("emission.channel_alphas must be an object")
+    out = {}
+    for name in raw:
+        if name not in channels.CHANNELS:
+            raise ProfileError(f"emission.channel_alphas has unknown channel {name!r}")
+        out[name] = _num("emission.channel_alphas", raw, name, 0.0, 1.0, lo_open=True)
+    return tuple(sorted(out.items()))
+
+
 @dataclass(frozen=True)
 class Emission:
     midpoint: float
@@ -139,8 +153,15 @@ class Emission:
     channel_weights: Tuple[Tuple[str, float], ...] = tuple(
         sorted(channels.DEFAULT_WEIGHTS.items()))
 
+    channel_alphas: Tuple[Tuple[str, float], ...] = ()
+
     def weights(self) -> Dict[str, float]:
         return dict(self.channel_weights)
+
+    def alphas(self) -> Dict[str, float]:
+        """EMA step per channel; a channel not named uses `ema_alpha`."""
+        named = dict(self.channel_alphas)
+        return {name: named.get(name, self.ema_alpha) for name in channels.CHANNELS}
 
     @staticmethod
     def parse(d: dict) -> "Emission":
@@ -161,6 +182,7 @@ class Emission:
             n_min=_int("emission", d, "n_min", 0, 1_000_000),
             ema_alpha=_num("emission", d, "ema_alpha", 0.0, 1.0, lo_open=True),
             channel_weights=_channel_weights(d),
+            channel_alphas=_channel_alphas(d),
         )
 
 
