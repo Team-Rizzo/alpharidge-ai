@@ -8,7 +8,7 @@ something about the article, not about the submission.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import bittensor as bt
@@ -135,8 +135,11 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
         return None
 
     if choice.slice == selector.KEEPER:
-        return _keeper(article_id, article_text, miner_intel, choice, grader,
-                       oracle.keeper_weight, floor_result)
+        observed = _keeper(article_id, article_text, miner_intel, choice, grader,
+                           oracle.keeper_weight, floor_result)
+        if observed is None:
+            return None
+        return replace(observed, detail=f"{observed.detail} schema={verdict.reason}")
 
     adjudicator = None
     if grader is not None and choice.grader_model:
@@ -166,7 +169,8 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
         article_id=int(article_id), score=score.observation, weight=1.0,
         path=selector.POOL, grader_model=choice.grader_model,
         detail=(f"p={score.precision:.2f} r={score.recall:.2f} "
-                f"conf={score.confidence:.2f} residual={len(decided.residual)}"))
+                f"conf={score.confidence:.2f} residual={len(decided.residual)} "
+                f"submitted={len(miner_keys)} schema={verdict.reason}"))
 
 
 def _keeper(article_id, article_text, miner_intel, choice, grader,
