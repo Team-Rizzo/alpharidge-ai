@@ -112,11 +112,50 @@ def test_every_audit_is_scored_against_the_drawn_model(monkeypatch):
     assert {o.grader_model for o in observed} == {"model-b"}
 
 
-def test_the_sample_analysis_is_reused_when_the_draw_matches(monkeypatch):
+def test_the_reference_is_its_own_run_even_for_the_default_model(monkeypatch):
     analyzer = ModelAnalyzer()
     _run(monkeypatch, DrawingAuditor("default"), analyzer)
-    assert analyzer.models.count("default") == len(analyzer.models)
-    assert len(analyzer.models) == 1 + 2
+    assert analyzer.models == ["default"] * (1 + 1 + 2)
+
+
+def _anchor_lines(monkeypatch):
+    lines = []
+    monkeypatch.setattr(scoring.bt.logging, "info", lambda m: lines.append(m))
+    return lines
+
+
+def test_the_stock_analysis_is_scored_against_the_same_reference(monkeypatch):
+    lines = _anchor_lines(monkeypatch)
+    result = _run(monkeypatch, DrawingAuditor("model-b"), ModelAnalyzer())
+    anchors = [l for l in lines if l.startswith("[ANCHOR] kind=stock")]
+    assert len(anchors) == 1
+    assert "model=model-b" in anchors[0]
+    assert all(o.grader_model == "model-b" for o in result["audit_observations"])
+
+
+def test_the_stock_score_never_becomes_an_observation(monkeypatch):
+    _anchor_lines(monkeypatch)
+    with_anchor = _run(monkeypatch, DrawingAuditor("model-b"), ModelAnalyzer())
+    assert len(with_anchor["audit_observations"]) == 1 + 2
+
+
+def test_the_stock_anchor_can_be_switched_off(monkeypatch):
+    lines = _anchor_lines(monkeypatch)
+    from tests.test_floor_gating import _payload, TEXT, TITLE
+
+    monkeypatch.setattr(scoring, "_cfg_get", lambda k, d=None: (
+        2 if k == "AUDIT_MAX_PER_BATCH" else False if k == "STOCK_ANCHOR_ENABLED" else d))
+    blob = _payload([{"metric_name": "revenue", "value": 1.2e9, "unit": "USD",
+                      "confidence": 0.9}])
+    batch = [_article(i, blob, TEXT) for i in range(1, 7)]
+    for a in batch:
+        a.title = TITLE
+    monkeypatch.setattr(scoring, "validate_article_intelligence",
+                        lambda m, v: (True, 1.0, {}))
+    monkeypatch.setattr(scoring, "_summary_agreement", lambda m, v: 1.0)
+    scoring.validate_miner_article_intelligence_batch(
+        batch, ModelAnalyzer(), sample_size=1, auditor=DrawingAuditor("model-b"), block=0)
+    assert not [l for l in lines if l.startswith("[ANCHOR]")]
 
 
 def test_the_reference_run_is_extraction_only(monkeypatch):

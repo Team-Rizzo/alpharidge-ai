@@ -1556,19 +1556,33 @@ def _floor_sweep(miner_batch, reference_by_id=None, *, block: int = 0,
     return results
 
 
-def _reference_analysis(analyzer, auditor, article, src, block: int, default=None):
+def _reference_analysis(analyzer, auditor, article, src, block: int):
     """The reference an audit is scored against, from the model drawn for the article."""
     drawn = ""
     if hasattr(auditor, "reference_model"):
         drawn = auditor.reference_model(int(article.id), block) or ""
-    if default is not None and (not drawn or drawn == getattr(analyzer, "model", None)):
-        return default
     kwargs = {"model": drawn} if drawn else {}
     return analyzer.analyze(
         article_id=article.id, url=src.url, title=src.title,
         source=src.source, published=src.published, summary=src.summary,
         content=src.content, raw_html=getattr(src, "raw_html", None),
         reference=True, **kwargs)
+
+
+def _log_stock_anchor(auditor, article_id, text, stock_intel, reference, block: int):
+    """Score the validator's own default analysis as a submission would be. Report only."""
+    try:
+        result = oracle_floor.evaluate(stock_intel, text)
+        observed = auditor.audit(int(article_id), text, stock_intel, reference, result,
+                                 block)
+    except Exception as e:
+        bt.logging.debug(f"[ANCHOR] stock failed on {article_id}: {e}")
+        return None
+    if observed is not None:
+        bt.logging.info(
+            f"[ANCHOR] kind=stock id={observed.article_id} path={observed.path} "
+            f"model={observed.grader_model} score={observed.score:.3f} {observed.detail}")
+    return observed
 
 
 def validate_miner_article_intelligence_batch(
@@ -1707,12 +1721,15 @@ def validate_miner_article_intelligence_batch(
                 if seen and auditor.selects(int(article.id), text, int(block)):
                     result = oracle_floor.evaluate(miner_intel, text)
                     reference = _reference_analysis(analyzer, auditor, article, src,
-                                                    int(block), validator_intel)
+                                                    int(block))
                     observed = (None if reference is None else
                                 auditor.audit(int(article.id), text, miner_intel,
                                               reference, result, int(block)))
                     if observed is not None:
                         audit_observations.append(observed)
+                    if reference is not None and _cfg_get("STOCK_ANCHOR_ENABLED", True):
+                        _log_stock_anchor(auditor, article.id, text, validator_intel,
+                                          reference, int(block))
             except Exception as e:
                 bt.logging.debug(f"[AUDIT] failed on {getattr(article, 'id', '?')}: {e}")
 

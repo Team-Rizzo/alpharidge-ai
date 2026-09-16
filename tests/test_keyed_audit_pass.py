@@ -115,10 +115,10 @@ def test_the_keyed_pass_is_capped(monkeypatch):
     _, result = scoring.validate_miner_article_intelligence_batch(
         batch, analyzer, sample_size=1, auditor=recorder, block=0)
 
-    # The cap bounds EXTRA reference analyses. The acceptance sample's analysis is
-    # already paid for, so its article is audited on top of the cap, not inside it.
-    assert analyzer.calls <= 1 + 2
-    assert len(recorder.audited) <= 1 + 2
+    # The cap bounds the sweep. The acceptance sample adds its own analysis and one
+    # reference per sampled article on top of it.
+    assert analyzer.calls <= 2 + 2
+    assert len(set(recorder.audited)) <= 1 + 2
     assert len(result["audit_observations"]) <= 1 + 2
 
 
@@ -188,4 +188,4 @@ def test_an_empty_audit_does_not_use_a_slot(monkeypatch, sampled):
 
 def test_analyses_stay_bounded_when_nothing_is_observed(monkeypatch):
     analyzer, result = _run(monkeypatch, NeverObserves(), cap=2)
-    assert analyzer.calls <= 1 + 2 * 2
+    assert analyzer.calls <= 2 + 2 * 2
