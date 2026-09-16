@@ -1761,7 +1761,8 @@ def validate_miner_article_intelligence_batch(
                 validator_intel = analyzer.analyze(
                     article_id=article.id, url=src.url, title=src.title,
                     source=src.source, published=src.published, summary=src.summary,
-                    content=src.content, raw_html=getattr(src, "raw_html", None))
+                    content=src.content, raw_html=getattr(src, "raw_html", None),
+                    reference=True)
                 if validator_intel is None:
                     continue
                 result = oracle_floor.evaluate(miner_intel, text)

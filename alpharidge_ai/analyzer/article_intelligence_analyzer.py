@@ -407,6 +407,9 @@ class ArticleIntelligenceAnalyzer:
         cache_ttl = float(getattr(config, "LLM_CACHE_TTL", 300)) if config else 300.0
         cache_size = int(getattr(config, "LLM_CACHE_MAX_SIZE", 1024)) if config else 1024
         self._cache = LLMCache(max_size=cache_size, ttl_seconds=cache_ttl)
+        reference_ttl = (float(getattr(config, "REFERENCE_CACHE_TTL", 21600))
+                         if config else 21600.0)
+        self._reference_cache = LLMCache(max_size=cache_size, ttl_seconds=reference_ttl)
 
         self.ner_engine = NERFusionEngine(
             enable_refined=enable_refined,
@@ -499,7 +502,36 @@ class ArticleIntelligenceAnalyzer:
         self, article_id: int, url: str, title: str, source: str,
         published: Optional[str] = None, summary: Optional[str] = None,
         content: Optional[str] = None, miner_hotkey: Optional[str] = None,
-        raw_html: Optional[str] = None,
+        raw_html: Optional[str] = None, reference: bool = False,
+    ) -> Optional[ArticleIntelligence]:
+        """Analyse one article.
+
+        `reference=True` is the validator's audit reference: extraction only, and
+        cached per article, model and content so every audit of an article is scored
+        against the same result.
+        """
+        key = None
+        if reference and miner_hotkey is None:
+            key = self._reference_key(article_id, self.model, title,
+                                      content or summary or "")
+            cached = self._reference_cache.get(key)
+            if cached is not None:
+                return cached.model_copy()
+        result = self._analyze(article_id, url, title, source, published, summary,
+                               content, miner_hotkey, raw_html, reference)
+        if key is not None and result is not None:
+            self._reference_cache.put(key, result.model_copy())
+        return result
+
+    @staticmethod
+    def _reference_key(article_id, model, title, body) -> str:
+        digest = ArticleIntelligence.compute_content_hash(title, body)
+        return f"{article_id}|{model}|{digest}"
+
+    def _analyze(
+        self, article_id: int, url: str, title: str, source: str,
+        published: Optional[str], summary: Optional[str], content: Optional[str],
+        miner_hotkey: Optional[str], raw_html: Optional[str], reference: bool,
     ) -> Optional[ArticleIntelligence]:
         start_ms = int(time.time() * 1000)
         body = content or summary or ""
@@ -546,14 +578,17 @@ class ArticleIntelligenceAnalyzer:
                     all_tickers.append(t.upper())
 
             # ── STAGE 3: LLM Call 2 — Reason & Summarize (~5-8s) ──
-            fact_sheet = self._build_fact_sheet(title, source, published, primary_sector,
-                                                call1, ner_result, all_tickers)
-            call2_prompt = (
-                f"Based on these extracted facts, write chart-ready summaries: a headline, "
-                f"a one-liner, and a context paragraph.\n\n"
-                f"{fact_sheet}"
-            )
-            call2 = self._llm_call(call2_prompt, REASON_SUMMARIZE_TOOL, "reason_and_summarize")
+            call2 = {}
+            if not reference:
+                fact_sheet = self._build_fact_sheet(title, source, published, primary_sector,
+                                                    call1, ner_result, all_tickers)
+                call2_prompt = (
+                    f"Based on these extracted facts, write chart-ready summaries: a headline, "
+                    f"a one-liner, and a context paragraph.\n\n"
+                    f"{fact_sheet}"
+                )
+                call2 = self._llm_call(call2_prompt, REASON_SUMMARIZE_TOOL,
+                                       "reason_and_summarize")
 
             # ── ASSEMBLY ──
             # Contagion + per-asset sentiment are computed off-LLM from the DETERMINISTIC
