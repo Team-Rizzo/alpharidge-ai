@@ -53,11 +53,13 @@ def test_same_work_scores_the_same_however_it_is_sliced(n, hard):
 
 
 @pytest.mark.parametrize("n", [1, 2, 3, 8, 32])
-def test_the_hard_term_keeps_its_full_weight_at_every_size(n):
-    res = _result(n, hard=list(range(n)))
-    total = sum(w for _, _, w in res.observations(CFG, 0))
+@pytest.mark.parametrize("kind", ["hard", "proof"])
+def test_the_penalty_keeps_its_full_weight_at_every_size(n, kind):
+    res = _result(n, **{kind: list(range(n))})
+    obs = res.observations(CFG, 0)
+    total = sum(w for _, _, w in obs)
     assert total == pytest.approx(CFG.clean_weight * (1 + CFG.hard_severity))
-    assert total <= MAX_OBSERVATION_WEIGHT
+    assert all(w <= MAX_OBSERVATION_WEIGHT for _, _, w in obs)
 
 
 def test_hard_events_pull_harder_than_soft_ones():
@@ -82,11 +84,31 @@ def test_no_clean_credit_and_no_findings_records_nothing():
     assert _result(32).observations(CFG, None) == []
 
 
-def test_proof_failure_is_per_article_and_hard():
+def test_proof_failures_are_pooled_like_hard_events():
     obs = _result(32, flagged=[1], proof=[2, 3]).observations(CFG, 0)
-    assert (2, 0.0, CFG.hard_weight) in obs
-    assert (3, 0.0, CFG.hard_weight) in obs
-    assert all(score < 1.0 for _, score, _ in obs)
+    assert (0, pytest.approx(29 / 32), CFG.clean_weight) in obs
+    assert (2, 0.0, pytest.approx(CFG.clean_weight * CFG.hard_severity * 2 / 32)) in obs
+
+
+def test_a_proof_failure_does_not_erase_the_rest_of_the_batch():
+    (aid, score, _), *_ = _result(32, proof=[5]).observations(CFG, 0)
+    assert aid == 0
+    assert score == pytest.approx(31 / 32)
+
+
+@pytest.mark.parametrize("n", [1, 2, 4, 8, 16])
+@pytest.mark.parametrize("proof", [{11}, {11, 12, 30}])
+def test_proof_failures_score_the_same_however_the_work_is_sliced(n, proof):
+    hard = {9}
+    whole = [(_result(32, hard=hard, proof=proof), 0)]
+    sliced = []
+    for start in range(0, 32, n):
+        ids = list(range(start, start + n))
+        bad = hard | proof
+        clean = next((i for i in ids if i not in bad), ids[0])
+        sliced.append((_result(n, hard=[i for i in ids if i in hard],
+                               proof=[i for i in ids if i in proof]), clean))
+    assert _mean_score(sliced) == pytest.approx(_mean_score(whole))
 
 
 def test_weights_stay_inside_the_store_bound():

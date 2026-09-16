@@ -472,8 +472,8 @@ class TestDefectFixes:
         assert set(res.proof_failures) == {7, 8}
         obs = res.observations(cfg, clean_article_id=7)
         assert all(s == 0.0 for _, s, _ in obs)
-        hard_ids = {aid for aid, _, w in obs if w == cfg.hard_weight}
-        assert hard_ids == {7, 8}
+        assert sum(w for *_, w in obs) == pytest.approx(
+            cfg.clean_weight * (1 + cfg.hard_severity))
 
     def test_d5_analysis_on_nonrelevant_label_costs_something(self):
         from alpharidge_ai.triage import build_proof_of_read, build_triage_record

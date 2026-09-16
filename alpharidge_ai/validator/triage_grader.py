@@ -31,7 +31,6 @@ class TriageConfig:
     released code change."""
     audit_irrelevant_n: int = 1
     borderline_cap: int = 3
-    hard_weight: float = 2.0
     soft_weight: float = 0.4
     clean_weight: float = 1.0
     hard_severity: float = 9.0
@@ -81,36 +80,39 @@ class TriageGradeResult:
         """(article_id, score, weight) triples for the reputation EMA.
 
         A batch contributes one observation scored by the share of its articles that
-        raised no event, and one for hard events weighted by their share. Proof-of-read
-        failures are recorded per article.
+        raised nothing, plus one each for hard events and proof-of-read failures,
+        weighted by their share of the batch.
         """
         if self.grace:
             return []
         acc: Dict[int, Tuple[float, float]] = {}
+        skip = {int(a) for a in avoid}
 
         def add(aid: int, score: float, weight: float) -> None:
             w, mass = acc.get(aid, (0.0, 0.0))
             acc[aid] = (w + weight, mass + score * weight)
 
-        failed = [int(aid) for aid in self.proof_failures]
-        for aid in failed:
-            add(aid, 0.0, cfg.hard_weight)
+        def penalise(ids: List[int], n: int) -> None:
+            key = next((a for a in ids if a not in skip and a not in acc),
+                       next((a for a in ids if a not in skip), ids[0]))
+            add(key, 0.0, cfg.clean_weight * cfg.hard_severity * len(ids) / n)
+
+        failed = sorted({int(aid) for aid in self.proof_failures})
         failed_set = set(failed)
         flagged = sorted({int(e.article_id) for e in self.events} - failed_set)
         hard = sorted({int(e.article_id) for e in self.events
                        if e.kind == "hard"} - failed_set)
-        n = max(int(self.batch_size), len(flagged) + len(failed), 1)
+        bad = len(flagged) + len(failed)
+        n = max(int(self.batch_size), bad, 1)
 
-        if clean_article_id is not None and not failed:
-            add(int(clean_article_id), 1.0 - len(flagged) / n, cfg.clean_weight)
-        elif flagged:
-            add(flagged[0], 0.0, cfg.clean_weight * len(flagged) / n)
-
+        if clean_article_id is not None:
+            add(int(clean_article_id), 1.0 - bad / n, cfg.clean_weight)
+        elif bad:
+            add((flagged or failed)[0], 0.0, cfg.clean_weight * bad / n)
         if hard:
-            skip = {int(a) for a in avoid}
-            key = next((a for a in hard if a not in skip and a not in acc),
-                       next((a for a in hard if a not in skip), hard[0]))
-            add(key, 0.0, cfg.clean_weight * cfg.hard_severity * len(hard) / n)
+            penalise(hard, n)
+        if failed:
+            penalise(failed, n)
 
         return [(aid, mass / w, min(w, MAX_OBSERVATION_WEIGHT))
                 for aid, (w, mass) in acc.items()]
