@@ -16,7 +16,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from alpharidge_ai.mechanism import channels
 
-SUPPORTED_SCHEMA_VERSIONS = ("1.2.0",)
+SUPPORTED_SCHEMA_VERSIONS = ("1.2.0", "1.3.0")
+
+# Fields a 1.2.0 validator would not read. A profile carrying them must say so, or an
+# older validator would apply the rest of it without them.
+FIELDS_SINCE_1_3 = {"emission": ("channel_weights", "channel_alphas"),
+                    "oracle.grader_models": ("scale", "keeper_scale")}
 
 # Blocks per epoch and epochs per day. Mechanism constants are quoted per day; the code
 # runs per epoch. Convert here, never at a call site.
@@ -346,6 +351,17 @@ class MechanismProfile:
     raw: Dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
 
+def _refuse_newer_fields(raw: dict) -> None:
+    for name in FIELDS_SINCE_1_3["emission"]:
+        if name in raw["emission"]:
+            raise ProfileError(f"emission.{name} requires schema_version 1.3.0")
+    for i, m in enumerate(raw["oracle"].get("grader_models") or ()):
+        for name in FIELDS_SINCE_1_3["oracle.grader_models"]:
+            if isinstance(m, dict) and name in m:
+                raise ProfileError(
+                    f"oracle.grader_models[{i}].{name} requires schema_version 1.3.0")
+
+
 def parse(raw: dict) -> MechanismProfile:
     """Parse and range-check a profile. Raises ProfileError with the reason."""
     if not isinstance(raw, dict):
@@ -360,6 +376,9 @@ def parse(raw: dict) -> MechanismProfile:
     for section in ("settlement", "emission", "rations", "oracle", "controller"):
         if not isinstance(raw.get(section), dict):
             raise ProfileError(f"{section} section missing")
+
+    if schema_version == "1.2.0":
+        _refuse_newer_fields(raw)
 
     return MechanismProfile(
         version=_int("profile", raw, "version", 1, 2**63 - 1),

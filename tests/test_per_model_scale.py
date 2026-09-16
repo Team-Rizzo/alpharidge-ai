@@ -22,8 +22,14 @@ class Judge:
         return []
 
 
-def _auditor(scale=None, keeper_scale=None, keeper=False):
+def _valid_13():
     raw = valid()
+    raw["schema_version"] = "1.3.0"
+    return raw
+
+
+def _auditor(scale=None, keeper_scale=None, keeper=False):
+    raw = _valid_13()
     raw["oracle"]["keyed_rate_pool"] = 0.0 if keeper else 1.0
     raw["oracle"]["keyed_rate_keeper"] = 1.0 if keeper else 0.0
     entry = {"id": "m", "weight": 1.0}
@@ -74,14 +80,14 @@ def test_keeper_scores_are_scaled_separately():
 @pytest.mark.parametrize("field", ["scale", "keeper_scale"])
 @pytest.mark.parametrize("bad", [0.0, -0.1, 1.01, "x"])
 def test_scales_only_ever_lower_a_score(field, bad):
-    raw = valid()
+    raw = _valid_13()
     raw["oracle"]["grader_models"][0][field] = bad
     with pytest.raises(mp.ProfileError):
         mp.parse(raw)
 
 
 def test_scales_are_read_per_model():
-    raw = valid()
+    raw = _valid_13()
     raw["oracle"]["grader_models"] = [{"id": "a", "weight": 1.0, "scale": 0.7},
                                       {"id": "b", "weight": 1.0}]
     models = {m.id: m for m in mp.parse(raw).oracle.grader_models}

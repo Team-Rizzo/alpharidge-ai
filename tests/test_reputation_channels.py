@@ -168,8 +168,14 @@ def test_profile_defaults_the_weights():
     assert mp.parse(valid()).emission.weights() == ch.DEFAULT_WEIGHTS
 
 
-def test_profile_overrides_named_weights_only():
+def valid_13():
     raw = valid()
+    raw["schema_version"] = "1.3.0"
+    return raw
+
+
+def test_profile_overrides_named_weights_only():
+    raw = valid_13()
     raw["emission"]["channel_weights"] = {ch.AUDIT: 4.0, ch.LEGACY: 0.0}
     weights = mp.parse(raw).emission.weights()
     assert weights[ch.AUDIT] == 4.0 and weights[ch.LEGACY] == 0.0
@@ -184,7 +190,7 @@ def test_profile_overrides_named_weights_only():
     [1, 2],
 ])
 def test_profile_rejects_bad_weights(bad):
-    raw = valid()
+    raw = valid_13()
     raw["emission"]["channel_weights"] = bad
     with pytest.raises(mp.ProfileError):
         mp.parse(raw)
@@ -262,7 +268,7 @@ def test_changing_the_steps_rederives_reputation(tmp_path):
 
 
 def test_profile_reads_channel_alphas():
-    raw = valid()
+    raw = valid_13()
     raw["emission"]["channel_alphas"] = {ch.AUDIT: 0.015}
     alphas = mp.parse(raw).emission.alphas()
     assert alphas[ch.AUDIT] == 0.015
@@ -272,7 +278,7 @@ def test_profile_reads_channel_alphas():
 
 @pytest.mark.parametrize("bad", [{"nonsense": 0.1}, {ch.AUDIT: 0.0}, {ch.AUDIT: 1.5}, [0.1]])
 def test_profile_rejects_bad_channel_alphas(bad):
-    raw = valid()
+    raw = valid_13()
     raw["emission"]["channel_alphas"] = bad
     with pytest.raises(mp.ProfileError):
         mp.parse(raw)
@@ -321,3 +327,36 @@ def test_readiness_counts_warm_channels(tmp_path):
     ready = store.channel_readiness(["warm", "cold", "absent"])
     assert ready[ch.TRIAGE] == (1, 3)
     assert ready[ch.AUDIT] == (0, 3)
+
+
+
+# ---- schema version ---------------------------------------------------------------
+
+@pytest.mark.parametrize("section, field, value", [
+    ("emission", "channel_weights", {ch.AUDIT: 3.0}),
+    ("emission", "channel_alphas", {ch.AUDIT: 0.015}),
+])
+def test_new_emission_fields_need_the_new_schema(section, field, value):
+    raw = valid()
+    raw[section][field] = value
+    with pytest.raises(mp.ProfileError):
+        mp.parse(raw)
+    raw["schema_version"] = "1.3.0"
+    assert mp.parse(raw)
+
+
+@pytest.mark.parametrize("field", ["scale", "keeper_scale"])
+def test_model_scales_need_the_new_schema(field):
+    raw = valid()
+    raw["oracle"]["grader_models"][0][field] = 0.9
+    with pytest.raises(mp.ProfileError):
+        mp.parse(raw)
+    raw["schema_version"] = "1.3.0"
+    assert mp.parse(raw)
+
+
+def test_a_profile_without_new_fields_parses_under_either_schema():
+    raw = valid()
+    assert mp.parse(raw)
+    raw["schema_version"] = "1.3.0"
+    assert mp.parse(raw)
