@@ -359,7 +359,8 @@ EXTRACT_CLASSIFY_TOOL = {
                          "urgency", "temporal_focus", "factual_confidence", "positioning_signal",
                          "primary_geo", "target_audience", "credibility_flag",
                          "event_type", "event_title", "semantic_fingerprint",
-                         "staleness_flag", "forward_event_type"],
+                         "staleness_flag", "forward_event_type",
+                         "numeric_claims", "quotes", "additional_tickers", "economic_data"],
         },
     },
 }
