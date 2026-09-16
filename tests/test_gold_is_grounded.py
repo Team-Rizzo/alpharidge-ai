@@ -30,7 +30,7 @@ def test_a_grader_claim_the_article_does_not_state_is_not_gold():
 
 
 def test_matching_an_invented_grader_claim_earns_nothing():
-    """The route that paid twice: the matched key landed in gold and in supported."""
+    """A claim the article does not state is not part of the reference set."""
     grader = [claim(12.5, "%", "margin"), claim(99, "bn", "revenue")]
     miner = [claim(99, "bn", "revenue")]
     decided = audit.adjudicate(miner, grader, _floor(miner).grounded, TEXT, None)
@@ -52,7 +52,7 @@ def test_an_honest_match_is_still_credited():
 
 
 def test_recall_is_measured_only_against_findable_claims():
-    """Two invented claims used to treble the denominator and cap recall at a third."""
+    """Recall is measured against what the article states, not against the raw set."""
     grader = [claim(12.5, "%", "margin"), claim(99, "bn", "x"), claim(77, "bn", "y")]
     miner = [claim(12.5, "%", "margin")]
     decided = audit.adjudicate(miner, grader, _floor(miner).grounded, TEXT, None)
