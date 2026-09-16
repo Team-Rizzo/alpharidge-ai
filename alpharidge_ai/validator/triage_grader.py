@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from alpharidge_ai.triage import (
     FLAG_VALUABLE,
@@ -22,6 +22,9 @@ from alpharidge_ai.triage import (
 )
 
 
+MAX_OBSERVATION_WEIGHT = 10.0
+
+
 @dataclass
 class TriageConfig:
     """Design constants — not runtime configuration. Changing one is a
@@ -31,6 +34,7 @@ class TriageConfig:
     hard_weight: float = 2.0
     soft_weight: float = 0.4
     clean_weight: float = 1.0
+    hard_severity: float = 9.0
     canary_ttl_s: float = 6 * 3600.0
     canary_max_exposures: int = 30
     canary_pos_rate: float = 0.7
@@ -71,26 +75,45 @@ class TriageGradeResult:
                 | {int(aid) for aid in self.proof_failures})
 
     def observations(self, cfg: TriageConfig,
-                     clean_article_id: Optional[int] = None
+                     clean_article_id: Optional[int] = None,
+                     avoid: Iterable[int] = ()
                      ) -> List[Tuple[int, float, float]]:
         """(article_id, score, weight) triples for the reputation EMA.
 
-        A batch contributes one observation, scored by the share of its articles that
-        raised no event. Proof-of-read failures are recorded per article.
+        A batch contributes one observation scored by the share of its articles that
+        raised no event, and one for hard events weighted by their share. Proof-of-read
+        failures are recorded per article.
         """
         if self.grace:
             return []
+        acc: Dict[int, Tuple[float, float]] = {}
+
+        def add(aid: int, score: float, weight: float) -> None:
+            w, mass = acc.get(aid, (0.0, 0.0))
+            acc[aid] = (w + weight, mass + score * weight)
+
         failed = [int(aid) for aid in self.proof_failures]
-        obs: List[Tuple[int, float, float]] = [
-            (aid, 0.0, cfg.hard_weight) for aid in failed]
-        flagged = sorted({int(e.article_id) for e in self.events} - set(failed))
+        for aid in failed:
+            add(aid, 0.0, cfg.hard_weight)
+        failed_set = set(failed)
+        flagged = sorted({int(e.article_id) for e in self.events} - failed_set)
+        hard = sorted({int(e.article_id) for e in self.events
+                       if e.kind == "hard"} - failed_set)
         n = max(int(self.batch_size), len(flagged) + len(failed), 1)
+
         if clean_article_id is not None and not failed:
-            obs.append((int(clean_article_id), 1.0 - len(flagged) / n,
-                        cfg.clean_weight))
+            add(int(clean_article_id), 1.0 - len(flagged) / n, cfg.clean_weight)
         elif flagged:
-            obs.append((flagged[0], 0.0, cfg.clean_weight * len(flagged) / n))
-        return obs
+            add(flagged[0], 0.0, cfg.clean_weight * len(flagged) / n)
+
+        if hard:
+            skip = {int(a) for a in avoid}
+            key = next((a for a in hard if a not in skip and a not in acc),
+                       next((a for a in hard if a not in skip), hard[0]))
+            add(key, 0.0, cfg.clean_weight * cfg.hard_severity * len(hard) / n)
+
+        return [(aid, mass / w, min(w, MAX_OBSERVATION_WEIGHT))
+                for aid, (w, mass) in acc.items()]
 
 
 def fp_soft_event(article_id: int) -> TriageEvent:

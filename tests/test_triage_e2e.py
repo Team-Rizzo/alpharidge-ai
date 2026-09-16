@@ -191,11 +191,15 @@ class TestEndToEnd:
 
         v._record_triage_observations("hk2", res, returned)
         flagged = res.flagged_ids()
-        assert flagged
-        assert len(v.observations) == 1
-        aid, score, _ = v.observations[0]
-        assert aid not in flagged
-        assert score == pytest.approx(1.0 - len(flagged) / len(returned))
+        hard = {e.article_id for e in res.events if e.kind == "hard"}
+        assert hard
+        obs = {aid: (score, w) for aid, score, w in v.observations}
+        clean = [aid for aid in obs if aid not in flagged]
+        assert len(clean) == 1
+        assert obs[clean[0]][0] == pytest.approx(1.0 - len(flagged) / len(returned))
+        penalties = [(score, w) for aid, (score, w) in obs.items() if aid in hard]
+        assert penalties == [(0.0, pytest.approx(
+            TriageConfig().hard_severity * len(hard) / len(returned)))]
 
         # The asset article is never retired despite being claimed irrelevant.
         v._apply_triage_outcome(returned, "hk2", res, fp_ids=set())

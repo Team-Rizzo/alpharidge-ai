@@ -1235,7 +1235,9 @@ class Validator(BaseValidatorNeuron):
                             unflagged[0] if unflagged else ids[0])
         merged = {}
         for aid, score, weight in (graded
-                                   + triage_res.observations(self._triage_cfg(), clean_id)):
+                                   + triage_res.observations(
+                                       self._triage_cfg(), clean_id,
+                                       avoid={aid for aid, _, _ in graded})):
             aid = int(aid)
             prev = merged.get(aid)
             merged[aid] = ((min(prev[0], float(score)), max(prev[1], float(weight)))
