@@ -226,6 +226,9 @@ class Rations:
 class GraderModel:
     id: str
     weight: float
+    # Brings this model's audit scores onto the strictest model's level.
+    scale: float = 1.0
+    keeper_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -257,9 +260,14 @@ class Oracle:
             mid = m.get("id")
             if not isinstance(mid, str) or not mid:
                 raise ProfileError(f"oracle.grader_models[{i}].id missing")
+            section = f"oracle.grader_models[{i}]"
             models.append(GraderModel(
                 id=mid,
-                weight=_num(f"oracle.grader_models[{i}]", m, "weight", 0.0, 1e6),
+                weight=_num(section, m, "weight", 0.0, 1e6),
+                scale=(_num(section, m, "scale", 0.0, 1.0, lo_open=True)
+                       if "scale" in m else 1.0),
+                keeper_scale=(_num(section, m, "keeper_scale", 0.0, 1.0, lo_open=True)
+                              if "keeper_scale" in m else 1.0),
             ))
         if sum(m.weight for m in models) <= 0:
             raise ProfileError("oracle.grader_models weights sum to zero")

@@ -109,6 +109,17 @@ def _quote_keys(miner_intel, grader_intel, article_text, aligned, claim_cap: int
     return keys, {("q", s) for s in grader_spans}, confidences
 
 
+_UNSCALED = type("Unscaled", (), {"scale": 1.0, "keeper_scale": 1.0})()
+
+
+def _model_entry(oracle, model_id):
+    """The profile entry for a drawn model, or one that leaves scores unchanged."""
+    for m in oracle.grader_models or ():
+        if getattr(m, "id", None) == model_id:
+            return m
+    return _UNSCALED
+
+
 def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
                   floor_result: floor.FloorResult, *,
                   audit_selector: selector.Selector, profile, grader=None,
@@ -134,12 +145,15 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
     if not verdict.accepted:
         return None
 
+    model = _model_entry(oracle, choice.grader_model)
+
     if choice.slice == selector.KEEPER:
         observed = _keeper(article_id, article_text, miner_intel, choice, grader,
                            oracle.keeper_weight, floor_result)
         if observed is None:
             return None
-        return replace(observed, detail=f"{observed.detail} schema={verdict.reason}")
+        return replace(observed, score=observed.score * model.keeper_scale,
+                       detail=f"{observed.detail} schema={verdict.reason}")
 
     adjudicator = None
     if grader is not None and choice.grader_model:
@@ -166,7 +180,7 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
         return None
 
     return Observation(
-        article_id=int(article_id), score=score.observation, weight=1.0,
+        article_id=int(article_id), score=score.observation * model.scale, weight=1.0,
         path=selector.POOL, grader_model=choice.grader_model,
         detail=(f"p={score.precision:.2f} r={score.recall:.2f} "
                 f"conf={score.confidence:.2f} residual={len(decided.residual)} "
