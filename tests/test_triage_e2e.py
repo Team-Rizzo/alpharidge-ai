@@ -119,9 +119,11 @@ class HarnessValidator:
         self._article_store = FakeStore()
         self._miner_reward = FakeReward()
         self.observations = []
+        self.channels = []
 
-    def _record_observations(self, hotkey, observations):
+    def _record_observations(self, hotkey, observations, channel):
         self.observations.extend(observations)
+        self.channels.extend([channel] * len(observations))
 
 
 @pytest.fixture(scope="module")

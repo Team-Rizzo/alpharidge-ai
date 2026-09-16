@@ -1,7 +1,7 @@
 """Durable, consensus-safe reputation state.
 
-Reputation is a substantive-weighted recency EMA of per-article graded scores, kept per
-hotkey. To keep both validators identical, per-article observations are broadcast and the
+Reputation is a fixed-weight mix of per-channel recency EMAs of graded scores, kept per
+hotkey (see mechanism/channels.py). To keep both validators identical, per-article observations are broadcast and the
 UNION (local + received) is applied at a delayed epoch close in a DETERMINISTIC order
 (sort by article_id, then source) — EMA is order-dependent, so arrival order must not
 matter. Mirrors the reward/penalty broadcast-store pattern (delayed application, keep a
@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 from alpharidge_ai import config
+from alpharidge_ai.mechanism import channels as ch
 from alpharidge_ai.validator import reputation as rep
 
 
@@ -34,8 +35,8 @@ def _prior() -> float:
         return rep.PRIOR
 
 
-# one observation: (article_id, graded, weight)
-Obs = Tuple[int, float, float]
+# one observation: (article_id, graded, weight, channel code)
+Obs = Tuple[int, float, float, int]
 
 # Defense-in-depth bounds on ingested observations. A sender broadcasts once per epoch
 # with seq == epoch, so a distant seq is a rogue or replayed payload; the volume caps
@@ -50,8 +51,12 @@ class ReputationStore:
     path: Path = field(default_factory=_default_path)
     keep_epochs: int = 4
 
-    # durable per-hotkey state: hotkey -> {"r": reputation, "n": sample count}
-    state: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    # durable per-hotkey state:
+    #   hotkey -> {"r": reputation, "n": samples, "e": epoch, "c": {channel: {"r", "n"}}}
+    # "r" is the weighted mean of the channels, kept current for readers.
+    state: Dict[str, Dict] = field(default_factory=dict)
+    channel_weights: Dict[str, float] = field(
+        default_factory=lambda: dict(ch.DEFAULT_WEIGHTS))
     # pending observations: epoch -> sender_hotkey -> target_hotkey -> [Obs]
     obs: Dict[int, Dict[str, Dict[str, List[Obs]]]] = field(default_factory=dict)
     finalized: List[int] = field(default_factory=list)
@@ -63,14 +68,13 @@ class ReputationStore:
             if not self.path.exists():
                 return
             data = json.loads(self.path.read_text())
-            self.state = {str(k): {"r": float(v["r"]), "n": int(v.get("n", 0)),
-                                   **({"e": int(v["e"])} if "e" in v else {})}
+            self.state = {str(k): self._load_entry(v)
                           for k, v in (data.get("state") or {}).items()}
             self.finalized = [int(e) for e in (data.get("finalized") or [])][-64:]
             self.last_seen_seq = {str(k): int(v)
                                   for k, v in (data.get("last_seen_seq") or {}).items()}
             raw = data.get("obs") or {}
-            self.obs = {int(e): {s: {t: [tuple(o) for o in lst] for t, lst in tgts.items()}
+            self.obs = {int(e): {s: {t: [self._as_obs(o) for o in lst] for t, lst in tgts.items()}
                                  for s, tgts in senders.items()}
                         for e, senders in raw.items()}
         except Exception:
@@ -86,17 +90,50 @@ class ReputationStore:
         }))
         tmp.replace(self.path)
 
+    @staticmethod
+    def _load_entry(v: Dict) -> Dict:
+        entry = {"r": float(v["r"]), "n": int(v.get("n", 0))}
+        if "e" in v:
+            entry["e"] = int(v["e"])
+        raw = v.get("c")
+        if isinstance(raw, dict):
+            entry["c"] = {str(name): {"r": float(c["r"]), "n": int(c.get("n", 0))}
+                          for name, c in raw.items() if name in ch.CHANNELS}
+        else:
+            # State written before channels existed carries on as the legacy channel.
+            entry["c"] = {ch.LEGACY: {"r": entry["r"], "n": entry["n"]}}
+        return entry
+
+    @staticmethod
+    def _as_obs(o) -> Obs:
+        code = int(float(o[3])) if len(o) > 3 else ch.CODES[ch.LEGACY]
+        return (int(o[0]), float(o[1]), float(o[2]), code)
+
+    def set_channel_weights(self, weights: Dict[str, float] = None) -> None:
+        """Adopt published channel weights, and re-derive every reputation if they changed."""
+        new = dict(ch.DEFAULT_WEIGHTS if weights is None else weights)
+        if new == self.channel_weights:
+            return
+        self.channel_weights = new
+        for st in self.state.values():
+            st["r"] = ch.combine(st.get("c", {}), self.channel_weights, _prior())
+
     # ---- ingest ----
-    def _add(self, epoch: int, sender: str, target: str, o: Obs) -> None:
+    def _add(self, epoch: int, sender: str, target: str, o) -> None:
         aid, g, w = int(o[0]), float(o[1]), float(o[2])
         if not (0.0 <= g <= 1.0) or not (0.0 < w <= 10.0):  # bounds guard
             return
-        self.obs.setdefault(epoch, {}).setdefault(sender, {}).setdefault(target, []).append((aid, g, w))
+        channel = ch.name_of(o[3]) if len(o) > 3 else ch.LEGACY
+        if not channel:
+            return
+        self.obs.setdefault(epoch, {}).setdefault(sender, {}).setdefault(target, []).append(
+            (aid, g, w, ch.CODES[channel]))
 
     def record_local(self, epoch: int, self_hotkey: str, target: str, article_id: int,
-                     graded: float, weight: float) -> None:
+                     graded: float, weight: float, channel: str = ch.LEGACY) -> None:
         """Own observation — buffered for aggregation and for broadcast (via export)."""
-        self._add(epoch, self_hotkey, target, (article_id, graded, weight))
+        self._add(epoch, self_hotkey, target,
+                  (article_id, graded, weight, ch.CODES[channel]))
 
     def ingest(self, sender: str, epoch: int, targets: Dict[str, List[Obs]],
                seq: int = None) -> Tuple[bool, str]:
@@ -140,26 +177,34 @@ class ReputationStore:
         if epoch in self.finalized or epoch not in self.obs:
             return
         alpha = rep.ALPHA if alpha is None else alpha
-        # union per target: dedup identical (sender, obs), then order by (article_id, sender)
-        per_target: Dict[str, List[Tuple[int, str, float, float]]] = {}
+        # union per target, then order by (article_id, sender, channel)
+        per_target: Dict[str, List[Tuple[int, str, int, float, float]]] = {}
         for sender, targets in self.obs[epoch].items():
             for target, lst in targets.items():
-                # One observation per (article, sender): keep the worst
+                # One observation per (article, sender, channel): keep the worst
                 # score (ties: larger weight).
-                best: Dict[Tuple[int, str], Tuple[float, float]] = {}
-                for aid, g, w in lst:
-                    key = (aid, sender)
+                best: Dict[Tuple[int, int], Tuple[float, float]] = {}
+                for o in lst:
+                    aid, g, w, code = self._as_obs(o)
+                    key = (aid, code)
                     cur = best.get(key)
                     if cur is None or g < cur[0] or (g == cur[0] and w > cur[1]):
                         best[key] = (float(g), float(w))
-                for (aid, sender_), (g, w) in best.items():
-                    per_target.setdefault(target, []).append((aid, sender_, g, w))
+                for (aid, code), (g, w) in best.items():
+                    per_target.setdefault(target, []).append((aid, sender, code, g, w))
         for target, rows in per_target.items():
-            rows.sort(key=lambda x: (x[0], x[1]))  # (article_id, sender) — deterministic
-            st = self.state.setdefault(target, {"r": _prior(), "n": 0})
-            for _aid, _sender, g, w in rows:
-                st["r"] = rep.update(st["r"], g, w, alpha)
+            rows.sort(key=lambda x: (x[0], x[1], x[2]))  # deterministic
+            st = self.state.setdefault(target, {"r": _prior(), "n": 0, "c": {}})
+            if "c" not in st:
+                st["c"] = ({ch.LEGACY: {"r": float(st["r"]), "n": int(st["n"])}}
+                           if int(st.get("n", 0)) > 0 else {})
+            chans = st["c"]
+            for _aid, _sender, code, g, w in rows:
+                cur = chans.setdefault(ch.NAMES[code], {"r": _prior(), "n": 0})
+                cur["r"] = rep.update(cur["r"], g, w, alpha)
+                cur["n"] += 1
                 st["n"] += 1
+            st["r"] = ch.combine(chans, self.channel_weights, _prior())
             # Last epoch this hotkey was actually scored. Pruning needs to tell a hotkey
             # that has gone quiet from one that is merely absent from this batch.
             st["e"] = int(epoch)
@@ -216,6 +261,7 @@ class ReputationStore:
     def senders(self, epoch: int) -> List[str]:
         return sorted((self.obs.get(int(epoch), {}) or {}).keys())
 
-    def snapshot(self) -> Dict[str, Dict[str, float]]:
-        """Per-hotkey {r, n} for telemetry / emission."""
-        return {k: dict(v) for k, v in self.state.items()}
+    def snapshot(self) -> Dict[str, Dict]:
+        """Per-hotkey {r, n, e, c} for telemetry / emission."""
+        return {k: {**v, "c": {name: dict(c) for name, c in v.get("c", {}).items()}}
+                for k, v in self.state.items()}

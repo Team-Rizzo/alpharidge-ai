@@ -1932,6 +1932,7 @@ def validate_miner_article_intelligence_batch(
         "faithfulness_scores": faithfulness_scores,
         "reference_irrelevant": reference_irrelevant,
         "floor_results": floor_results,
+        "floor_quality": batch_floor_quality(floor_stats),
         "audit_observations": audit_observations,
     }
 

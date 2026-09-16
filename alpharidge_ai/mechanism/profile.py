@@ -14,6 +14,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from alpharidge_ai.mechanism import channels
+
 SUPPORTED_SCHEMA_VERSIONS = ("1.2.0",)
 
 # Blocks per epoch and epochs per day. Mechanism constants are quoted per day; the code
@@ -110,6 +112,21 @@ class Settlement:
         )
 
 
+def _channel_weights(d: dict) -> Tuple[Tuple[str, float], ...]:
+    raw = d.get("channel_weights")
+    weights = dict(channels.DEFAULT_WEIGHTS)
+    if raw is not None:
+        if not isinstance(raw, dict):
+            raise ProfileError("emission.channel_weights must be an object")
+        for name in raw:
+            if name not in channels.CHANNELS:
+                raise ProfileError(f"emission.channel_weights has unknown channel {name!r}")
+            weights[name] = _num("emission.channel_weights", raw, name, 0.0, 100.0)
+    if sum(weights.values()) <= 0.0:
+        raise ProfileError("emission.channel_weights sum to zero")
+    return tuple(sorted(weights.items()))
+
+
 @dataclass(frozen=True)
 class Emission:
     midpoint: float
@@ -119,6 +136,11 @@ class Emission:
     bonus_full: float
     n_min: int
     ema_alpha: float
+    channel_weights: Tuple[Tuple[str, float], ...] = tuple(
+        sorted(channels.DEFAULT_WEIGHTS.items()))
+
+    def weights(self) -> Dict[str, float]:
+        return dict(self.channel_weights)
 
     @staticmethod
     def parse(d: dict) -> "Emission":
@@ -138,6 +160,7 @@ class Emission:
             bonus_full=full,
             n_min=_int("emission", d, "n_min", 0, 1_000_000),
             ema_alpha=_num("emission", d, "ema_alpha", 0.0, 1.0, lo_open=True),
+            channel_weights=_channel_weights(d),
         )
 
 

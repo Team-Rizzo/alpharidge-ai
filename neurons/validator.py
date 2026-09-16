@@ -30,6 +30,8 @@ from alpharidge_ai.analyzer import setup_news_analyzer
 from alpharidge_ai.analyzer import setup_article_intelligence_analyzer
 import alpharidge_ai.protocol
 from alpharidge_ai import config
+from alpharidge_ai.mechanism import channels
+from alpharidge_ai.oracle.selector import KEEPER as KEEPER_PATH, POOL as POOL_PATH
 from alpharidge_ai.analyzer.aspect_sentiment import install_meta_init_guard
 
 # Must precede every model load: accelerate's meta-device patch is process-wide, so
@@ -833,9 +835,12 @@ class Validator(BaseValidatorNeuron):
                 f"model={obs.grader_model} {obs.detail}"
                 f"{'' if live else ' (shadow)'}")
         if live and observations:
-            self._record_observations(
-                miner_hotkey,
-                [(o.article_id, float(o.score), float(o.weight)) for o in observations])
+            for path, channel in ((POOL_PATH, channels.AUDIT), (KEEPER_PATH, channels.KEEPER)):
+                self._record_observations(
+                    miner_hotkey,
+                    [(o.article_id, float(o.score), float(o.weight))
+                     for o in observations if o.path == path],
+                    channel)
 
     def _ration_for(self, hotkey):
         """This UID's earned ration for the current epoch, or None to leave dispatch
@@ -1221,29 +1226,19 @@ class Validator(BaseValidatorNeuron):
 
     def _record_triage_observations(self, miner_hotkey, triage_res, article_batch,
                                     graded_observations=(), allow_clean=True):
-        """Merge triage and quality observations before recording (the store
-        keeps one observation per (article_id, sender); worst score wins)."""
+        """Record triage and quality observations, each on its own channel. A quality
+        score on an article triage flagged is recorded as a zero."""
         flagged = triage_res.flagged_ids()
-        graded = [(int(aid), 0.0 if int(aid) in flagged else float(score), weight)
-                  for aid, score, weight in graded_observations]
+        graded = sorted((int(aid), 0.0 if int(aid) in flagged else float(score),
+                         float(weight))
+                        for aid, score, weight in graded_observations)
+        self._record_observations(miner_hotkey, graded, channels.GRADED)
         clean_id = None
         if article_batch and allow_clean:
             ids = [int(a.id) for a in article_batch]
-            unflagged = [aid for aid in ids if aid not in flagged]
-            taken = {aid for aid, _, _ in graded}
-            clean_id = next((aid for aid in unflagged if aid not in taken),
-                            unflagged[0] if unflagged else ids[0])
-        merged = {}
-        for aid, score, weight in (graded
-                                   + triage_res.observations(
-                                       self._triage_cfg(), clean_id,
-                                       avoid={aid for aid, _, _ in graded})):
-            aid = int(aid)
-            prev = merged.get(aid)
-            merged[aid] = ((min(prev[0], float(score)), max(prev[1], float(weight)))
-                           if prev else (float(score), float(weight)))
-        self._record_observations(
-            miner_hotkey, [(aid, s, w) for aid, (s, w) in sorted(merged.items())])
+            clean_id = next((aid for aid in ids if aid not in flagged), ids[0])
+        triage = sorted(triage_res.observations(self._triage_cfg(), clean_id))
+        self._record_observations(miner_hotkey, triage, channels.TRIAGE)
 
     @staticmethod
     def _has_full_analysis(article) -> bool:
@@ -1382,7 +1377,7 @@ class Validator(BaseValidatorNeuron):
                               self._attribute_pay(per_article, payout, record=False),
                               miner_signatures, nonces, epoch)
 
-    def _record_observations(self, target_hotkey, observations):
+    def _record_observations(self, target_hotkey, observations, channel):
         if not observations:
             return
         try:
@@ -1390,7 +1385,8 @@ class Validator(BaseValidatorNeuron):
             self_hk = self.wallet.hotkey.ss58_address
             for aid, g, w in observations:
                 self._reputation_store.record_local(
-                    epoch, self_hk, target_hotkey, int(aid), float(g), float(w))
+                    epoch, self_hk, target_hotkey, int(aid), float(g), float(w),
+                    channel=channel)
         except Exception as e:
             bt.logging.warning(f"[REPUTATION] record failed: {e}")
 
@@ -1535,6 +1531,11 @@ class Validator(BaseValidatorNeuron):
             self._log_audit(miner_hotkey,
                             (validation_result or {}).get("audit_observations"),
                             live=oracle_live)
+            quality = (validation_result or {}).get("floor_quality")
+            if quality is not None and track_batch:
+                self._record_observations(
+                    miner_hotkey, [(int(track_batch[0].id), float(quality), 1.0)],
+                    channels.FLOOR)
             if gscorer is not None:
                 # Merged with triage grades below when grading succeeded
                 # (first-obs-wins dedup in the reputation store).
@@ -1542,7 +1543,8 @@ class Validator(BaseValidatorNeuron):
                     # Replaced, not supplemented: the audit measures the same thing
                     # against the article rather than against our own re-run.
                     self._record_observations(
-                        miner_hotkey, (validation_result or {}).get("observations") or [])
+                        miner_hotkey, (validation_result or {}).get("observations") or [],
+                        channels.GRADED)
                 # Faithfulness cooldown update (min over sampled articles).
                 faiths = (validation_result or {}).get("faithfulness_scores") or []
                 if faiths:

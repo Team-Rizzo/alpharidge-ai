@@ -100,3 +100,14 @@ def test_the_line_reports_quality(monkeypatch):
     monkeypatch.setattr(scoring.bt.logging, "info", lambda m: lines.append(m))
     scoring._log_floor_stats("hk", [_stats(grounded=3, ungrounded=1)])
     assert lines[0].endswith("quality=0.750")
+
+
+def test_the_batch_result_carries_its_quality(monkeypatch):
+    from tests.test_keyed_audit_pass import Analyzer
+    monkeypatch.setattr(scoring, "validate_article_intelligence",
+                        lambda m, v: (True, 1.0, {}))
+    monkeypatch.setattr(scoring, "_summary_agreement", lambda m, v: 1.0)
+    _, result = scoring.validate_miner_article_intelligence_batch(
+        _batch(3), Analyzer(), sample_size=1, auditor=None, block=0)
+    assert isinstance(result["floor_quality"], float)
+    assert 0.0 <= result["floor_quality"] <= 1.0
