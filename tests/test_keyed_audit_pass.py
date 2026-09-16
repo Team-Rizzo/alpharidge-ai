@@ -140,3 +140,51 @@ def test_no_auditor_means_no_extra_analyses(monkeypatch):
         batch, analyzer, sample_size=1, auditor=None, block=0)
 
     assert analyzer.calls == 1   # the acceptance sample, and nothing more
+
+
+class SometimesEmpty(Recorder):
+    """Yields nothing on odd articles, as an empty reference does."""
+
+    def audit(self, article_id, text, miner_intel, grader_intel, result, block):
+        self.audited.append(article_id)
+        if article_id % 2:
+            return None
+        return Observation(article_id=article_id, score=0.5, weight=1.0, path="pool")
+
+
+class NeverObserves(Recorder):
+    def audit(self, article_id, text, miner_intel, grader_intel, result, block):
+        self.audited.append(article_id)
+        return None
+
+
+def _run(monkeypatch, auditor, cap=2, size=20):
+    from tests.test_floor_gating import _payload, TEXT, TITLE
+
+    monkeypatch.setattr(scoring, "_cfg_get",
+                        lambda k, d=None: cap if k == "AUDIT_MAX_PER_BATCH" else d)
+    analyzer = Analyzer()
+    blob = _payload([{"metric_name": "revenue", "value": 1.2e9, "unit": "USD",
+                      "confidence": 0.9}])
+    batch = [_article(i, blob, TEXT) for i in range(1, size + 1)]
+    for a in batch:
+        a.title = TITLE
+    monkeypatch.setattr(scoring, "validate_article_intelligence",
+                        lambda m, v: (True, 1.0, {}))
+    monkeypatch.setattr(scoring, "_summary_agreement", lambda m, v: 1.0)
+    _, result = scoring.validate_miner_article_intelligence_batch(
+        batch, analyzer, sample_size=1, auditor=auditor, block=0)
+    return analyzer, result
+
+
+def test_an_empty_audit_does_not_use_a_slot(monkeypatch):
+    auditor = SometimesEmpty()
+    analyzer, result = _run(monkeypatch, auditor, cap=2)
+    sampled = auditor.audited[0]
+    sweep = [o for o in result["audit_observations"] if o.article_id != sampled]
+    assert len(sweep) == 2
+
+
+def test_analyses_stay_bounded_when_nothing_is_observed(monkeypatch):
+    analyzer, result = _run(monkeypatch, NeverObserves(), cap=2)
+    assert analyzer.calls <= 1 + 2 * 2

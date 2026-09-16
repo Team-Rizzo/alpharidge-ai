@@ -1722,9 +1722,12 @@ def validate_miner_article_intelligence_batch(
     if auditor is not None:
         already = {int(getattr(a, "id", 0)) for a in sampled}
         cap = int(_cfg_get("AUDIT_MAX_PER_BATCH", 4))
+        # Slots count observations; the analysis budget bounds spend.
+        budget = 2 * cap
         picked = 0
+        spent = 0
         for article in miner_batch:
-            if picked >= cap:
+            if picked >= cap or spent >= budget:
                 bt.logging.debug(
                     f"[AUDIT] per-batch cap {cap} reached; "
                     f"{len(miner_batch) - len(already)} article(s) left unwatched")
@@ -1753,7 +1756,7 @@ def validate_miner_article_intelligence_batch(
                                 schema_cutover_block=schema_cutover_block).get(aid):
                 continue
 
-            picked += 1
+            spent += 1
             try:
                 validator_intel = analyzer.analyze(
                     article_id=article.id, url=src.url, title=src.title,
@@ -1766,6 +1769,7 @@ def validate_miner_article_intelligence_batch(
                                          result, int(block))
                 if observed is not None:
                     audit_observations.append(observed)
+                    picked += 1
             except Exception as e:
                 bt.logging.debug(f"[AUDIT] keyed pass failed on {aid}: {e}")
 
