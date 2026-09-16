@@ -51,3 +51,11 @@ def test_every_served_emission_value_is_expressible(field, served):
                              "bonus_start": 0.63, "bonus_full": 0.75, "n_min": 100})
     body["emission"][field] = served
     assert getattr(mp.parse(body).emission, field) == served
+
+
+def test_the_ceiling_bound_covers_the_ramp():
+    """Stage 4 steps the bonus ceiling; the bound must not bind mid-ramp."""
+    from alpharidge_ai.mechanism import profile as mp
+    body = _valid_body()
+    body["emission"]["ceiling"] = 10.0
+    assert mp.parse(body).emission.ceiling == 10.0
