@@ -1567,7 +1567,8 @@ def _reference_analysis(analyzer, auditor, article, src, block: int, default=Non
     return analyzer.analyze(
         article_id=article.id, url=src.url, title=src.title,
         source=src.source, published=src.published, summary=src.summary,
-        content=src.content, raw_html=getattr(src, "raw_html", None), **kwargs)
+        content=src.content, raw_html=getattr(src, "raw_html", None),
+        reference=True, **kwargs)
 
 
 def validate_miner_article_intelligence_batch(

@@ -117,3 +117,18 @@ def test_the_sample_analysis_is_reused_when_the_draw_matches(monkeypatch):
     _run(monkeypatch, DrawingAuditor("default"), analyzer)
     assert analyzer.models.count("default") == len(analyzer.models)
     assert len(analyzer.models) == 1 + 2
+
+
+def test_the_reference_run_is_extraction_only(monkeypatch):
+    analyzer = ModelAnalyzer()
+    seen = []
+    original = analyzer.analyze
+
+    def record(**kwargs):
+        seen.append(kwargs.get("reference"))
+        return original(**kwargs)
+
+    analyzer.analyze = record
+    _run(monkeypatch, DrawingAuditor("model-b"), analyzer)
+    assert seen[0] is None          # the acceptance analysis
+    assert seen[1:] and all(seen[1:])
