@@ -52,16 +52,30 @@ def name_of(code) -> str:
 
 
 def combine(channels: Mapping[str, Mapping], weights: Mapping[str, float],
-            prior: float, alphas: Mapping[str, float] = None) -> float:
-    """Weighted mean of the channel scores, each phased in over its first observations."""
+            prior: float, alphas: Mapping[str, float] = None,
+            defaults: Mapping[str, float] = None) -> float:
+    """Weighted mean of the channel scores.
+
+    A channel with a default always counts at its full weight: it reads as the default
+    until it has data and moves to its own measurement over its warm-up. A channel without
+    one is phased in by weight instead.
+    """
+    channels = channels or {}
+    defaults = defaults or {}
     total = 0.0
     mass = 0.0
-    for name, st in (channels or {}).items():
-        n = int(st.get("n", 0))
-        ramp = warmup((alphas or {}).get(name))
-        w = float(weights.get(name, 0.0)) * min(1.0, n / ramp)
+    for name in sorted(set(channels) | set(defaults)):
+        w = float(weights.get(name, 0.0))
         if w <= 0.0:
             continue
-        total += w
-        mass += w * float(st.get("r", prior))
+        st = channels.get(name) or {}
+        n = int(st.get("n", 0))
+        ramp = min(1.0, n / warmup((alphas or {}).get(name)))
+        measured = float(st.get("r", prior))
+        if name in defaults:
+            total += w
+            mass += w * (ramp * measured + (1.0 - ramp) * float(defaults[name]))
+        elif ramp > 0.0:
+            total += w * ramp
+            mass += w * ramp * measured
     return mass / total if total > 0.0 else float(prior)

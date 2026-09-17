@@ -933,7 +933,8 @@ class ValidationClient:
                                   else float(getattr(config, "REPUTATION_EMA_ALPHA", 0.03)))
                         self._validator._reputation_store.set_channel_weights(
                             _prof.emission.weights() if _prof is not None else None,
-                            _prof.emission.alphas() if _prof is not None else None)
+                            _prof.emission.alphas() if _prof is not None else None,
+                            _prof.emission.defaults() if _prof is not None else None)
                         self._validator._reputation_store.finalize(
                             int(target_epoch), alpha=_alpha)
                         self._validator._reputation_store.save()

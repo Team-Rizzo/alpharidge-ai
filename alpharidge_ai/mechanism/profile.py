@@ -16,12 +16,16 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from alpharidge_ai.mechanism import channels
 
-SUPPORTED_SCHEMA_VERSIONS = ("1.2.0", "1.3.0")
+SUPPORTED_SCHEMA_VERSIONS = ("1.2.0", "1.3.0", "1.4.0")
 
-# Fields a 1.2.0 validator would not read. A profile carrying them must say so, or an
+# Fields an older validator would not read. A profile carrying them must say so, or an
 # older validator would apply the rest of it without them.
-FIELDS_SINCE_1_3 = {"emission": ("channel_weights", "channel_alphas"),
-                    "oracle.grader_models": ("scale", "keeper_scale")}
+FIELDS_SINCE = {
+    "1.3.0": {"emission": ("channel_weights", "channel_alphas"),
+              "oracle.grader_models": ("scale", "keeper_scale")},
+    "1.4.0": {"emission": ("channel_defaults",)},
+}
+FIELDS_SINCE_1_3 = FIELDS_SINCE["1.3.0"]
 
 # Blocks per epoch and epochs per day. Mechanism constants are quoted per day; the code
 # runs per epoch. Convert here, never at a call site.
@@ -132,6 +136,20 @@ def _channel_weights(d: dict) -> Tuple[Tuple[str, float], ...]:
     return tuple(sorted(weights.items()))
 
 
+def _channel_defaults(d: dict) -> Tuple[Tuple[str, float], ...]:
+    raw = d.get("channel_defaults")
+    if raw is None:
+        return ()
+    if not isinstance(raw, dict):
+        raise ProfileError("emission.channel_defaults must be an object")
+    out = {}
+    for name in raw:
+        if name not in channels.CHANNELS:
+            raise ProfileError(f"emission.channel_defaults has unknown channel {name!r}")
+        out[name] = _num("emission.channel_defaults", raw, name, 0.0, 1.0)
+    return tuple(sorted(out.items()))
+
+
 def _channel_alphas(d: dict) -> Tuple[Tuple[str, float], ...]:
     raw = d.get("channel_alphas")
     if raw is None:
@@ -159,9 +177,14 @@ class Emission:
         sorted(channels.DEFAULT_WEIGHTS.items()))
 
     channel_alphas: Tuple[Tuple[str, float], ...] = ()
+    channel_defaults: Tuple[Tuple[str, float], ...] = ()
 
     def weights(self) -> Dict[str, float]:
         return dict(self.channel_weights)
+
+    def defaults(self) -> Dict[str, float]:
+        """The value a channel reads as before it has data; empty when none are published."""
+        return dict(self.channel_defaults)
 
     def alphas(self) -> Dict[str, float]:
         """EMA step per channel; a channel not named uses `ema_alpha`."""
@@ -188,6 +211,7 @@ class Emission:
             ema_alpha=_num("emission", d, "ema_alpha", 0.0, 1.0, lo_open=True),
             channel_weights=_channel_weights(d),
             channel_alphas=_channel_alphas(d),
+            channel_defaults=_channel_defaults(d),
         )
 
 
@@ -351,15 +375,22 @@ class MechanismProfile:
     raw: Dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
 
-def _refuse_newer_fields(raw: dict) -> None:
-    for name in FIELDS_SINCE_1_3["emission"]:
-        if name in raw["emission"]:
-            raise ProfileError(f"emission.{name} requires schema_version 1.3.0")
-    for i, m in enumerate(raw["oracle"].get("grader_models") or ()):
-        for name in FIELDS_SINCE_1_3["oracle.grader_models"]:
-            if isinstance(m, dict) and name in m:
-                raise ProfileError(
-                    f"oracle.grader_models[{i}].{name} requires schema_version 1.3.0")
+def _version(text: str) -> Tuple[int, ...]:
+    return tuple(int(x) for x in text.split("."))
+
+
+def _refuse_newer_fields(raw: dict, schema_version: str) -> None:
+    for since, fields in FIELDS_SINCE.items():
+        if _version(schema_version) >= _version(since):
+            continue
+        for name in fields.get("emission", ()):
+            if name in raw["emission"]:
+                raise ProfileError(f"emission.{name} requires schema_version {since}")
+        for i, m in enumerate(raw["oracle"].get("grader_models") or ()):
+            for name in fields.get("oracle.grader_models", ()):
+                if isinstance(m, dict) and name in m:
+                    raise ProfileError(
+                        f"oracle.grader_models[{i}].{name} requires schema_version {since}")
 
 
 def parse(raw: dict) -> MechanismProfile:
@@ -377,8 +408,7 @@ def parse(raw: dict) -> MechanismProfile:
         if not isinstance(raw.get(section), dict):
             raise ProfileError(f"{section} section missing")
 
-    if schema_version == "1.2.0":
-        _refuse_newer_fields(raw)
+    _refuse_newer_fields(raw, schema_version)
 
     return MechanismProfile(
         version=_int("profile", raw, "version", 1, 2**63 - 1),

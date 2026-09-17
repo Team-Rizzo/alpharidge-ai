@@ -58,6 +58,7 @@ class ReputationStore:
     channel_weights: Dict[str, float] = field(
         default_factory=lambda: dict(ch.DEFAULT_WEIGHTS))
     channel_alphas: Dict[str, float] = field(default_factory=dict)
+    channel_defaults: Dict[str, float] = field(default_factory=dict)
     # pending observations: epoch -> sender_hotkey -> target_hotkey -> [Obs]
     obs: Dict[int, Dict[str, Dict[str, List[Obs]]]] = field(default_factory=dict)
     finalized: List[int] = field(default_factory=list)
@@ -122,18 +123,25 @@ class ReputationStore:
         return (int(o[0]), float(o[1]), float(o[2]), code)
 
     def set_channel_weights(self, weights: Dict[str, float] = None,
-                            alphas: Dict[str, float] = None) -> None:
-        """Adopt published channel weights and steps, and re-derive every reputation if
-        they changed."""
+                            alphas: Dict[str, float] = None,
+                            defaults: Dict[str, float] = None) -> None:
+        """Adopt published channel weights, steps and defaults, and re-derive every
+        reputation if any of them changed."""
         new = dict(ch.DEFAULT_WEIGHTS if weights is None else weights)
         new_alphas = dict(alphas or {})
-        if new == self.channel_weights and new_alphas == self.channel_alphas:
+        new_defaults = dict(defaults or {})
+        if (new == self.channel_weights and new_alphas == self.channel_alphas
+                and new_defaults == self.channel_defaults):
             return
         self.channel_weights = new
         self.channel_alphas = new_alphas
+        self.channel_defaults = new_defaults
         for st in self.state.values():
-            st["r"] = ch.combine(st.get("c", {}), self.channel_weights, _prior(),
-                                 self.channel_alphas)
+            st["r"] = self._combine(st.get("c", {}))
+
+    def _combine(self, chans) -> float:
+        return ch.combine(chans, self.channel_weights, _prior(), self.channel_alphas,
+                          self.channel_defaults)
 
     # ---- ingest ----
     def _add(self, epoch: int, sender: str, target: str, o) -> None:
@@ -237,8 +245,7 @@ class ReputationStore:
                 cur["r"] = cur["m"] / cur["d"] if cur["d"] > 0.0 else _prior()
                 cur["n"] += 1
                 st["n"] += 1
-            st["r"] = ch.combine(chans, self.channel_weights, _prior(),
-                                 self.channel_alphas)
+            st["r"] = self._combine(chans)
             # Last epoch this hotkey was actually scored. Pruning needs to tell a hotkey
             # that has gone quiet from one that is merely absent from this batch.
             st["e"] = int(epoch)
@@ -283,7 +290,10 @@ class ReputationStore:
 
     # ---- read ----
     def reputation(self, hotkey: str) -> float:
-        return self.state.get(hotkey, {}).get("r", _prior())
+        st = self.state.get(hotkey)
+        if st is None:
+            return self._combine({}) if self.channel_defaults else _prior()
+        return st.get("r", _prior())
 
     def channel_readiness(self, among=None) -> Dict[str, Tuple[int, int]]:
         """Per channel, (hotkeys past their warm-up, hotkeys counted)."""
