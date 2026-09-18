@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
@@ -18,7 +19,14 @@ from alpharidge_ai.oracle import floor
 
 VALUE_MATCH_TOLERANCE = 0.005
 
+NAME_OVERLAP = 0.2
+EXTRAS_MIN = 3
+
 _WS = re.compile(r"\s+")
+_WORD = re.compile(r"\w+")
+_STOP = frozenset(
+    "the a an of in on for to and or by with from at as is was were be its per vs than "
+    "total number rate value amount year years".split())
 
 # An adjudicator takes (article_text, residual claims) and returns
 # [{"i": int, "supported": bool, "evidence": str}].
@@ -33,8 +41,8 @@ def _values_match(a: float, b: float) -> bool:
     return abs(a - b) / max(abs(b), 1e-9) <= VALUE_MATCH_TOLERANCE
 
 
-def claims_match(left, right) -> bool:
-    """Two claims describe the same fact: same metric, same unit class, same magnitude.
+def same_quantity(left, right) -> bool:
+    """Same unit class and same magnitude.
 
     Magnitude, not just class: "1 million" and "1" share the class `count`.
     """
@@ -46,12 +54,27 @@ def claims_match(left, right) -> bool:
     if floor._unit_class(lu) != floor._unit_class(ru):
         return False
     # Compare what each claim actually asserts, scale included.
-    lv *= floor.unit_magnitude(lu)
-    rv *= floor.unit_magnitude(ru)
-    if _metric(getattr(left, "metric_name", None)) != \
-            _metric(getattr(right, "metric_name", None)):
-        return False
-    return _values_match(lv, rv)
+    return _values_match(lv * floor.unit_magnitude(lu), rv * floor.unit_magnitude(ru))
+
+
+def claims_match(left, right) -> bool:
+    """Two claims describe the same fact: same metric, same unit class, same magnitude."""
+    return (_metric(getattr(left, "metric_name", None))
+            == _metric(getattr(right, "metric_name", None))
+            and same_quantity(left, right))
+
+
+def _words(name) -> frozenset:
+    text = unicodedata.normalize("NFKD", str(name or "").lower())
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return frozenset(w for w in _WORD.findall(text)
+                     if len(w) >= 3 and w not in _STOP and not w.isdigit())
+
+
+def names_overlap(left, right) -> bool:
+    a = _words(getattr(left, "metric_name", None))
+    b = _words(getattr(right, "metric_name", None))
+    return bool(a and b) and len(a & b) / len(a | b) >= NAME_OVERLAP
 
 
 @dataclass
@@ -182,6 +205,45 @@ def adjudicate(miner_claims: Sequence, grader_claims: Sequence,
             result.valid.add(("m", i))
 
     result.residual = residual
+    return result
+
+
+def rematch(miner_claims: Sequence, grader_claims: Sequence, first: Adjudication,
+            grounded: Set[int]) -> Adjudication:
+    """Settle the same claims again with a looser name test.
+
+    Reuses `first`'s gold set and adjudicated claims, so it makes no model call.
+    """
+    result = Adjudication(grader_keys=set(first.grader_keys))
+    kept = {j for _, j in first.grader_keys}
+    match: Dict[int, int] = {}
+    taken: Set[int] = set()
+    for test in (claims_match, lambda c, g: same_quantity(c, g) and names_overlap(c, g)):
+        for i, claim in enumerate(miner_claims):
+            if i in match:
+                continue
+            for j, gold in enumerate(grader_claims):
+                if j in taken or j not in kept:
+                    continue
+                if test(claim, gold):
+                    match[i] = j
+                    taken.add(j)
+                    break
+
+    budget = max(EXTRAS_MIN, len(kept))
+    extras = 0
+    for i in range(len(miner_claims)):
+        if i in match:
+            result.miner_keys.append(("g", match[i]))
+            continue
+        key = ("m", i)
+        result.miner_keys.append(key)
+        if i not in grounded:
+            result.residual.append(i)
+        if i in grounded or key in first.valid:
+            if extras < budget:
+                result.valid.add(key)
+            extras += 1
     return result
 
 

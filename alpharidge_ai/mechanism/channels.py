@@ -15,15 +15,18 @@ FLOOR = "floor"
 AUDIT = "audit"
 KEEPER = "keeper"
 GRADED = "graded"
+AUDIT_V2 = "audit_v2"
 
 # Wire codes. Observations travel as numbers, so a channel is sent as its code; an
 # observation without one is a legacy observation.
-CODES: Dict[str, int] = {LEGACY: 0, TRIAGE: 1, FLOOR: 2, AUDIT: 3, KEEPER: 4, GRADED: 5}
+CODES: Dict[str, int] = {LEGACY: 0, TRIAGE: 1, FLOOR: 2, AUDIT: 3, KEEPER: 4, GRADED: 5,
+                         AUDIT_V2: 6}
 NAMES: Dict[int, str] = {code: name for name, code in CODES.items()}
 CHANNELS = tuple(CODES)
 
 DEFAULT_WEIGHTS: Dict[str, float] = {
     LEGACY: 1.0, TRIAGE: 1.0, FLOOR: 1.0, AUDIT: 2.0, KEEPER: 0.5, GRADED: 1.0,
+    AUDIT_V2: 0.0,
 }
 
 # A channel reaches full weight once it holds about one half-life of observations.

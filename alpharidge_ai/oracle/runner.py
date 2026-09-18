@@ -27,6 +27,8 @@ class Observation:
     path: str
     grader_model: str = ""
     detail: str = ""
+    # The same audit under audit.rematch, for the audit_v2 channel. Pool path only.
+    score_v2: Optional[float] = None
 
 
 def _enum(value) -> Optional[str]:
@@ -78,17 +80,18 @@ def _claim_keys(miner_intel, grader_intel, grounded, article_text, adjudicator,
 
     decided = audit.adjudicate(miner_claims, grader_claims, grounded, article_text,
                                adjudicator)
+    rematched = audit.rematch(miner_claims, grader_claims, decided, grounded)
+    return _keys(decided, miner_claims), _keys(rematched, miner_claims), decided
 
+
+def _keys(decided, miner_claims):
     miner_keys = list(decided.miner_keys)
-    grader_keys = set(decided.grader_keys)
-    valid = set(decided.valid)
     confidences = {}
     for i, claim in enumerate(miner_claims):
         value = getattr(claim, "confidence", None)
         if value is not None and i < len(miner_keys):
             confidences[miner_keys[i]] = float(value)
-
-    return miner_keys, grader_keys, valid, confidences, decided
+    return miner_keys, set(decided.grader_keys), set(decided.valid), confidences
 
 
 def _quote_keys(miner_intel, grader_intel, article_text, aligned, claim_cap: int):
@@ -109,7 +112,8 @@ def _quote_keys(miner_intel, grader_intel, article_text, aligned, claim_cap: int
     return keys, {("q", s) for s in grader_spans}, confidences
 
 
-_UNSCALED = type("Unscaled", (), {"scale": 1.0, "keeper_scale": 1.0})()
+_UNSCALED = type("Unscaled", (), {"scale": 1.0, "keeper_scale": 1.0,
+                                   "audit_v2_scale": 1.0})()
 
 
 def _model_entry(oracle, model_id):
@@ -162,20 +166,22 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
 
     # Only literally grounded claims are granted; an inferred match joins the residual
     # and is adjudicated like anything else.
-    miner_keys, grader_keys, valid, confidences, decided = _claim_keys(
+    first, second, decided = _claim_keys(
         miner_intel, grader_intel, floor_result.grounded, article_text,
         adjudicator, oracle.claim_cap)
 
     q_miner, q_grader, q_conf = _quote_keys(
         miner_intel, grader_intel, article_text, floor_result.aligned_quotes,
         oracle.claim_cap)
-    miner_keys += q_miner
-    grader_keys |= q_grader
-    confidences.update(q_conf)
 
-    score = scoring.article_score(miner_keys, grader_keys, valid, confidences,
-                                  claim_cap=oracle.claim_cap,
-                                  score_confidence=verdict.score_confidence)
+    def _score(keys):
+        miner_keys, grader_keys, valid, confidences = keys
+        confidences = {**confidences, **q_conf}
+        return scoring.article_score(miner_keys + q_miner, grader_keys | q_grader, valid,
+                                     confidences, claim_cap=oracle.claim_cap,
+                                     score_confidence=verdict.score_confidence)
+
+    score, score_v2 = _score(first), _score(second)
     if score is None:
         return None
 
@@ -184,7 +190,9 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
         path=selector.POOL, grader_model=choice.grader_model,
         detail=(f"p={score.precision:.2f} r={score.recall:.2f} "
                 f"conf={score.confidence:.2f} residual={len(decided.residual)} "
-                f"submitted={len(miner_keys)} schema={verdict.reason}"))
+                f"submitted={len(first[0]) + len(q_miner)} schema={verdict.reason}"),
+        score_v2=(None if score_v2 is None
+                  else score_v2.observation * getattr(model, "audit_v2_scale", model.scale)))
 
 
 def _keeper(article_id, article_text, miner_intel, choice, grader,

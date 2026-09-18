@@ -16,7 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from alpharidge_ai.mechanism import channels
 
-SUPPORTED_SCHEMA_VERSIONS = ("1.2.0", "1.3.0", "1.4.0")
+SUPPORTED_SCHEMA_VERSIONS = ("1.2.0", "1.3.0", "1.4.0", "1.5.0")
 
 # Fields an older validator would not read. A profile carrying them must say so, or an
 # older validator would apply the rest of it without them.
@@ -24,8 +24,14 @@ FIELDS_SINCE = {
     "1.3.0": {"emission": ("channel_weights", "channel_alphas"),
               "oracle.grader_models": ("scale", "keeper_scale")},
     "1.4.0": {"emission": ("channel_defaults",)},
+    "1.5.0": {"oracle.grader_models": ("audit_v2_scale",)},
 }
 FIELDS_SINCE_1_3 = FIELDS_SINCE["1.3.0"]
+
+# Channels an older validator does not know. A profile may only name them, and a
+# validator only records them, from the schema that introduced them.
+CHANNELS_SINCE = {channels.AUDIT_V2: "1.5.0"}
+_CHANNEL_MAPS = ("channel_weights", "channel_alphas", "channel_defaults")
 
 # Blocks per epoch and epochs per day. Mechanism constants are quoted per day; the code
 # runs per epoch. Convert here, never at a call site.
@@ -280,6 +286,7 @@ class GraderModel:
     # Brings this model's audit scores onto the strictest model's level.
     scale: float = 1.0
     keeper_scale: float = 1.0
+    audit_v2_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -319,6 +326,10 @@ class Oracle:
                        if "scale" in m else 1.0),
                 keeper_scale=(_num(section, m, "keeper_scale", 0.0, 1.0, lo_open=True)
                               if "keeper_scale" in m else 1.0),
+                audit_v2_scale=(_num(section, m, "audit_v2_scale", 0.0, 1.0, lo_open=True)
+                                if "audit_v2_scale" in m
+                                else (_num(section, m, "scale", 0.0, 1.0, lo_open=True)
+                                      if "scale" in m else 1.0)),
             ))
         if sum(m.weight for m in models) <= 0:
             raise ProfileError("oracle.grader_models weights sum to zero")
@@ -379,7 +390,23 @@ def _version(text: str) -> Tuple[int, ...]:
     return tuple(int(x) for x in text.split("."))
 
 
+def records(profile: Optional["MechanismProfile"], channel: str) -> bool:
+    """Whether observations for `channel` are recorded under this profile."""
+    since = CHANNELS_SINCE.get(channel)
+    if since is None:
+        return True
+    return profile is not None and _version(profile.schema_version) >= _version(since)
+
+
 def _refuse_newer_fields(raw: dict, schema_version: str) -> None:
+    for name, since in CHANNELS_SINCE.items():
+        if _version(schema_version) >= _version(since):
+            continue
+        for field_name in _CHANNEL_MAPS:
+            table = raw["emission"].get(field_name)
+            if isinstance(table, dict) and name in table:
+                raise ProfileError(
+                    f"emission.{field_name}.{name} requires schema_version {since}")
     for since, fields in FIELDS_SINCE.items():
         if _version(schema_version) >= _version(since):
             continue

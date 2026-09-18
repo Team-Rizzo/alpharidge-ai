@@ -99,8 +99,14 @@ class ReputationStore:
             entry["e"] = int(v["e"])
         raw = v.get("c")
         if isinstance(raw, dict):
-            entry["c"] = {str(name): ReputationStore._load_channel(c)
-                          for name, c in raw.items() if name in ch.CHANNELS}
+            # Channels this version does not know are kept as they are, so running an
+            # older release against newer state does not erase their history.
+            entry["c"] = {}
+            for name, c in raw.items():
+                try:
+                    entry["c"][str(name)] = ReputationStore._load_channel(c)
+                except (KeyError, TypeError, ValueError, AttributeError):
+                    continue
         else:
             # State written before channels existed carries on as the legacy channel.
             entry["c"] = {ch.LEGACY: ReputationStore._settled(entry["r"], entry["n"])}

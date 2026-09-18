@@ -1643,7 +1643,8 @@ def _log_stock_anchor(auditor, article_id, text, stock_intel, reference, block: 
     if observed is not None:
         bt.logging.info(
             f"[ANCHOR] kind=stock id={observed.article_id} path={observed.path} "
-            f"model={observed.grader_model} score={observed.score:.3f} {observed.detail}")
+            f"model={observed.grader_model} score={observed.score:.3f} {observed.detail}"
+            f"{'' if observed.score_v2 is None else f' v2={observed.score_v2:.3f}'}")
     return observed
 
 

@@ -31,6 +31,7 @@ from alpharidge_ai.analyzer import setup_article_intelligence_analyzer
 import alpharidge_ai.protocol
 from alpharidge_ai import config
 from alpharidge_ai.mechanism import channels
+from alpharidge_ai.mechanism import profile as mprofile
 from alpharidge_ai.oracle.selector import KEEPER as KEEPER_PATH, POOL as POOL_PATH
 from alpharidge_ai.analyzer.aspect_sentiment import install_meta_init_guard
 
@@ -829,10 +830,12 @@ class Validator(BaseValidatorNeuron):
         fleet-wide within an epoch and cannot be undone.
         """
         for obs in observations or []:
+            v2 = getattr(obs, "score_v2", None)
             bt.logging.info(
                 f"[AUDIT] hk={miner_hotkey[:12]}.. id={obs.article_id} "
                 f"path={obs.path} score={obs.score:.3f} w={obs.weight:.2f} "
                 f"model={obs.grader_model} {obs.detail}"
+                f"{'' if v2 is None else f' v2={v2:.3f}'}"
                 f"{'' if live else ' (shadow)'}")
         if live and observations:
             for path, channel in ((POOL_PATH, channels.AUDIT), (KEEPER_PATH, channels.KEEPER)):
@@ -841,6 +844,18 @@ class Validator(BaseValidatorNeuron):
                     [(o.article_id, float(o.score), float(o.weight))
                      for o in observations if o.path == path],
                     channel)
+            try:
+                v2_live = mprofile.records(
+                    self._mechanism_profile.resolve(int(self.block)), channels.AUDIT_V2)
+            except Exception:
+                v2_live = False
+            if v2_live:
+                self._record_observations(
+                    miner_hotkey,
+                    [(o.article_id, float(o.score_v2), float(o.weight))
+                     for o in observations
+                     if o.path == POOL_PATH and getattr(o, "score_v2", None) is not None],
+                    channels.AUDIT_V2)
 
     def _ration_for(self, hotkey):
         """This UID's earned ration for the current epoch, or None to leave dispatch
