@@ -1631,6 +1631,19 @@ def _reference_analysis(analyzer, auditor, article, src, block: int):
         reference=True, **kwargs)
 
 
+def _keyed_order(auditor, batch):
+    """The batch in the auditor's keyed order."""
+    def key(article):
+        try:
+            return (auditor.order_key(int(getattr(article, "id", 0))), 0)
+        except Exception:
+            return (1.0, 1)
+    try:
+        return sorted(batch or (), key=key)
+    except Exception:
+        return list(batch or ())
+
+
 def _log_stock_anchor(auditor, article_id, text, stock_intel, reference, block: int):
     """Score the validator's own default analysis as a submission would be. Report only."""
     try:
@@ -1827,7 +1840,7 @@ def validate_miner_article_intelligence_batch(
         budget = 2 * cap
         picked = 0
         spent = 0
-        for article in miner_batch:
+        for article in _keyed_order(auditor, miner_batch):
             if picked >= cap or spent >= budget:
                 bt.logging.debug(
                     f"[AUDIT] per-batch cap {cap} reached; "
