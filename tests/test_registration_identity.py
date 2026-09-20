@@ -115,3 +115,16 @@ def test_an_unreadable_metagraph_does_not_raise(monkeypatch):
     monkeypatch.setattr(nv.bt.logging, "debug", lambda m: None)
     v = types.SimpleNamespace(metagraph=None)
     assert Validator._identity_rows(v) == []
+
+
+def test_a_record_nobody_holds_is_cleared_when_someone_claims_it(tmp_path):
+    """A hotkey already departed when the rule arrives must not keep its record."""
+    store = ReputationStore(path=tmp_path / "rep.json")
+    store.set_channel_weights({ch.AUDIT_V2: 3.0})
+    for epoch in range(10, 40):
+        store.record_local(epoch, "me", HK_OLD, epoch, 0.9, 1.0, channel=ch.AUDIT_V2)
+        store.finalize(epoch)
+    store.reconcile_identities([(7, HK_OTHER, 1000)])       # HK_OLD is not in the field
+    cleared, moved = store.reconcile_identities([(7, HK_OLD, 5000)])   # it comes back
+    assert (cleared, moved) == (1, 0)
+    assert HK_OLD not in store.state

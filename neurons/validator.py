@@ -53,7 +53,8 @@ from alpharidge_ai.utils.api_models import TweetWithAuthor, CompletedTweetSubmis
 from alpharidge_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch
 from alpharidge_ai.utils.uids import get_random_uids, get_alive_uids
 from alpharidge_ai.utils.liveness import LivenessRoster
-from alpharidge_ai.utils.dispatch import (FLOOR_FRAC, RECENCY_S, TRIAL_EPOCHS, ShadowCredit,
+from alpharidge_ai.utils.dispatch import (CARRY_MAX_BATCHES, FLOOR_FRAC, RECENCY_S,
+                                          TRIAL_EPOCHS, ShadowCredit,
                                           coverage_depth_select, credit_select)
 from alpharidge_ai.utils.dispatch_metrics import AdaptiveDispatchMetrics
 from alpharidge_ai.utils.tweet_store import TweetStore
@@ -1811,14 +1812,17 @@ class Validator(BaseValidatorNeuron):
             cursor = 0
             for uid, _placeholder in ordered:
                 if cursor >= len(articles):
-                    break
+                    self._refund_credit(uid)
+                    continue
                 try:
                     hk = self.metagraph.hotkeys[int(uid)]
                 except Exception:
+                    self._refund_credit(uid)
                     continue
                 miner_batch = articles[cursor:cursor + self._article_cooldown.batch_size(hk)]
                 if not miner_batch:
-                    break
+                    self._refund_credit(uid)
+                    continue
                 cursor += len(miner_batch)
                 targets.append((int(uid), miner_batch))
         else:
@@ -1855,12 +1859,14 @@ class Validator(BaseValidatorNeuron):
             if not self._liveness.is_alive(hk):
                 continue
             eligible.append(u)
-        for uid, miner_batch in targets:
+        for _i, (uid, miner_batch) in enumerate(targets):
             if len(self._pending_miner_tasks) >= self._max_pending_miner_tasks:
                 bt.logging.warning(
                     f"[VALIDATION] Too many pending miner dispatch tasks ({len(self._pending_miner_tasks)}); "
                     f"skipping scheduling remaining article batches this tick."
                 )
+                for dropped, _batch in targets[_i:]:
+                    self._refund_credit(dropped)
                 break
             miner_batch = list(miner_batch)
             self._inject_canaries(miner_batch, canary_rng, charge=overlap_k)
@@ -1983,6 +1989,42 @@ class Validator(BaseValidatorNeuron):
             return []
         return rows
 
+    def _warn_credit_unreachable(self) -> None:
+        """Credit mode does nothing while dispatch selection is the random draw."""
+        warned = getattr(self, "_credit_warned", set())
+        if "adaptive" not in warned:
+            warned.add("adaptive")
+            bt.logging.warning(
+                "[DISPATCH] DISPATCH_MODE=credit but ADAPTIVE_DISPATCH_ENABLED is off; "
+                "selection stays random")
+        self._credit_warned = warned
+
+    def _warn_credit_preconditions(self) -> None:
+        """Say so when the settings around credit dispatch contradict it. Once each."""
+        warned = getattr(self, "_credit_warned", set())
+        if (not getattr(config, "ADAPTIVE_BATCH_SIZE_ENABLED", False)
+                or "batch" in warned):
+            pass
+        else:
+            warned.add("batch")
+            bt.logging.warning(
+                "[DISPATCH] credit mode with adaptive batch size on: batches differ in "
+                "size, so equal turns are not equal work")
+        self._credit_warned = warned
+
+    def _refund_credit(self, uid) -> None:
+        """Give back a turn that was allocated but never sent.
+
+        Credit is spent when a batch is allocated; anything that stops it reaching the
+        miner has to put it back, or the turn is lost and shares drift."""
+        if str(getattr(config, "DISPATCH_MODE", "coverage") or "").lower() != "credit":
+            return
+        try:
+            self._article_cooldown.add_credit(
+                self.metagraph.hotkeys[int(uid)], 1.0, CARRY_MAX_BATCHES)
+        except Exception:
+            pass
+
     def _dispatch_eligible(self, epoch):
         """Which miners are owed a share: those returning work, and those still starting.
 
@@ -2064,6 +2106,8 @@ class Validator(BaseValidatorNeuron):
         """
         n_batches = len(miner_batches)
         if not getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False):
+            if str(getattr(config, "DISPATCH_MODE", "") or "").lower() == "credit":
+                self._warn_credit_unreachable()
             uids = list(get_random_uids(self, k=n_batches, exclude=exclude))
             return [(int(u), b) for b, u in zip(miner_batches, uids)]
 
@@ -2096,6 +2140,7 @@ class Validator(BaseValidatorNeuron):
         epoch = self._current_epoch()
         mode = str(getattr(config, "DISPATCH_MODE", "coverage") or "coverage").lower()
         if mode == "credit":
+            self._warn_credit_preconditions()
             assignments = self._credit_assign(live, hotkeys, self._article_cooldown,
                                               epoch, n_batches)
         else:
@@ -2164,6 +2209,7 @@ class Validator(BaseValidatorNeuron):
         except Exception:
             pass
         if hotkey and not self._article_cooldown.try_acquire(hotkey):
+            self._refund_credit(uid)
             for article in miner_batch:
                 try:
                     self._article_store.reset_to_unprocessed(article.id)

@@ -103,10 +103,12 @@ def coverage_depth_select(
 # ---- Credit allocator ---------------------------------------------------------------
 
 CARRY_MAX_BATCHES = 2.0
-# Kept for miners outside the recency gate, so one that has stopped can be re-measured.
+# Rate a miner outside the recency gate accrues at, so one that has stopped can be
+# re-measured without being owed a full share.
 FLOOR_FRAC = 0.05
 # A miner is owed a share while it is returning work, or while it is still starting up.
-RECENCY_S = 7200.0
+# Long enough that an outage does not cost a miner its place in the rotation.
+RECENCY_S = 28800.0
 TRIAL_EPOCHS = 3
 
 
@@ -124,11 +126,11 @@ def credit_select(
 ) -> List[Tuple[int, int]]:
     """Assign this tick's batches by turn owed rather than by draw.
 
-    Every eligible miner is owed a share of each tick; whoever is owed most is served
-    first, and an unserved turn stays owed, bounded. `weight_of` scales a miner's share
-    (default: equal), `cap` bounds it as a multiple of the average, and `floor_frac`
-    reserves a slice for miners outside `eligible`, so one that has stopped delivering
-    can still be re-measured.
+    Every miner is owed a share of each tick; whoever is owed most is served first, and
+    an unserved turn stays owed, bounded. `weight_of` scales a miner's share (default:
+    equal), `cap` bounds it as a multiple of the average, and a miner outside `eligible`
+    accrues at `floor_frac` of the normal rate, so one that has stopped delivering can
+    still be re-measured without being owed a full share.
 
     Read-only on the tracker apart from the credit it keeps: the reservation stays with
     the validator's dispatch coroutine, as in coverage_depth_select.
@@ -139,32 +141,29 @@ def credit_select(
     uids = [u for u in live_uids if 0 <= u < len(hotkeys)]
     if not uids:
         return []
-    ok = [u for u in uids if eligible is None or eligible(hotkeys[u])]
-    held = [u for u in uids if u not in set(ok)]
-
-    reserved = min(len(held), int(round(max(0.0, floor_frac) * n_batches))) if held else 0
-    share_batches = n_batches - reserved
-    if not ok:
-        reserved, share_batches = min(len(held), n_batches), 0
 
     weights = {}
-    for u in ok:
+    for u in uids:
+        hk = hotkeys[u]
         try:
-            w = float(weight_of(hotkeys[u])) if weight_of else 1.0
+            w = float(weight_of(hk)) if weight_of else 1.0
         except Exception:
             w = 1.0
+        if eligible is not None and not eligible(hk):
+            w *= max(0.0, float(floor_frac))
         weights[u] = max(0.0, w)
+
     total = sum(weights.values())
     if total <= 0.0:
-        weights = {u: 1.0 for u in ok}
-        total = float(len(ok)) or 1.0
-    if cap and cap > 0 and ok:
-        ceiling = float(cap) * total / len(ok)
+        weights = {u: 1.0 for u in uids}
+        total = float(len(uids))
+    if cap and cap > 0:
+        ceiling = float(cap) * total / len(uids)
         weights = {u: min(w, ceiling) for u, w in weights.items()}
         total = sum(weights.values()) or 1.0
 
-    for u in ok:
-        tracker.add_credit(hotkeys[u], share_batches * weights[u] / total, carry_max)
+    for u in uids:
+        tracker.add_credit(hotkeys[u], n_batches * weights[u] / total, carry_max)
 
     pending: Dict[str, int] = {}
 
@@ -174,43 +173,30 @@ def credit_select(
 
     assignments: List[Tuple[int, int]] = []
 
-    def serve(uid: int, debit: bool) -> None:
-        if debit:
-            tracker.spend_credit(hotkeys[uid], 1.0, carry_max)
+    def serve(uid: int) -> None:
+        tracker.spend_credit(hotkeys[uid], 1.0, carry_max)
         pending[hotkeys[uid]] = pending.get(hotkeys[uid], 0) + 1
         assignments.append((uid, len(assignments)))
 
     # Most owed first; hotkey breaks ties so priority never tracks UID. Every batch goes
     # out: the owed are served first, then the same order fills what is left. Serving
     # early is debited, so a turn taken now is one not owed later.
-    order = sorted(ok, key=lambda x: (-tracker.credit(hotkeys[x]), hotkeys[x]))
+    order = sorted(uids, key=lambda x: (-tracker.credit(hotkeys[x]), hotkeys[x]))
     for uid in order:
-        while len(assignments) < share_batches and tracker.credit(hotkeys[uid]) >= 1.0:
+        while len(assignments) < n_batches and tracker.credit(hotkeys[uid]) >= 1.0:
             if not free(uid):
                 break
-            serve(uid, True)
-    while len(assignments) < share_batches:
+            serve(uid)
+    while len(assignments) < n_batches:
         progressed = False
         for uid in order:
-            if len(assignments) >= share_batches:
+            if len(assignments) >= n_batches:
                 break
             if free(uid):
-                serve(uid, True)
+                serve(uid)
                 progressed = True
         if not progressed:
             break
-
-    # The exploration slice, on the same credit so it rotates on its own.
-    if reserved and held:
-        for uid in held:
-            tracker.add_credit(hotkeys[uid], reserved / len(held), carry_max)
-        left = reserved
-        for uid in sorted(held, key=lambda x: (-tracker.credit(hotkeys[x]), hotkeys[x])):
-            if left <= 0 or len(assignments) >= n_batches:
-                break
-            if free(uid):
-                serve(uid, True)
-                left -= 1
 
     return assignments
 

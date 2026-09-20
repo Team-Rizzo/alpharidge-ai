@@ -162,3 +162,22 @@ def test_a_miner_is_never_given_more_than_it_can_hold(limit):
         for uid, _bi in credit_select(UIDS, HOTKEYS, tracker, 400):
             counts[uid] = counts.get(uid, 0) + 1
         assert max(counts.values(), default=0) <= limit
+
+
+def test_a_lone_idle_miner_gets_a_sliver_not_a_windfall():
+    """The idle slice is a rate, so its size does not depend on how few are idle."""
+    working = set(HOTKEYS[:239])
+    got, _ = run(ticks=200, n_batches=80, eligible=working.__contains__, floor_frac=0.05)
+    idle = [v for hk, v in got.items() if hk not in working]
+    busy = st.median(v for hk, v in got.items() if hk in working)
+    assert len(idle) == 1
+    assert idle[0] < 0.2 * busy
+
+
+def test_the_idle_rate_holds_whatever_the_group_size():
+    for n_idle in (1, 12, 60):
+        working = set(HOTKEYS[:240 - n_idle])
+        got, _ = run(ticks=200, n_batches=80, eligible=working.__contains__, floor_frac=0.05)
+        idle = st.median(v for hk, v in got.items() if hk not in working)
+        busy = st.median(v for hk, v in got.items() if hk in working)
+        assert 0.02 <= idle / busy <= 0.1

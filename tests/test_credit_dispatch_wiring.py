@@ -5,7 +5,7 @@ import types
 import pytest
 
 from alpharidge_ai import config
-from alpharidge_ai.utils.dispatch import ShadowCredit, credit_select
+from alpharidge_ai.utils.dispatch import CARRY_MAX_BATCHES, ShadowCredit, credit_select
 from neurons.validator import Validator
 from tests.test_credit_dispatch import HOTKEYS, UIDS, Tracker
 
@@ -28,7 +28,8 @@ def validator(tracker=None, **flags):
 
 @pytest.fixture(autouse=True)
 def _restore():
-    keys = ["DISPATCH_MODE", "DISPATCH_CREDIT_SHADOW", "REPUTATION_SCORING_ENABLED"]
+    keys = ["DISPATCH_MODE", "DISPATCH_CREDIT_SHADOW", "REPUTATION_SCORING_ENABLED",
+            "ADAPTIVE_BATCH_SIZE_ENABLED"]
     before = {k: getattr(config, k, None) for k in keys}
     yield
     for k, v in before.items():
@@ -140,3 +141,55 @@ def test_the_spread_report_compares_both(monkeypatch):
     Validator._log_shadow_spread(v, UIDS, HOTKEYS)
     assert any("spread live" in line and "credit" in line for line in lines)
     assert v._shadow_ticks == 0 and not v._live_served
+
+
+# ---- turns that never reach a miner ------------------------------------------------
+
+def _refunder(mode="credit"):
+    tracker = Tracker()
+    v = types.SimpleNamespace(_article_cooldown=tracker,
+                              metagraph=types.SimpleNamespace(hotkeys=HOTKEYS))
+    v._refund_credit = types.MethodType(Validator._refund_credit, v)
+    config.DISPATCH_MODE = mode
+    return v, tracker
+
+
+def test_an_unsent_turn_is_given_back():
+    v, tracker = _refunder()
+    tracker.credits["hk000"] = 0.0
+    v._refund_credit(0)
+    assert tracker.credit("hk000") == pytest.approx(1.0)
+
+
+def test_nothing_is_refunded_while_credit_is_off():
+    v, tracker = _refunder(mode="coverage")
+    v._refund_credit(0)
+    assert not tracker.credits
+
+
+def test_a_refund_for_an_unknown_uid_is_harmless():
+    v, tracker = _refunder()
+    v._refund_credit(9_999)
+    assert not tracker.credits
+
+
+def test_refunds_respect_the_carry_bound():
+    v, tracker = _refunder()
+    for _ in range(10):
+        v._refund_credit(0)
+    assert tracker.credit("hk000") <= CARRY_MAX_BATCHES
+
+
+def test_contradictory_settings_are_called_out(monkeypatch):
+    lines = []
+    import neurons.validator as nv
+    monkeypatch.setattr(nv.bt.logging, "warning", lambda m: lines.append(m))
+    v = types.SimpleNamespace()
+    v._warn_credit_preconditions = types.MethodType(Validator._warn_credit_preconditions, v)
+    v._warn_credit_unreachable = types.MethodType(Validator._warn_credit_unreachable, v)
+    config.ADAPTIVE_BATCH_SIZE_ENABLED = True
+    v._warn_credit_preconditions()
+    v._warn_credit_preconditions()          # once only
+    v._warn_credit_unreachable()
+    assert sum("adaptive batch size" in line for line in lines) == 1
+    assert any("ADAPTIVE_DISPATCH_ENABLED is off" in line for line in lines)

@@ -45,6 +45,9 @@ MAX_SEQ_EPOCH_SKEW = 100
 MAX_OBS_PER_TARGET = 512
 MAX_TARGETS_PER_SENDER = 1024
 
+# Stands in for "no registration" on a record nobody currently holds.
+UNHELD = -1
+
 
 @dataclass
 class ReputationStore:
@@ -309,6 +312,7 @@ class ReputationStore:
 
         Returns (cleared, moved). Both validators derive `rows` from the same chain facts.
         """
+        rows = list(rows)
         cleared = moved = 0
         by_slot = {}
         for hk, st in self.state.items():
@@ -336,6 +340,13 @@ class ReputationStore:
                 self.state[hotkey] = carried
                 moved += 1
                 break
+
+        # A record held by nobody is bound to no registration, so whichever one claims
+        # its hotkey next starts empty.
+        present = {str(hotkey) for _, hotkey, _ in rows}
+        for hotkey, entry in self.state.items():
+            if hotkey not in present and entry.get("b") is None:
+                entry["u"], entry["b"] = UNHELD, UNHELD
 
         if cleared or moved:
             self.save()
