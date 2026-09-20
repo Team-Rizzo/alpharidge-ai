@@ -249,6 +249,17 @@ class Auditor:
         except Exception:
             return False
 
+    def order_key(self, article_id) -> float:
+        """Keyed position for an article in the audit pass.
+
+        Which articles a batch spends its audit budget on is decided by the key, not by
+        the order they arrived in.
+        """
+        try:
+            return self._selector.fraction(article_id, "order")
+        except Exception:
+            return 1.0
+
     def reference_model(self, article_id, block: int) -> str:
         """The model drawn for this article, or "" to use the analyzer's own."""
         try:
