@@ -53,7 +53,8 @@ from alpharidge_ai.utils.api_models import TweetWithAuthor, CompletedTweetSubmis
 from alpharidge_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch
 from alpharidge_ai.utils.uids import get_random_uids, get_alive_uids
 from alpharidge_ai.utils.liveness import LivenessRoster
-from alpharidge_ai.utils.dispatch import ShadowCredit, coverage_depth_select, credit_select
+from alpharidge_ai.utils.dispatch import (FLOOR_FRAC, RECENCY_S, TRIAL_EPOCHS, ShadowCredit,
+                                          coverage_depth_select, credit_select)
 from alpharidge_ai.utils.dispatch_metrics import AdaptiveDispatchMetrics
 from alpharidge_ai.utils.tweet_store import TweetStore
 from alpharidge_ai.utils.telegram_store import TelegramStore
@@ -1989,44 +1990,14 @@ class Validator(BaseValidatorNeuron):
         falls back to the exploration slice, which is enough to re-measure it.
         """
         tracker = self._article_cooldown
-        recency = float(getattr(config, "DISPATCH_CREDIT_RECENCY_S", 7200))
-        trial = int(getattr(config, "DISPATCH_CREDIT_TRIAL_EPOCHS", 3))
 
         def eligible(hotkey):
-            return (tracker.delivered_since(hotkey, recency)
-                    or tracker.starting_up(hotkey, epoch, trial))
+            return (tracker.delivered_since(hotkey, RECENCY_S)
+                    or tracker.starting_up(hotkey, epoch, TRIAL_EPOCHS))
         return eligible
 
-    def _dispatch_weight(self):
-        """Per-miner share weight, or None for an equal share.
-
-        Reads the same multiplier the dashboard shows. Anything missing reads as 1.0,
-        so a cold store dispatches evenly rather than not at all.
-        """
-        k = float(getattr(config, "DISPATCH_CREDIT_WEIGHT_K", 0.0))
-        if k <= 0.0 or not getattr(config, "REPUTATION_SCORING_ENABLED", False):
-            return None
-        try:
-            params = emission_params.resolve(
-                self._mechanism_profile.resolve(int(self.block)))
-            args, n_min = params.as_args(), params.n_min
-        except Exception:
-            return None
-
-        def weight(hotkey):
-            try:
-                r = self._reputation_store.reputation(hotkey)
-                n = self._reputation_store.samples(hotkey)
-                return max(0.0, float(_rep_emission(r, *args, n=n, n_min=n_min))) ** k
-            except Exception:
-                return 1.0
-        return weight
-
     def _credit_args(self, epoch):
-        return dict(weight_of=self._dispatch_weight(),
-                    cap=float(getattr(config, "DISPATCH_CREDIT_CAP", 2.0)),
-                    floor_frac=float(getattr(config, "DISPATCH_CREDIT_FLOOR_PCT", 0.05)),
-                    eligible=self._dispatch_eligible(epoch))
+        return dict(floor_frac=FLOOR_FRAC, eligible=self._dispatch_eligible(epoch))
 
     def _credit_assign(self, live, hotkeys, tracker, epoch, n_batches):
         assignments = credit_select(live, hotkeys, tracker, n_batches,

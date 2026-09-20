@@ -18,7 +18,7 @@ def validator(tracker=None, **flags):
         _mechanism_profile=types.SimpleNamespace(resolve=lambda block: None),
         block=1_000,
         _shadow_credit_state={}, _shadow_served={}, _live_served={}, _shadow_ticks=0)
-    for name in ("_dispatch_weight", "_dispatch_eligible", "_credit_args",
+    for name in ("_dispatch_eligible", "_credit_args",
                  "_credit_assign", "_shadow_credit", "_log_shadow_spread"):
         setattr(v, name, types.MethodType(getattr(Validator, name), v))
     for k, val in flags.items():
@@ -28,9 +28,7 @@ def validator(tracker=None, **flags):
 
 @pytest.fixture(autouse=True)
 def _restore():
-    keys = ["DISPATCH_MODE", "DISPATCH_CREDIT_SHADOW", "DISPATCH_CREDIT_WEIGHT_K",
-            "DISPATCH_CREDIT_RECENCY_S", "DISPATCH_CREDIT_TRIAL_EPOCHS",
-            "REPUTATION_SCORING_ENABLED"]
+    keys = ["DISPATCH_MODE", "DISPATCH_CREDIT_SHADOW", "REPUTATION_SCORING_ENABLED"]
     before = {k: getattr(config, k, None) for k in keys}
     yield
     for k, v in before.items():
@@ -43,14 +41,14 @@ def _restore():
 def test_it_is_off_by_default():
     assert config.DISPATCH_MODE == "coverage"
     assert config.DISPATCH_CREDIT_SHADOW is False
-    assert config.DISPATCH_CREDIT_WEIGHT_K == 0.0
 
 
-def test_the_settings_are_served():
-    for key in ("DISPATCH_MODE", "DISPATCH_CREDIT_SHADOW", "DISPATCH_CREDIT_WEIGHT_K",
-                "DISPATCH_CREDIT_CAP", "DISPATCH_CREDIT_FLOOR_PCT",
-                "DISPATCH_CREDIT_RECENCY_S", "DISPATCH_CREDIT_TRIAL_EPOCHS"):
-        assert key in config._REMOTE_CONFIG_KEYS
+def test_only_the_two_switches_are_settings():
+    """The allocator's own constants are not knobs an operator can turn."""
+    assert "DISPATCH_MODE" in config._REMOTE_CONFIG_KEYS
+    assert "DISPATCH_CREDIT_SHADOW" in config._REMOTE_CONFIG_KEYS
+    assert not [k for k in config._REMOTE_CONFIG_KEYS
+                if k.startswith("DISPATCH_CREDIT_") and k != "DISPATCH_CREDIT_SHADOW"]
 
 
 def test_dispatch_settings_are_not_consensus_keys():
@@ -63,7 +61,7 @@ def test_dispatch_settings_are_not_consensus_keys():
 def test_a_miner_returning_work_is_owed_a_share():
     tracker = Tracker()
     tracker.last_valid = {"hk000": 0.0}
-    v = validator(tracker, DISPATCH_CREDIT_RECENCY_S=7200)
+    v = validator(tracker)
     tracker.delivered_since = lambda hk, s: hk == "hk000"
     tracker.starting_up = lambda hk, e, t: False
     assert Validator._dispatch_eligible(v, epoch=10)("hk000")
@@ -74,38 +72,9 @@ def test_a_miner_that_has_not_returned_yet_still_gets_its_start():
     tracker = Tracker()
     tracker.delivered_since = lambda hk, s: False
     tracker.starting_up = lambda hk, e, t: hk == "hk002"
-    v = validator(tracker, DISPATCH_CREDIT_TRIAL_EPOCHS=3)
+    v = validator(tracker)
     assert Validator._dispatch_eligible(v, epoch=10)("hk002")
     assert not Validator._dispatch_eligible(v, epoch=10)("hk003")
-
-
-# ---- weights ----------------------------------------------------------------------
-
-def test_no_weighting_by_default():
-    v = validator(DISPATCH_CREDIT_WEIGHT_K=0.0, REPUTATION_SCORING_ENABLED=True)
-    assert Validator._dispatch_weight(v) is None
-
-
-def test_weighting_is_off_while_reputation_scoring_is():
-    v = validator(DISPATCH_CREDIT_WEIGHT_K=1.0, REPUTATION_SCORING_ENABLED=False)
-    assert Validator._dispatch_weight(v) is None
-
-
-def test_a_weight_reads_the_multiplier():
-    v = validator(DISPATCH_CREDIT_WEIGHT_K=1.0, REPUTATION_SCORING_ENABLED=True)
-    weight = Validator._dispatch_weight(v)
-    assert weight is not None
-    value = weight("hk000")
-    assert value >= 0.0
-
-
-def test_an_unreadable_store_still_dispatches():
-    v = validator(DISPATCH_CREDIT_WEIGHT_K=1.0, REPUTATION_SCORING_ENABLED=True)
-    v._reputation_store = types.SimpleNamespace(
-        reputation=lambda hk: (_ for _ in ()).throw(RuntimeError("cold")),
-        samples=lambda hk: 0)
-    weight = Validator._dispatch_weight(v)
-    assert weight("hk000") == 1.0
 
 
 # ---- shadow mode ------------------------------------------------------------------

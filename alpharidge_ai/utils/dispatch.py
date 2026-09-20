@@ -103,6 +103,11 @@ def coverage_depth_select(
 # ---- Credit allocator ---------------------------------------------------------------
 
 CARRY_MAX_BATCHES = 2.0
+# Kept for miners outside the recency gate, so one that has stopped can be re-measured.
+FLOOR_FRAC = 0.05
+# A miner is owed a share while it is returning work, or while it is still starting up.
+RECENCY_S = 7200.0
+TRIAL_EPOCHS = 3
 
 
 def credit_select(
