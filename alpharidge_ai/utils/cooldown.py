@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, Set, Tuple
 
 from alpharidge_ai import config
+from alpharidge_ai.utils.dispatch import CARRY_MAX_BATCHES
 
 
 BACKOFF_SCHEDULE = [30, 60, 120, 300, 600]  # seconds
@@ -49,6 +50,8 @@ class MinerCooldownTracker:
         self._window: Dict[str, float] = {}       # per-miner congestion window
         self._consec_to: Dict[str, int] = {}      # consecutive lease timeouts (non-response)
         self._covered_ep: Dict[str, int] = {}     # last epoch given a coverage batch
+        self._credit: Dict[str, float] = {}       # batches owed under credit dispatch
+        self._last_valid: Dict[str, float] = {}   # last valid push-back, unix seconds
         self._cap: float = None                   # per-tick anti-monopoly cap; None => from config
 
         # ---- Faithfulness cooldown (2026-07-09) ----
@@ -87,6 +90,8 @@ class MinerCooldownTracker:
                 "inv_until": self._inv_until,
                 "consec_fail": self._consec_fail,
                 "covered_ep": self._covered_ep,
+                "credit": self._credit,
+                "last_valid": self._last_valid,
             }))
             tmp.replace(path)
         except Exception as e:
@@ -119,6 +124,8 @@ class MinerCooldownTracker:
             self._inv_until = {k: float(v) for k, v in (raw.get("inv_until") or {}).items()}
             self._consec_fail = {k: int(v) for k, v in (raw.get("consec_fail") or {}).items()}
             self._covered_ep = {k: int(v) for k, v in (raw.get("covered_ep") or {}).items()}
+            self._credit = {k: float(v) for k, v in (raw.get("credit") or {}).items()}
+            self._last_valid = {k: float(v) for k, v in (raw.get("last_valid") or {}).items()}
             bt.logging.info(
                 f"[COOLDOWN] restored dispatch state for {len(self._batch_size)} miner(s); "
                 f"mean batch {sum(self._batch_size.values())/max(len(self._batch_size),1):.1f}, "
@@ -261,7 +268,12 @@ class MinerCooldownTracker:
         return max(1, int(math.ceil(ration / max(1, self._bs_max()))))
 
     def record_batch_valid(self, hotkey: str, latency_s: float) -> None:
-        """Grow on an on-time valid return; hold on valid-but-slow. No-op when disabled."""
+        """Grow on an on-time valid return; hold on valid-but-slow.
+
+        The delivery stamp is kept whatever the adaptive flags say: credit dispatch reads
+        it to tell a miner that is working from one that only answers.
+        """
+        self.note_valid(hotkey)
         if not self._bs_active():
             return
         if latency_s is not None and latency_s <= self._late_threshold_s():
@@ -490,6 +502,33 @@ class MinerCooldownTracker:
     def mark_covered(self, hotkey: str, epoch: int) -> None:
         self._covered_ep[hotkey] = int(epoch)
 
+    # ---- Credit dispatch ----
+
+    def credit(self, hotkey: str) -> float:
+        return float(self._credit.get(hotkey, 0.0))
+
+    def add_credit(self, hotkey: str, amount: float, carry_max: float) -> None:
+        """Accrue what this tick owes a miner, bounded so an absence cannot bank a burst."""
+        if amount <= 0.0:
+            return
+        self._credit[hotkey] = min(float(carry_max),
+                                   self.credit(hotkey) + float(amount))
+
+    def spend_credit(self, hotkey: str, amount: float,
+                     carry_max: float = None) -> None:
+        """Debit a served turn. It may go negative: a miner served before its turn is
+        owed less next time, which is what keeps long-run shares equal."""
+        floor = -float(CARRY_MAX_BATCHES if carry_max is None else carry_max)
+        self._credit[hotkey] = max(floor, self.credit(hotkey) - float(amount))
+
+    def note_valid(self, hotkey: str, when: float = None) -> None:
+        self._last_valid[hotkey] = float(time.time() if when is None else when)
+
+    def delivered_since(self, hotkey: str, seconds: float) -> bool:
+        """Whether this miner has returned valid work recently enough to be owed more."""
+        last = self._last_valid.get(hotkey)
+        return last is not None and (time.time() - float(last)) <= float(seconds)
+
     # ---- Reconciliation (anti-leak; RFC Component 2) ----
 
     def reconcile_inflight(self, counts: Dict[str, int]) -> None:
@@ -557,7 +596,8 @@ class MinerCooldownTracker:
         stale_inflight = [hk for hk in self._inflight if hk not in active_hotkeys]
         for hk in stale_inflight:
             del self._inflight[hk]
-        for d in (self._window, self._consec_to, self._covered_ep,
+        for d in (self._credit, self._last_valid,
+                  self._window, self._consec_to, self._covered_ep,
                   self._consec_inv, self._inv_level, self._inv_until, self._last_faith,
                   self._batch_size, self._consec_fail, self._latency):
             for hk in [h for h in d if h not in active_hotkeys]:

@@ -98,3 +98,113 @@ def coverage_depth_select(
                 break  # every live window is full; remaining batches retry next tick
 
     return assignments
+
+
+# ---- Credit allocator ---------------------------------------------------------------
+
+CARRY_MAX_BATCHES = 2.0
+
+
+def credit_select(
+    live_uids: Sequence[int],
+    hotkeys: Sequence[str],
+    tracker,
+    n_batches: int,
+    *,
+    weight_of=None,
+    cap: Optional[float] = None,
+    floor_frac: float = 0.0,
+    eligible=None,
+    carry_max: float = CARRY_MAX_BATCHES,
+) -> List[Tuple[int, int]]:
+    """Assign this tick's batches by turn owed rather than by draw.
+
+    Every eligible miner is owed a share of each tick; whoever is owed most is served
+    first, and an unserved turn stays owed, bounded. `weight_of` scales a miner's share
+    (default: equal), `cap` bounds it as a multiple of the average, and `floor_frac`
+    reserves a slice for miners outside `eligible`, so one that has stopped delivering
+    can still be re-measured.
+
+    Read-only on the tracker apart from the credit it keeps: the reservation stays with
+    the validator's dispatch coroutine, as in coverage_depth_select.
+    """
+    if n_batches <= 0 or not live_uids:
+        return []
+
+    uids = [u for u in live_uids if 0 <= u < len(hotkeys)]
+    if not uids:
+        return []
+    ok = [u for u in uids if eligible is None or eligible(hotkeys[u])]
+    held = [u for u in uids if u not in set(ok)]
+
+    reserved = min(len(held), int(round(max(0.0, floor_frac) * n_batches))) if held else 0
+    share_batches = n_batches - reserved
+    if not ok:
+        reserved, share_batches = min(len(held), n_batches), 0
+
+    weights = {}
+    for u in ok:
+        try:
+            w = float(weight_of(hotkeys[u])) if weight_of else 1.0
+        except Exception:
+            w = 1.0
+        weights[u] = max(0.0, w)
+    total = sum(weights.values())
+    if total <= 0.0:
+        weights = {u: 1.0 for u in ok}
+        total = float(len(ok)) or 1.0
+    if cap and cap > 0 and ok:
+        ceiling = float(cap) * total / len(ok)
+        weights = {u: min(w, ceiling) for u, w in weights.items()}
+        total = sum(weights.values()) or 1.0
+
+    for u in ok:
+        tracker.add_credit(hotkeys[u], share_batches * weights[u] / total, carry_max)
+
+    pending: Dict[str, int] = {}
+
+    def free(uid: int) -> bool:
+        hk = hotkeys[uid]
+        return tracker.inflight(hk) + pending.get(hk, 0) < _slot_limit(tracker, hk)
+
+    assignments: List[Tuple[int, int]] = []
+
+    def serve(uid: int, debit: bool) -> None:
+        if debit:
+            tracker.spend_credit(hotkeys[uid], 1.0, carry_max)
+        pending[hotkeys[uid]] = pending.get(hotkeys[uid], 0) + 1
+        assignments.append((uid, len(assignments)))
+
+    # Most owed first; hotkey breaks ties so priority never tracks UID. Every batch goes
+    # out: the owed are served first, then the same order fills what is left. Serving
+    # early is debited, so a turn taken now is one not owed later.
+    order = sorted(ok, key=lambda x: (-tracker.credit(hotkeys[x]), hotkeys[x]))
+    for uid in order:
+        while len(assignments) < share_batches and tracker.credit(hotkeys[uid]) >= 1.0:
+            if not free(uid):
+                break
+            serve(uid, True)
+    while len(assignments) < share_batches:
+        progressed = False
+        for uid in order:
+            if len(assignments) >= share_batches:
+                break
+            if free(uid):
+                serve(uid, True)
+                progressed = True
+        if not progressed:
+            break
+
+    # The exploration slice, on the same credit so it rotates on its own.
+    if reserved and held:
+        for uid in held:
+            tracker.add_credit(hotkeys[uid], reserved / len(held), carry_max)
+        left = reserved
+        for uid in sorted(held, key=lambda x: (-tracker.credit(hotkeys[x]), hotkeys[x])):
+            if left <= 0 or len(assignments) >= n_batches:
+                break
+            if free(uid):
+                serve(uid, True)
+                left -= 1
+
+    return assignments
