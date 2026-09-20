@@ -924,6 +924,12 @@ class ValidationClient:
                 # snapshot (once per epoch, display/monitoring only).
                 if getattr(config, "REPUTATION_SCORING_ENABLED", False) and target_epoch >= 0:
                     try:
+                        cleared, moved = self._validator._reputation_store.\
+                            reconcile_identities(self._validator._identity_rows())
+                        if cleared or moved:
+                            bt.logging.info(
+                                f"[REPUTATION] registrations reconciled: {cleared} "
+                                f"record(s) cleared, {moved} carried to a new hotkey")
                         # Consensus value: read from the profile so it applies at one
                         # activation block. Served config is the fallback only while no
                         # profile is active.

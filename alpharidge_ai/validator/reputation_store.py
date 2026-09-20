@@ -97,6 +97,9 @@ class ReputationStore:
         entry = {"r": float(v["r"]), "n": int(v.get("n", 0))}
         if "e" in v:
             entry["e"] = int(v["e"])
+        for field in ("u", "b"):
+            if v.get(field) is not None:
+                entry[field] = int(v[field])
         raw = v.get("c")
         if isinstance(raw, dict):
             # Channels this version does not know are kept as they are, so running an
@@ -293,6 +296,50 @@ class ReputationStore:
         if gone:
             self.save()
         return len(gone)
+
+    # ---- identity ----
+
+    def reconcile_identities(self, rows) -> Tuple[int, int]:
+        """Bind each record to the registration that earned it.
+
+        `rows` is (uid, hotkey, registration block) read from the chain. A record follows
+        its registration: the same registration under a new hotkey keeps it, and a new
+        registration starts empty, whichever hotkey holds it. Records with no binding yet
+        are adopted by the registration currently holding them.
+
+        Returns (cleared, moved). Both validators derive `rows` from the same chain facts.
+        """
+        cleared = moved = 0
+        by_slot = {}
+        for hk, st in self.state.items():
+            if st.get("u") is not None and st.get("b") is not None:
+                by_slot.setdefault((int(st["u"]), int(st["b"])), []).append(hk)
+
+        for uid, hotkey, reg_block in rows:
+            uid, hotkey, reg_block = int(uid), str(hotkey), int(reg_block)
+            entry = self.state.get(hotkey)
+            if entry is not None:
+                held = entry.get("b")
+                if held is not None and int(held) != reg_block:
+                    del self.state[hotkey]
+                    cleared += 1
+                    entry = None
+                else:
+                    entry["u"], entry["b"] = uid, reg_block
+                    continue
+
+            for prior in by_slot.get((uid, reg_block), []):
+                if prior == hotkey or prior not in self.state:
+                    continue
+                carried = self.state.pop(prior)
+                carried["u"], carried["b"] = uid, reg_block
+                self.state[hotkey] = carried
+                moved += 1
+                break
+
+        if cleared or moved:
+            self.save()
+        return cleared, moved
 
     # ---- read ----
     def reputation(self, hotkey: str) -> float:

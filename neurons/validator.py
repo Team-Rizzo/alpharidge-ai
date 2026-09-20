@@ -1968,6 +1968,20 @@ class Validator(BaseValidatorNeuron):
             })
         return rows
 
+    def _identity_rows(self):
+        """(uid, hotkey, registration block) for the current field, from the chain."""
+        rows = []
+        try:
+            hotkeys = list(self.metagraph.hotkeys)
+            blocks = list(getattr(self.metagraph, "block_at_registration", []) or [])
+            for uid, hotkey in enumerate(hotkeys):
+                if uid < len(blocks):
+                    rows.append((uid, hotkey, int(blocks[uid])))
+        except Exception as e:
+            bt.logging.debug(f"[REPUTATION] identity rows unavailable: {e}")
+            return []
+        return rows
+
     def _dispatch_eligible(self, epoch):
         """Which miners are owed a share: those returning work, and those still starting.
 
