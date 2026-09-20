@@ -1632,16 +1632,28 @@ def _reference_analysis(analyzer, auditor, article, src, block: int):
 
 
 def _keyed_order(auditor, batch):
-    """The batch in the auditor's keyed order."""
+    """The batch in the auditor's keyed order.
+
+    Falling back to the order it arrived in is the one outcome worth seeing in the log:
+    it is silent otherwise, and it is not the order the audit is meant to use.
+    """
+    missed = []
+
     def key(article):
         try:
             return (auditor.order_key(int(getattr(article, "id", 0))), 0)
         except Exception:
+            missed.append(1)
             return (1.0, 1)
     try:
-        return sorted(batch or (), key=key)
+        ordered = sorted(batch or (), key=key)
     except Exception:
-        return list(batch or ())
+        ordered = list(batch or ())
+        missed = [1] * len(ordered)
+    if ordered and len(missed) == len(ordered):
+        bt.logging.debug(f"[AUDIT] keyed order unavailable for {len(ordered)} article(s); "
+                         f"batch order kept")
+    return ordered
 
 
 def _log_stock_anchor(auditor, article_id, text, stock_intel, reference, block: int):

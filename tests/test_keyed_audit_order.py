@@ -3,6 +3,7 @@
 import random
 import types
 
+from alpharidge_ai.analyzer import scoring
 from alpharidge_ai.analyzer.scoring import _keyed_order
 from alpharidge_ai.oracle.runner import Auditor
 
@@ -67,3 +68,18 @@ def test_the_order_key_is_stable_and_bounded():
         value = a.order_key(aid)
         assert 0.0 <= value < 1.0
         assert value == a.order_key(aid)
+
+
+def test_a_total_fallback_is_logged(monkeypatch):
+    lines = []
+    monkeypatch.setattr(scoring.bt.logging, "debug", lambda m: lines.append(m))
+    broken = types.SimpleNamespace(order_key=lambda aid: 1 / 0)
+    _keyed_order(broken, batch(IDS[:3]))
+    assert any("keyed order unavailable" in line for line in lines)
+
+
+def test_a_working_key_logs_nothing(monkeypatch):
+    lines = []
+    monkeypatch.setattr(scoring.bt.logging, "debug", lambda m: lines.append(m))
+    _keyed_order(auditor(), batch(IDS))
+    assert not lines
