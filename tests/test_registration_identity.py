@@ -128,3 +128,52 @@ def test_a_record_nobody_holds_is_cleared_when_someone_claims_it(tmp_path):
     cleared, moved = store.reconcile_identities([(7, HK_OLD, 5000)])   # it comes back
     assert (cleared, moved) == (1, 0)
     assert HK_OLD not in store.state
+
+
+def test_a_pass_that_would_clear_the_store_refuses(tmp_path, monkeypatch):
+    """A chain fact we no longer understand must raise an alarm, not empty the store."""
+    import alpharidge_ai.validator.reputation_store as rs
+    errors = []
+    monkeypatch.setattr(rs.bt.logging, "error", lambda m: errors.append(m))
+    store = ReputationStore(path=tmp_path / "rep.json")
+    for i in range(60):
+        hk = f"hk{i:03d}"
+        store.state[hk] = {"r": 0.6, "n": 30, "c": {}, "u": i, "b": 1000 + i}
+    rows = [(i, f"hk{i:03d}", 9_000_000 + i) for i in range(60)]   # every block changed
+    assert store.reconcile_identities(rows) == (0, 0)
+    assert len(store.state) == 60
+    assert any("above the" in line for line in errors)
+
+
+def test_a_normal_days_churn_is_allowed(tmp_path, monkeypatch):
+    import alpharidge_ai.validator.reputation_store as rs
+    monkeypatch.setattr(rs.bt.logging, "info", lambda m: None)
+    store = ReputationStore(path=tmp_path / "rep.json")
+    for i in range(300):
+        hk = f"hk{i:03d}"
+        store.state[hk] = {"r": 0.6, "n": 30, "c": {}, "u": i, "b": 1000 + i}
+    rows = [(i, f"hk{i:03d}", (9_000_000 if i < 14 else 1000 + i)) for i in range(300)]
+    cleared, _ = store.reconcile_identities(rows)
+    assert cleared == 14
+
+
+def test_the_first_pass_reports_what_it_bound(tmp_path, monkeypatch):
+    import alpharidge_ai.validator.reputation_store as rs
+    lines = []
+    monkeypatch.setattr(rs.bt.logging, "info", lambda m: lines.append(m))
+    store = ReputationStore(path=tmp_path / "rep.json")
+    for i in range(5):
+        store.state[f"hk{i:03d}"] = {"r": 0.6, "n": 30, "c": {}}
+    store.reconcile_identities([(i, f"hk{i:03d}", 1000 + i) for i in range(5)])
+    assert any("5 bound for the first time" in line for line in lines)
+    assert (tmp_path / "rep.json").exists()
+
+
+def test_carry_over_does_not_depend_on_insertion_order(tmp_path):
+    def build(order):
+        store = ReputationStore(path=tmp_path / f"rep-{order[0]}.json")
+        for hk in order:
+            store.state[hk] = {"r": 0.6, "n": 30, "c": {}, "u": 7, "b": 1000}
+        store.reconcile_identities([(7, HK_NEW, 1000)])
+        return store.state[HK_NEW]["r"]
+    assert build(["hk-a", "hk-b"]) == build(["hk-b", "hk-a"])

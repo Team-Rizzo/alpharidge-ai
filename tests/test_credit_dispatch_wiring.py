@@ -29,7 +29,7 @@ def validator(tracker=None, **flags):
 @pytest.fixture(autouse=True)
 def _restore():
     keys = ["DISPATCH_MODE", "DISPATCH_CREDIT_SHADOW", "REPUTATION_SCORING_ENABLED",
-            "ADAPTIVE_BATCH_SIZE_ENABLED"]
+            "ADAPTIVE_BATCH_SIZE_ENABLED", "MINER_BATCH_SIZE"]
     before = {k: getattr(config, k, None) for k in keys}
     yield
     for k, v in before.items():
@@ -193,3 +193,17 @@ def test_contradictory_settings_are_called_out(monkeypatch):
     v._warn_credit_unreachable()
     assert sum("adaptive batch size" in line for line in lines) == 1
     assert any("ADAPTIVE_DISPATCH_ENABLED is off" in line for line in lines)
+
+
+def test_too_large_a_batch_is_called_out(monkeypatch):
+    lines = []
+    import neurons.validator as nv
+    monkeypatch.setattr(nv.bt.logging, "warning", lambda m: lines.append(m))
+    v = types.SimpleNamespace()
+    v._warn_credit_preconditions = types.MethodType(Validator._warn_credit_preconditions, v)
+    config.ADAPTIVE_BATCH_SIZE_ENABLED = False
+    config.MINER_BATCH_SIZE = 32
+    v._warn_credit_preconditions()
+    v._warn_credit_preconditions()
+    assert sum("MINER_BATCH_SIZE=32" in line for line in lines) == 1
+    config.MINER_BATCH_SIZE = 16

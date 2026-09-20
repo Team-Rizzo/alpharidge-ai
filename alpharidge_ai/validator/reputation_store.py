@@ -12,6 +12,8 @@ backed up like the reward store.
 """
 from __future__ import annotations
 import json
+
+import bittensor as bt
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -47,6 +49,11 @@ MAX_TARGETS_PER_SENDER = 1024
 
 # Stands in for "no registration" on a record nobody currently holds.
 UNHELD = -1
+
+# A reconcile pass clears records one registration at a time. Anything wider than this
+# is the chain telling us something we do not understand, so the pass stops instead.
+MAX_CLEAR_PER_PASS = 20
+MAX_CLEAR_FRACTION = 0.05
 
 
 @dataclass
@@ -310,14 +317,27 @@ class ReputationStore:
         registration starts empty, whichever hotkey holds it. Records with no binding yet
         are adopted by the registration currently holding them.
 
-        Returns (cleared, moved). Both validators derive `rows` from the same chain facts.
+        Returns (cleared, moved). Both validators read `rows` at the same block.
         """
         rows = list(rows)
-        cleared = moved = 0
+        cleared = moved = adopted = 0
         by_slot = {}
         for hk, st in self.state.items():
             if st.get("u") is not None and st.get("b") is not None:
                 by_slot.setdefault((int(st["u"]), int(st["b"])), []).append(hk)
+        for holders in by_slot.values():
+            holders.sort()
+
+        doomed = [hotkey for _, hotkey, reg_block in rows
+                  if hotkey in self.state
+                  and self.state[hotkey].get("b") is not None
+                  and int(self.state[hotkey]["b"]) != int(reg_block)]
+        limit = max(MAX_CLEAR_PER_PASS, int(MAX_CLEAR_FRACTION * len(self.state)))
+        if len(doomed) > limit:
+            bt.logging.error(
+                f"[REPUTATION] reconcile would clear {len(doomed)} of {len(self.state)} "
+                f"record(s), above the {limit} this pass allows; nothing was changed")
+            return 0, 0
 
         for uid, hotkey, reg_block in rows:
             uid, hotkey, reg_block = int(uid), str(hotkey), int(reg_block)
@@ -329,6 +349,8 @@ class ReputationStore:
                     cleared += 1
                     entry = None
                 else:
+                    if held is None:
+                        adopted += 1
                     entry["u"], entry["b"] = uid, reg_block
                     continue
 
@@ -347,8 +369,12 @@ class ReputationStore:
         for hotkey, entry in self.state.items():
             if hotkey not in present and entry.get("b") is None:
                 entry["u"], entry["b"] = UNHELD, UNHELD
+                adopted += 1
 
-        if cleared or moved:
+        if cleared or moved or adopted:
+            bt.logging.info(
+                f"[REPUTATION] registrations reconciled: {cleared} cleared, {moved} "
+                f"carried, {adopted} bound for the first time")
             self.save()
         return cleared, moved
 

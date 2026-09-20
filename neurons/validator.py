@@ -85,6 +85,9 @@ TRIAGE_CFG = TriageConfig()
 
 # Ticks between shadow-dispatch spread reports (about an hour of ticks).
 SHADOW_REPORT_TICKS = 180
+
+# Above this, a tick reaches too few miners for turns to even out.
+CREDIT_MAX_BATCH_SIZE = 16
 from alpharidge_ai.analyzer import setup_telegram_analyzer
 from alpharidge_ai.utils.cooldown import MinerCooldownTracker
 from alpharidge_ai.validator.verdict_payload import build_verdict_fields, collect_verdict_meta  # T5: verdict payload
@@ -1975,12 +1978,27 @@ class Validator(BaseValidatorNeuron):
             })
         return rows
 
-    def _identity_rows(self):
-        """(uid, hotkey, registration block) for the current field, from the chain."""
+    def _identity_rows(self, epoch=None):
+        """(uid, hotkey, registration block) for the field, read at one block.
+
+        Anchored to the epoch being scored so both validators read the same snapshot;
+        the live metagraph is the fallback, which costs one record a settlement.
+        """
+        source = None
+        if epoch is not None:
+            try:
+                source = self.subtensor.metagraph(
+                    self.config.netuid, lite=True,
+                    block=int(epoch) * int(config.BLOCK_LENGTH))
+            except Exception as e:
+                bt.logging.warning(
+                    f"[REPUTATION] metagraph at epoch {epoch} unavailable ({e}); "
+                    f"reconciling against the live one")
+        source = source if source is not None else self.metagraph
         rows = []
         try:
-            hotkeys = list(self.metagraph.hotkeys)
-            blocks = list(getattr(self.metagraph, "block_at_registration", []) or [])
+            hotkeys = list(source.hotkeys)
+            blocks = list(getattr(source, "block_at_registration", []) or [])
             for uid, hotkey in enumerate(hotkeys):
                 if uid < len(blocks):
                     rows.append((uid, hotkey, int(blocks[uid])))
@@ -2002,14 +2020,18 @@ class Validator(BaseValidatorNeuron):
     def _warn_credit_preconditions(self) -> None:
         """Say so when the settings around credit dispatch contradict it. Once each."""
         warned = getattr(self, "_credit_warned", set())
-        if (not getattr(config, "ADAPTIVE_BATCH_SIZE_ENABLED", False)
-                or "batch" in warned):
-            pass
-        else:
+        if getattr(config, "ADAPTIVE_BATCH_SIZE_ENABLED", False) and "batch" not in warned:
             warned.add("batch")
             bt.logging.warning(
                 "[DISPATCH] credit mode with adaptive batch size on: batches differ in "
                 "size, so equal turns are not equal work")
+        size = int(getattr(config, "MINER_BATCH_SIZE", 12) or 12)
+        if size > CREDIT_MAX_BATCH_SIZE and "size" not in warned:
+            warned.add("size")
+            bt.logging.warning(
+                f"[DISPATCH] credit mode at MINER_BATCH_SIZE={size}: too few miners are "
+                f"served per tick for turns to even out (expected "
+                f"<= {CREDIT_MAX_BATCH_SIZE})")
         self._credit_warned = warned
 
     def _refund_credit(self, uid) -> None:
