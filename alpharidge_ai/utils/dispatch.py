@@ -208,3 +208,29 @@ def credit_select(
                 left -= 1
 
     return assignments
+
+
+class ShadowCredit:
+    """A tracker view that keeps its own credit, for running credit dispatch alongside.
+
+    Everything else (in-flight, slot limits, coverage) reads through to the real
+    tracker, so the shadow sees the same constraints without touching its state.
+    """
+
+    def __init__(self, tracker, credit_state: Dict[str, float]):
+        self._tracker = tracker
+        self._credit = credit_state
+
+    def __getattr__(self, name):
+        return getattr(self._tracker, name)
+
+    def credit(self, hotkey: str) -> float:
+        return float(self._credit.get(hotkey, 0.0))
+
+    def add_credit(self, hotkey: str, amount: float, carry_max: float) -> None:
+        if amount > 0.0:
+            self._credit[hotkey] = min(float(carry_max), self.credit(hotkey) + float(amount))
+
+    def spend_credit(self, hotkey: str, amount: float, carry_max: float = None) -> None:
+        floor = -float(CARRY_MAX_BATCHES if carry_max is None else carry_max)
+        self._credit[hotkey] = max(floor, self.credit(hotkey) - float(amount))

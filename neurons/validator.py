@@ -53,7 +53,7 @@ from alpharidge_ai.utils.api_models import TweetWithAuthor, CompletedTweetSubmis
 from alpharidge_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch
 from alpharidge_ai.utils.uids import get_random_uids, get_alive_uids
 from alpharidge_ai.utils.liveness import LivenessRoster
-from alpharidge_ai.utils.dispatch import coverage_depth_select
+from alpharidge_ai.utils.dispatch import ShadowCredit, coverage_depth_select, credit_select
 from alpharidge_ai.utils.dispatch_metrics import AdaptiveDispatchMetrics
 from alpharidge_ai.utils.tweet_store import TweetStore
 from alpharidge_ai.utils.telegram_store import TelegramStore
@@ -80,6 +80,9 @@ from alpharidge_ai.validator.triage_grader import (
 
 # Triage design constants — one instance, no env var or served key behind it.
 TRIAGE_CFG = TriageConfig()
+
+# Ticks between shadow-dispatch spread reports (about an hour of ticks).
+SHADOW_REPORT_TICKS = 180
 from alpharidge_ai.analyzer import setup_telegram_analyzer
 from alpharidge_ai.utils.cooldown import MinerCooldownTracker
 from alpharidge_ai.validator.verdict_payload import build_verdict_fields, collect_verdict_meta  # T5: verdict payload
@@ -160,6 +163,9 @@ class Validator(BaseValidatorNeuron):
         self._graded_scorer = None  # lazy; built on first use when scoring is served on
         self._auditor = None        # lazy; built on first use when shadow auditing is on
         self._ration_plan = {}      # this tick's rations; empty leaves dispatch as-is
+        # Credit dispatch shadow: its own credit, and what each dispatcher served.
+        self._shadow_credit_state = {}
+        self._shadow_served, self._live_served, self._shadow_ticks = {}, {}, 0
         # Transient per-item verdict metadata (resource_id -> {miner_signature, nonce,
         # validator_verdict, epoch}); populated during validation, drained at submission.
         self._verdict_meta = {}
@@ -1962,6 +1968,105 @@ class Validator(BaseValidatorNeuron):
             })
         return rows
 
+    def _dispatch_eligible(self, epoch):
+        """Which miners are owed a share: those returning work, and those still starting.
+
+        A miner that answers but never delivers keeps holding batches otherwise; it
+        falls back to the exploration slice, which is enough to re-measure it.
+        """
+        tracker = self._article_cooldown
+        recency = float(getattr(config, "DISPATCH_CREDIT_RECENCY_S", 7200))
+        trial = int(getattr(config, "DISPATCH_CREDIT_TRIAL_EPOCHS", 3))
+
+        def eligible(hotkey):
+            return (tracker.delivered_since(hotkey, recency)
+                    or tracker.starting_up(hotkey, epoch, trial))
+        return eligible
+
+    def _dispatch_weight(self):
+        """Per-miner share weight, or None for an equal share.
+
+        Reads the same multiplier the dashboard shows. Anything missing reads as 1.0,
+        so a cold store dispatches evenly rather than not at all.
+        """
+        k = float(getattr(config, "DISPATCH_CREDIT_WEIGHT_K", 0.0))
+        if k <= 0.0 or not getattr(config, "REPUTATION_SCORING_ENABLED", False):
+            return None
+        try:
+            params = emission_params.resolve(
+                self._mechanism_profile.resolve(int(self.block)))
+            args, n_min = params.as_args(), params.n_min
+        except Exception:
+            return None
+
+        def weight(hotkey):
+            try:
+                r = self._reputation_store.reputation(hotkey)
+                n = self._reputation_store.samples(hotkey)
+                return max(0.0, float(_rep_emission(r, *args, n=n, n_min=n_min))) ** k
+            except Exception:
+                return 1.0
+        return weight
+
+    def _credit_args(self, epoch):
+        return dict(weight_of=self._dispatch_weight(),
+                    cap=float(getattr(config, "DISPATCH_CREDIT_CAP", 2.0)),
+                    floor_frac=float(getattr(config, "DISPATCH_CREDIT_FLOOR_PCT", 0.05)),
+                    eligible=self._dispatch_eligible(epoch))
+
+    def _credit_assign(self, live, hotkeys, tracker, epoch, n_batches):
+        assignments = credit_select(live, hotkeys, tracker, n_batches,
+                                    **self._credit_args(epoch))
+        if len(assignments) < n_batches:
+            bt.logging.info(
+                f"[DISPATCH] credit: {n_batches - len(assignments)}/{n_batches} batch(es) "
+                f"unassigned this tick (no free slots); they retry next tick.")
+        return assignments
+
+    def _shadow_credit(self, live, hotkeys, epoch, n_batches, live_assignments):
+        """Log what credit dispatch would have done, without doing it."""
+        if not getattr(config, "DISPATCH_CREDIT_SHADOW", False):
+            return
+        try:
+            shadow = ShadowCredit(self._article_cooldown, self._shadow_credit_state)
+            would = credit_select(live, hotkeys, shadow, n_batches,
+                                  **self._credit_args(epoch))
+            served = {u for u, _ in would}
+            actual = {u for u, _ in live_assignments}
+            for u, _ in would:
+                self._shadow_served[hotkeys[u]] = self._shadow_served.get(hotkeys[u], 0) + 1
+            for u, _ in live_assignments:
+                self._live_served[hotkeys[u]] = self._live_served.get(hotkeys[u], 0) + 1
+            bt.logging.debug(
+                f"[DISPATCH] credit shadow: {len(would)} batch(es) across {len(served)} "
+                f"miner(s); {len(served & actual)} also served live")
+            self._shadow_ticks += 1
+            if self._shadow_ticks % SHADOW_REPORT_TICKS == 0:
+                self._log_shadow_spread(live, hotkeys)
+        except Exception as e:
+            bt.logging.debug(f"[DISPATCH] credit shadow failed: {e}")
+
+    def _log_shadow_spread(self, live, hotkeys):
+        """How evenly each dispatcher spread work over the reporting period."""
+        def spread(counts):
+            served = [counts.get(hotkeys[u], 0) for u in live]
+            if not served:
+                return 0.0, 0, 0
+            mean = sum(served) / len(served)
+            if mean <= 0:
+                return 0.0, 0, 0
+            var = sum((x - mean) ** 2 for x in served) / len(served)
+            return (var ** 0.5) / mean, min(served), max(served)
+
+        live_cv, live_lo, live_hi = spread(self._live_served)
+        shadow_cv, shadow_lo, shadow_hi = spread(self._shadow_served)
+        bt.logging.info(
+            f"[DISPATCH] credit shadow over {self._shadow_ticks} tick(s): "
+            f"spread live {live_cv:.2f} (min {live_lo}, max {live_hi}) vs "
+            f"credit {shadow_cv:.2f} (min {shadow_lo}, max {shadow_hi})")
+        self._live_served, self._shadow_served = {}, {}
+        self._shadow_ticks = 0
+
     def _select_article_targets(self, miner_batches, exclude):
         """
         Choose (uid, batch) dispatch targets.
@@ -2004,7 +2109,14 @@ class Validator(BaseValidatorNeuron):
         self._article_cooldown.set_cap(max(w_min, cap_pct * budget))
 
         epoch = self._current_epoch()
-        assignments = coverage_depth_select(live, hotkeys, self._article_cooldown, epoch, n_batches)
+        mode = str(getattr(config, "DISPATCH_MODE", "coverage") or "coverage").lower()
+        if mode == "credit":
+            assignments = self._credit_assign(live, hotkeys, self._article_cooldown,
+                                              epoch, n_batches)
+        else:
+            assignments = coverage_depth_select(live, hotkeys, self._article_cooldown,
+                                                epoch, n_batches)
+            self._shadow_credit(live, hotkeys, epoch, n_batches, assignments)
 
         n_assigned = len(assignments)
         if n_assigned < n_batches:

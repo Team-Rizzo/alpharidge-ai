@@ -318,6 +318,20 @@ DISPATCH_LATE_FRACTION = float(os.getenv("DISPATCH_LATE_FRACTION", "0.6"))
 # built from that ping, so a shorter ack window systematically fails alive-but-slow
 # miners. (TODO: share one constant with get_alive_uids so they can't drift.)
 DISPATCH_ACK_TIMEOUT_S = float(os.getenv("DISPATCH_ACK_TIMEOUT_S", "12.0"))
+
+# Credit dispatch. "coverage" is the draw this has always used; "credit" serves the
+# miner owed most (see utils/dispatch.credit_select). Shadow logs what credit would
+# assign without assigning it, so the two can be compared on live traffic first.
+DISPATCH_MODE = os.getenv("DISPATCH_MODE", "coverage")
+DISPATCH_CREDIT_SHADOW = _as_bool(os.getenv("DISPATCH_CREDIT_SHADOW", "false"))
+# Share weighting by multiplier: 0 leaves every eligible miner an equal share.
+DISPATCH_CREDIT_WEIGHT_K = float(os.getenv("DISPATCH_CREDIT_WEIGHT_K", "0"))
+DISPATCH_CREDIT_CAP = float(os.getenv("DISPATCH_CREDIT_CAP", "2.0"))
+# Kept for miners outside the recency gate, so one that stopped can be re-measured.
+DISPATCH_CREDIT_FLOOR_PCT = float(os.getenv("DISPATCH_CREDIT_FLOOR_PCT", "0.05"))
+DISPATCH_CREDIT_RECENCY_S = float(os.getenv("DISPATCH_CREDIT_RECENCY_S", "7200"))
+# Epochs a miner that has never returned work still counts as starting up.
+DISPATCH_CREDIT_TRIAL_EPOCHS = int(os.getenv("DISPATCH_CREDIT_TRIAL_EPOCHS", "3"))
 # How long a dispatched article may sit in PROCESSING before it is reclaimed. Both readers
 # (article_store.get_timeouts, cooldown._late_threshold_s) used a hardcoded 900 fallback and it
 # was never declared here. Doubly-loaded: also scales the late-growth threshold (0.6 * TTL),
@@ -423,6 +437,13 @@ _REMOTE_CONFIG_KEYS = {
     "DISPATCH_WINDOW_SHRINK":     (float, "DISPATCH_WINDOW_SHRINK"),
     "DISPATCH_LATE_FRACTION":     (float, "DISPATCH_LATE_FRACTION"),
     "DISPATCH_ACK_TIMEOUT_S":     (float, "DISPATCH_ACK_TIMEOUT_S"),
+    "DISPATCH_MODE":              (str,   "DISPATCH_MODE"),
+    "DISPATCH_CREDIT_SHADOW":     (_as_bool, "DISPATCH_CREDIT_SHADOW"),
+    "DISPATCH_CREDIT_WEIGHT_K":   (float, "DISPATCH_CREDIT_WEIGHT_K"),
+    "DISPATCH_CREDIT_CAP":        (float, "DISPATCH_CREDIT_CAP"),
+    "DISPATCH_CREDIT_FLOOR_PCT":  (float, "DISPATCH_CREDIT_FLOOR_PCT"),
+    "DISPATCH_CREDIT_RECENCY_S":  (float, "DISPATCH_CREDIT_RECENCY_S"),
+    "DISPATCH_CREDIT_TRIAL_EPOCHS": (int, "DISPATCH_CREDIT_TRIAL_EPOCHS"),
     "SCORING_LEASE_TTL_SECONDS":  (float, "SCORING_LEASE_TTL_SECONDS"),
     "DISPATCH_CHRONIC_TIMEOUT_N": (int,   "DISPATCH_CHRONIC_TIMEOUT_N"),
     "LIVENESS_TTL_S":             (int,   "LIVENESS_TTL_S"),

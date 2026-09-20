@@ -52,6 +52,7 @@ class MinerCooldownTracker:
         self._covered_ep: Dict[str, int] = {}     # last epoch given a coverage batch
         self._credit: Dict[str, float] = {}       # batches owed under credit dispatch
         self._last_valid: Dict[str, float] = {}   # last valid push-back, unix seconds
+        self._first_ep: Dict[str, int] = {}       # first epoch this miner was dispatched
         self._cap: float = None                   # per-tick anti-monopoly cap; None => from config
 
         # ---- Faithfulness cooldown (2026-07-09) ----
@@ -91,6 +92,7 @@ class MinerCooldownTracker:
                 "consec_fail": self._consec_fail,
                 "covered_ep": self._covered_ep,
                 "credit": self._credit,
+                "first_ep": self._first_ep,
                 "last_valid": self._last_valid,
             }))
             tmp.replace(path)
@@ -125,6 +127,7 @@ class MinerCooldownTracker:
             self._consec_fail = {k: int(v) for k, v in (raw.get("consec_fail") or {}).items()}
             self._covered_ep = {k: int(v) for k, v in (raw.get("covered_ep") or {}).items()}
             self._credit = {k: float(v) for k, v in (raw.get("credit") or {}).items()}
+            self._first_ep = {k: int(v) for k, v in (raw.get("first_ep") or {}).items()}
             self._last_valid = {k: float(v) for k, v in (raw.get("last_valid") or {}).items()}
             bt.logging.info(
                 f"[COOLDOWN] restored dispatch state for {len(self._batch_size)} miner(s); "
@@ -501,6 +504,7 @@ class MinerCooldownTracker:
 
     def mark_covered(self, hotkey: str, epoch: int) -> None:
         self._covered_ep[hotkey] = int(epoch)
+        self._first_ep.setdefault(hotkey, int(epoch))
 
     # ---- Credit dispatch ----
 
@@ -523,6 +527,11 @@ class MinerCooldownTracker:
 
     def note_valid(self, hotkey: str, when: float = None) -> None:
         self._last_valid[hotkey] = float(time.time() if when is None else when)
+
+    def starting_up(self, hotkey: str, epoch: int, trial_epochs: int) -> bool:
+        """Within the allowance a miner gets before its first return is expected."""
+        first = self._first_ep.get(hotkey)
+        return first is None or (int(epoch) - int(first)) <= int(trial_epochs)
 
     def delivered_since(self, hotkey: str, seconds: float) -> bool:
         """Whether this miner has returned valid work recently enough to be owed more."""
@@ -596,7 +605,7 @@ class MinerCooldownTracker:
         stale_inflight = [hk for hk in self._inflight if hk not in active_hotkeys]
         for hk in stale_inflight:
             del self._inflight[hk]
-        for d in (self._credit, self._last_valid,
+        for d in (self._credit, self._last_valid, self._first_ep,
                   self._window, self._consec_to, self._covered_ep,
                   self._consec_inv, self._inv_level, self._inv_until, self._last_faith,
                   self._batch_size, self._consec_fail, self._latency):
