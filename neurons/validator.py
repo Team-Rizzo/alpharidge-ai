@@ -88,7 +88,7 @@ TRIAGE_CFG = TriageConfig()
 SHADOW_REPORT_TICKS = 180
 
 # Above this, a tick reaches too few miners for turns to even out.
-CREDIT_MAX_BATCH_SIZE = 16
+CREDIT_MAX_BATCH_SIZE = 32
 from alpharidge_ai.analyzer import setup_telegram_analyzer
 from alpharidge_ai.utils.cooldown import MinerCooldownTracker
 from alpharidge_ai.validator.verdict_payload import build_verdict_fields, collect_verdict_meta  # T5: verdict payload
@@ -888,6 +888,7 @@ class Validator(BaseValidatorNeuron):
             if profile is None or not profile.rations.dispatch:
                 self._ration_plan = {}
                 return
+            self._warn_rations_bypassed()
             epoch = int(self._miner_reward._get_current_epoch())
             self._ration_plan = self._ration_store.plan(
                 list(hotkeys), epoch=epoch, supply=float(supply), profile=profile)
@@ -1878,6 +1879,7 @@ class Validator(BaseValidatorNeuron):
                     self._refund_credit(dropped)
                 break
             miner_batch = list(miner_batch)
+            self._count_live_served([(uid, miner_batch)])
             self._inject_canaries(miner_batch, canary_rng, charge=overlap_k)
             pool = [u for u in eligible if u != int(uid)]
             n_verify = min(overlap_k - 1, len(pool)) if overlap_k > 1 else 0
@@ -2033,6 +2035,23 @@ class Validator(BaseValidatorNeuron):
                 f"<= {CREDIT_MAX_BATCH_SIZE})")
         self._credit_warned = warned
 
+    def _warn_rations_bypassed(self) -> None:
+        """Rations size batches only on the adaptive-batch path, and credit mode shares
+        turns on its own terms. Say so once when a profile turns rations on regardless."""
+        credit = str(getattr(config, "DISPATCH_MODE", "coverage") or "").lower() == "credit"
+        adaptive_batch = bool(getattr(config, "ADAPTIVE_BATCH_SIZE_ENABLED", False))
+        if not credit and adaptive_batch:
+            return
+        warned = getattr(self, "_credit_warned", set())
+        if "rations" not in warned:
+            warned.add("rations")
+            bt.logging.warning(
+                "[RATION] the profile turns ration dispatch on, but "
+                + ("credit mode allocates turns itself" if credit else
+                   "ADAPTIVE_BATCH_SIZE_ENABLED is off")
+                + "; rations are not applied to dispatch")
+        self._credit_warned = warned
+
     def _refund_credit(self, uid) -> None:
         """Give back a turn that was allocated but never sent.
 
@@ -2095,10 +2114,11 @@ class Validator(BaseValidatorNeuron):
                                   **self._credit_args(epoch))
             served = {u for u, _ in would}
             actual = {u for u, _ in live_assignments}
+            # A credit turn carries one MINER_BATCH_SIZE batch; live is counted from what
+            # was actually sliced and sent (_count_live_served), so both are articles.
+            size = max(1, int(getattr(config, "MINER_BATCH_SIZE", 12) or 12))
             for u, _ in would:
-                self._shadow_served[hotkeys[u]] = self._shadow_served.get(hotkeys[u], 0) + 1
-            for u, _ in live_assignments:
-                self._live_served[hotkeys[u]] = self._live_served.get(hotkeys[u], 0) + 1
+                self._shadow_served[hotkeys[u]] = self._shadow_served.get(hotkeys[u], 0) + size
             bt.logging.debug(
                 f"[DISPATCH] credit shadow: {len(would)} batch(es) across {len(served)} "
                 f"miner(s); {len(served & actual)} also served live")
@@ -2107,6 +2127,18 @@ class Validator(BaseValidatorNeuron):
                 self._log_shadow_spread(live, hotkeys)
         except Exception as e:
             bt.logging.debug(f"[DISPATCH] credit shadow failed: {e}")
+
+    def _count_live_served(self, targets):
+        """Articles each miner was actually sent this tick, for the shadow comparison."""
+        if (not getattr(config, "DISPATCH_CREDIT_SHADOW", False)
+                or str(getattr(config, "DISPATCH_MODE", "coverage") or "").lower() == "credit"):
+            return
+        for uid, batch in targets:
+            try:
+                hk = self.metagraph.hotkeys[int(uid)]
+            except Exception:
+                continue
+            self._live_served[hk] = self._live_served.get(hk, 0) + len(batch)
 
     def _log_shadow_spread(self, live, hotkeys):
         """How evenly each dispatcher spread work over the reporting period."""
@@ -2123,9 +2155,10 @@ class Validator(BaseValidatorNeuron):
         live_cv, live_lo, live_hi = spread(self._live_served)
         shadow_cv, shadow_lo, shadow_hi = spread(self._shadow_served)
         bt.logging.info(
-            f"[DISPATCH] credit shadow over {self._shadow_ticks} tick(s): "
+            f"[DISPATCH] credit shadow over {self._shadow_ticks} tick(s), articles per miner: "
             f"spread live {live_cv:.2f} (min {live_lo}, max {live_hi}) vs "
-            f"credit {shadow_cv:.2f} (min {shadow_lo}, max {shadow_hi})")
+            f"credit at batch {max(1, int(getattr(config, 'MINER_BATCH_SIZE', 12) or 12))} "
+            f"{shadow_cv:.2f} (min {shadow_lo}, max {shadow_hi})")
         self._live_served, self._shadow_served = {}, {}
         self._shadow_ticks = 0
 

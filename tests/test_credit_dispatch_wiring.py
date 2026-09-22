@@ -130,6 +130,45 @@ def test_a_broken_shadow_does_not_disturb_dispatch_but_says_so(monkeypatch):
     assert any("shadow failed" in line for line in lines)
 
 
+def test_shadow_counts_articles_not_turns(monkeypatch):
+    import neurons.validator as nv
+    monkeypatch.setattr(nv.bt.logging, "debug", lambda m: None)
+    tracker = Tracker()
+    tracker.delivered_since = lambda hk, s: True
+    tracker.starting_up = lambda hk, e, t: False
+    v = validator(tracker, DISPATCH_CREDIT_SHADOW=True, MINER_BATCH_SIZE=24,
+                  DISPATCH_MODE="coverage")
+    Validator._shadow_credit(v, UIDS, HOTKEYS, 5, 10, [(1, 0)])
+    assert sum(v._shadow_served.values()) == 10 * 24
+    assert not v._live_served
+
+
+def test_live_is_counted_from_what_was_sent():
+    v = validator(DISPATCH_CREDIT_SHADOW=True, DISPATCH_MODE="coverage")
+    v.metagraph = types.SimpleNamespace(hotkeys=HOTKEYS)
+    v._count_live_served = types.MethodType(Validator._count_live_served, v)
+    v._count_live_served([(0, ["a"] * 32), (1, ["a"] * 7), (0, ["a"] * 3)])
+    assert v._live_served == {HOTKEYS[0]: 35, HOTKEYS[1]: 7}
+    config.DISPATCH_CREDIT_SHADOW = False
+    v._count_live_served([(0, ["a"] * 32)])
+    assert v._live_served[HOTKEYS[0]] == 35
+
+
+def test_rations_left_unapplied_are_called_out(monkeypatch):
+    lines = []
+    import neurons.validator as nv
+    monkeypatch.setattr(nv.bt.logging, "warning", lambda m: lines.append(m))
+    v = types.SimpleNamespace()
+    v._warn_rations_bypassed = types.MethodType(Validator._warn_rations_bypassed, v)
+    config.DISPATCH_MODE, config.ADAPTIVE_BATCH_SIZE_ENABLED = "coverage", True
+    v._warn_rations_bypassed()
+    assert not lines
+    config.ADAPTIVE_BATCH_SIZE_ENABLED = False
+    v._warn_rations_bypassed()
+    v._warn_rations_bypassed()
+    assert len(lines) == 1 and "ADAPTIVE_BATCH_SIZE_ENABLED is off" in lines[0]
+
+
 def test_the_spread_report_compares_both(monkeypatch):
     lines = []
     import neurons.validator as nv
@@ -204,6 +243,9 @@ def test_too_large_a_batch_is_called_out(monkeypatch):
     config.ADAPTIVE_BATCH_SIZE_ENABLED = False
     config.MINER_BATCH_SIZE = 32
     v._warn_credit_preconditions()
+    assert not lines
+    config.MINER_BATCH_SIZE = 40
     v._warn_credit_preconditions()
-    assert sum("MINER_BATCH_SIZE=32" in line for line in lines) == 1
+    v._warn_credit_preconditions()
+    assert sum("MINER_BATCH_SIZE=40" in line for line in lines) == 1
     config.MINER_BATCH_SIZE = 16
