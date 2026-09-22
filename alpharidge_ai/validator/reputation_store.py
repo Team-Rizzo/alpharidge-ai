@@ -50,10 +50,13 @@ MAX_TARGETS_PER_SENDER = 1024
 # Stands in for "no registration" on a record nobody currently holds.
 UNHELD = -1
 
-# A reconcile pass clears records one registration at a time. Anything wider than this
-# is the chain telling us something we do not understand, so the pass stops instead.
+# A reconcile pass clears at most this many records; the oldest go first and the rest
+# wait for the next pass, so a backlog (a validator that was down) drains on its own.
 MAX_CLEAR_PER_PASS = 20
 MAX_CLEAR_FRACTION = 0.05
+# A mismatch this wide is the chain telling us something we do not understand: no record
+# is cleared, though the rest of the pass still runs.
+MAX_MISMATCH_FRACTION = 0.25
 
 
 @dataclass
@@ -317,7 +320,7 @@ class ReputationStore:
         registration starts empty, whichever hotkey holds it. Records with no binding yet
         are adopted by the registration currently holding them.
 
-        Returns (cleared, moved). Both validators read `rows` at the same block.
+        Returns (cleared, moved). Both validators must pass the same rows.
         """
         rows = list(rows)
         cleared = moved = adopted = 0
@@ -328,40 +331,50 @@ class ReputationStore:
         for holders in by_slot.values():
             holders.sort()
 
-        doomed = [hotkey for _, hotkey, reg_block in rows
-                  if hotkey in self.state
-                  and self.state[hotkey].get("b") is not None
-                  and int(self.state[hotkey]["b"]) != int(reg_block)]
+        doomed = sorted(
+            (int(self.state[hotkey]["b"]), str(hotkey)) for _, hotkey, reg_block in rows
+            if hotkey in self.state
+            and self.state[hotkey].get("b") is not None
+            and int(self.state[hotkey]["b"]) != int(reg_block))
         limit = max(MAX_CLEAR_PER_PASS, int(MAX_CLEAR_FRACTION * len(self.state)))
-        if len(doomed) > limit:
+        deferred = set()
+        if len(doomed) > max(limit, int(MAX_MISMATCH_FRACTION * len(rows))):
             bt.logging.error(
                 f"[REPUTATION] reconcile would clear {len(doomed)} of {len(self.state)} "
-                f"record(s), above the {limit} this pass allows; nothing was changed")
-            return 0, 0
+                f"record(s); no record was cleared this pass")
+            deferred = {hk for _, hk in doomed}
+        elif len(doomed) > limit:
+            deferred = {hk for _, hk in doomed[limit:]}
+            bt.logging.warning(
+                f"[REPUTATION] {len(doomed)} record(s) due to clear; clearing the oldest "
+                f"{limit}, the rest next pass")
 
         for uid, hotkey, reg_block in rows:
             uid, hotkey, reg_block = int(uid), str(hotkey), int(reg_block)
+            if hotkey in deferred:
+                continue
             entry = self.state.get(hotkey)
+            prior = next((p for p in by_slot.get((uid, reg_block), [])
+                          if p != hotkey and p in self.state), None)
             if entry is not None:
                 held = entry.get("b")
                 if held is not None and int(held) != reg_block:
                     del self.state[hotkey]
                     cleared += 1
                     entry = None
-                else:
+                elif held is not None or prior is None:
                     if held is None:
                         adopted += 1
                     entry["u"], entry["b"] = uid, reg_block
                     continue
 
-            for prior in by_slot.get((uid, reg_block), []):
-                if prior == hotkey or prior not in self.state:
-                    continue
+            # The registration's earlier record wins over one opened under the new hotkey
+            # before this pass saw it.
+            if prior is not None:
                 carried = self.state.pop(prior)
                 carried["u"], carried["b"] = uid, reg_block
                 self.state[hotkey] = carried
                 moved += 1
-                break
 
         # A record held by nobody is bound to no registration, so whichever one claims
         # its hotkey next starts empty.

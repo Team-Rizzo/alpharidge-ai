@@ -142,7 +142,7 @@ def test_a_pass_that_would_clear_the_store_refuses(tmp_path, monkeypatch):
     rows = [(i, f"hk{i:03d}", 9_000_000 + i) for i in range(60)]   # every block changed
     assert store.reconcile_identities(rows) == (0, 0)
     assert len(store.state) == 60
-    assert any("above the" in line for line in errors)
+    assert any("no record was cleared" in line for line in errors)
 
 
 def test_a_normal_days_churn_is_allowed(tmp_path, monkeypatch):
@@ -177,3 +177,51 @@ def test_carry_over_does_not_depend_on_insertion_order(tmp_path):
         store.reconcile_identities([(7, HK_NEW, 1000)])
         return store.state[HK_NEW]["r"]
     assert build(["hk-a", "hk-b"]) == build(["hk-b", "hk-a"])
+
+
+def test_a_backlog_clears_oldest_first_and_drains(tmp_path, monkeypatch):
+    """A validator that was down finds more than one pass may clear; it drains, not latches."""
+    import alpharidge_ai.validator.reputation_store as rs
+    monkeypatch.setattr(rs.bt.logging, "info", lambda m: None)
+    monkeypatch.setattr(rs.bt.logging, "warning", lambda m: None)
+    store = ReputationStore(path=tmp_path / "rep.json")
+    for i in range(240):
+        store.state[f"hk{i:03d}"] = {"r": 0.6, "n": 30, "c": {}, "u": i, "b": 1000 + i}
+    rows = [(i, f"hk{i:03d}", (9_000_000 if i < 25 else 1000 + i)) for i in range(240)]
+    assert store.reconcile_identities(rows) == (20, 0)
+    assert all(f"hk{i:03d}" not in store.state for i in range(20))
+    assert all(f"hk{i:03d}" in store.state for i in range(20, 25))
+    assert store.reconcile_identities(rows) == (5, 0)
+    assert store.reconcile_identities(rows) == (0, 0)
+
+
+def test_a_refused_pass_still_carries_a_swap(tmp_path, monkeypatch):
+    import alpharidge_ai.validator.reputation_store as rs
+    monkeypatch.setattr(rs.bt.logging, "error", lambda m: None)
+    monkeypatch.setattr(rs.bt.logging, "info", lambda m: None)
+    store = ReputationStore(path=tmp_path / "rep.json")
+    for i in range(60):
+        store.state[f"hk{i:03d}"] = {"r": 0.6, "n": 30, "c": {}, "u": i, "b": 1000 + i}
+    store.state[HK_OLD] = {"r": 0.9, "n": 30, "c": {}, "u": 60, "b": 5000}
+    rows = [(i, f"hk{i:03d}", 9_000_000 + i) for i in range(60)] + [(60, HK_NEW, 5000)]
+    assert store.reconcile_identities(rows) == (0, 1)
+    assert len(store.state) == 61 and store.state[HK_NEW]["r"] == 0.9
+
+
+def test_a_swap_keeps_its_record_when_the_new_hotkey_was_scored_first(tmp_path):
+    store = store_with(tmp_path, HK_OLD, uid=7, reg_block=1000)
+    before = store.reputation(HK_OLD)
+    store.state[HK_NEW] = {"r": 0.5, "n": 1, "c": {}}          # opened before this pass
+    cleared, moved = store.reconcile_identities([(7, HK_NEW, 1000)])
+    assert (cleared, moved) == (0, 1)
+    assert HK_OLD not in store.state
+    assert store.reputation(HK_NEW) == pytest.approx(before)
+
+
+def test_rows_leave_out_registrations_after_the_scored_epoch(monkeypatch):
+    import neurons.validator as nv
+    monkeypatch.setattr(nv.config, "BLOCK_LENGTH", 100, raising=False)
+    v = types.SimpleNamespace(metagraph=types.SimpleNamespace(
+        hotkeys=["a", "b", "c"], block_at_registration=[950, 1100, 1101]))
+    assert Validator._identity_rows(v, 10) == [(0, "a", 950), (1, "b", 1100)]
+    assert Validator._identity_rows(v) == [(0, "a", 950), (1, "b", 1100), (2, "c", 1101)]

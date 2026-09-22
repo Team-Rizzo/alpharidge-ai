@@ -926,6 +926,9 @@ class ValidationClient:
                     try:
                         self._validator._reputation_store.reconcile_identities(
                             self._validator._identity_rows(int(target_epoch)))
+                    except Exception as e:
+                        bt.logging.warning(f"[REPUTATION] reconcile failed: {e}")
+                    try:
                         # Consensus value: read from the profile so it applies at one
                         # activation block. Served config is the fallback only while no
                         # profile is active.

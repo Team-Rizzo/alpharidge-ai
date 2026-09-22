@@ -1979,32 +1979,25 @@ class Validator(BaseValidatorNeuron):
         return rows
 
     def _identity_rows(self, epoch=None):
-        """(uid, hotkey, registration block) for the field, read at one block.
+        """(uid, hotkey, registration block) for the field as of the epoch being scored.
 
-        Anchored to the epoch being scored so both validators read the same snapshot;
-        the live metagraph is the fallback, which costs one record a settlement.
+        Read from the live metagraph; a registration made after that epoch is left for a
+        later pass. Seats are immune for longer than the settlement lag, so what remains
+        is the same for both validators without a historical query.
         """
-        source = None
-        if epoch is not None:
-            try:
-                source = self.subtensor.metagraph(
-                    self.config.netuid, lite=True,
-                    block=int(epoch) * int(config.BLOCK_LENGTH))
-            except Exception as e:
-                bt.logging.warning(
-                    f"[REPUTATION] metagraph at epoch {epoch} unavailable ({e}); "
-                    f"reconciling against the live one")
-        source = source if source is not None else self.metagraph
         rows = []
         try:
-            hotkeys = list(source.hotkeys)
-            blocks = list(getattr(source, "block_at_registration", []) or [])
+            hotkeys = list(self.metagraph.hotkeys)
+            blocks = list(getattr(self.metagraph, "block_at_registration", []) or [])
             for uid, hotkey in enumerate(hotkeys):
                 if uid < len(blocks):
                     rows.append((uid, hotkey, int(blocks[uid])))
         except Exception as e:
             bt.logging.debug(f"[REPUTATION] identity rows unavailable: {e}")
             return []
+        if epoch is not None:
+            end = (int(epoch) + 1) * int(config.BLOCK_LENGTH)
+            rows = [r for r in rows if r[2] <= end]
         return rows
 
     def _warn_credit_unreachable(self) -> None:
