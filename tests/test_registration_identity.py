@@ -130,7 +130,7 @@ def test_a_record_nobody_holds_is_cleared_when_someone_claims_it(tmp_path):
     assert HK_OLD not in store.state
 
 
-def test_a_pass_that_would_clear_the_store_refuses(tmp_path, monkeypatch):
+def test_a_read_that_goes_backwards_refuses(tmp_path, monkeypatch):
     """A chain fact we no longer understand must raise an alarm, not empty the store."""
     import alpharidge_ai.validator.reputation_store as rs
     errors = []
@@ -138,11 +138,24 @@ def test_a_pass_that_would_clear_the_store_refuses(tmp_path, monkeypatch):
     store = ReputationStore(path=tmp_path / "rep.json")
     for i in range(60):
         hk = f"hk{i:03d}"
-        store.state[hk] = {"r": 0.6, "n": 30, "c": {}, "u": i, "b": 1000 + i}
-    rows = [(i, f"hk{i:03d}", 9_000_000 + i) for i in range(60)]   # every block changed
+        store.state[hk] = {"r": 0.6, "n": 30, "c": {}, "u": i, "b": 5000 + i}
+    rows = [(i, f"hk{i:03d}", (100 + i if i % 2 else 9_000_000 + i)) for i in range(60)]
     assert store.reconcile_identities(rows) == (0, 0)
     assert len(store.state) == 60
     assert any("no record was cleared" in line for line in errors)
+
+
+def test_a_long_outage_drains_however_large(tmp_path, monkeypatch):
+    """Everyone re-registered while we were down: it drains at the pass limit, never locks."""
+    import alpharidge_ai.validator.reputation_store as rs
+    monkeypatch.setattr(rs.bt.logging, "info", lambda m: None)
+    monkeypatch.setattr(rs.bt.logging, "warning", lambda m: None)
+    store = ReputationStore(path=tmp_path / "rep.json")
+    for i in range(256):
+        store.state[f"hk{i:03d}"] = {"r": 0.6, "n": 30, "c": {}, "u": i, "b": 1000 + i}
+    rows = [(i, f"hk{i:03d}", (9_000_000 + i if i < 70 else 1000 + i)) for i in range(256)]
+    cleared = [store.reconcile_identities(rows)[0] for _ in range(5)]
+    assert cleared == [20, 20, 20, 10, 0]
 
 
 def test_a_normal_days_churn_is_allowed(tmp_path, monkeypatch):
@@ -203,7 +216,7 @@ def test_a_refused_pass_still_carries_a_swap(tmp_path, monkeypatch):
     for i in range(60):
         store.state[f"hk{i:03d}"] = {"r": 0.6, "n": 30, "c": {}, "u": i, "b": 1000 + i}
     store.state[HK_OLD] = {"r": 0.9, "n": 30, "c": {}, "u": 60, "b": 5000}
-    rows = [(i, f"hk{i:03d}", 9_000_000 + i) for i in range(60)] + [(60, HK_NEW, 5000)]
+    rows = [(i, f"hk{i:03d}", 100 + i) for i in range(60)] + [(60, HK_NEW, 5000)]
     assert store.reconcile_identities(rows) == (0, 1)
     assert len(store.state) == 61 and store.state[HK_NEW]["r"] == 0.9
 

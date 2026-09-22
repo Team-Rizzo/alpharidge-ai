@@ -54,9 +54,6 @@ UNHELD = -1
 # wait for the next pass, so a backlog (a validator that was down) drains on its own.
 MAX_CLEAR_PER_PASS = 20
 MAX_CLEAR_FRACTION = 0.05
-# A mismatch this wide is the chain telling us something we do not understand: no record
-# is cleared, though the rest of the pass still runs.
-MAX_MISMATCH_FRACTION = 0.25
 
 
 @dataclass
@@ -332,19 +329,23 @@ class ReputationStore:
             holders.sort()
 
         doomed = sorted(
-            (int(self.state[hotkey]["b"]), str(hotkey)) for _, hotkey, reg_block in rows
+            (int(self.state[hotkey]["b"]), str(hotkey), int(reg_block))
+            for _, hotkey, reg_block in rows
             if hotkey in self.state
             and self.state[hotkey].get("b") is not None
             and int(self.state[hotkey]["b"]) != int(reg_block))
         limit = max(MAX_CLEAR_PER_PASS, int(MAX_CLEAR_FRACTION * len(self.state)))
+        # A new registration is always later than the one a record is bound to. A row
+        # that goes backwards is a read we cannot trust, so nothing is cleared on it.
+        backwards = [d for d in doomed if d[0] != UNHELD and d[2] < d[0]]
         deferred = set()
-        if len(doomed) > max(limit, int(MAX_MISMATCH_FRACTION * len(rows))):
+        if backwards:
             bt.logging.error(
-                f"[REPUTATION] reconcile would clear {len(doomed)} of {len(self.state)} "
-                f"record(s); no record was cleared this pass")
-            deferred = {hk for _, hk in doomed}
+                f"[REPUTATION] {len(backwards)} row(s) carry a registration older than "
+                f"the one on record; no record was cleared this pass")
+            deferred = {hk for _, hk, _ in doomed}
         elif len(doomed) > limit:
-            deferred = {hk for _, hk in doomed[limit:]}
+            deferred = {hk for _, hk, _ in doomed[limit:]}
             bt.logging.warning(
                 f"[REPUTATION] {len(doomed)} record(s) due to clear; clearing the oldest "
                 f"{limit}, the rest next pass")
