@@ -65,6 +65,7 @@ def test_a_miner_returning_work_is_owed_a_share():
     v = validator(tracker)
     tracker.delivered_since = lambda hk, s: hk == "hk000"
     tracker.starting_up = lambda hk, e, t: False
+    tracker.covered = {"hk000": 10, "hk001": 10}
     assert Validator._dispatch_eligible(v, epoch=10)("hk000")
     assert not Validator._dispatch_eligible(v, epoch=10)("hk001")
 
@@ -73,9 +74,21 @@ def test_a_miner_that_has_not_returned_yet_still_gets_its_start():
     tracker = Tracker()
     tracker.delivered_since = lambda hk, s: False
     tracker.starting_up = lambda hk, e, t: hk == "hk002"
+    tracker.covered = {"hk003": 9}
     v = validator(tracker)
     assert Validator._dispatch_eligible(v, epoch=10)("hk002")
     assert not Validator._dispatch_eligible(v, epoch=10)("hk003")
+
+
+def test_a_miner_sent_nothing_for_a_while_is_probed():
+    """One back from an outage is owed a share again rather than waiting on the floor."""
+    tracker = Tracker()
+    tracker.delivered_since = lambda hk, s: False
+    tracker.starting_up = lambda hk, e, t: False
+    tracker.covered = {"hk004": 100, "hk005": 93}
+    v = validator(tracker)
+    eligible = Validator._dispatch_eligible(v, epoch=100)
+    assert not eligible("hk004") and eligible("hk005")
 
 
 # ---- shadow mode ------------------------------------------------------------------

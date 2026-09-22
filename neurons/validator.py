@@ -53,10 +53,9 @@ from alpharidge_ai.utils.api_models import TweetWithAuthor, CompletedTweetSubmis
 from alpharidge_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch
 from alpharidge_ai.utils.uids import get_random_uids, get_alive_uids
 from alpharidge_ai.utils.liveness import LivenessRoster
-from alpharidge_ai.utils.dispatch import (CARRY_MAX_BATCHES, FLOOR_FRAC, RECENCY_S,
-                                          TRIAL_EPOCHS, ShadowCredit,
+from alpharidge_ai.utils.dispatch import (CARRY_MAX_BATCHES, FLOOR_FRAC, ShadowCredit,
                                           coverage_depth_select, credit_select,
-                                          speed_weights)
+                                          owed_share, speed_weights)
 from alpharidge_ai.utils.dispatch_metrics import AdaptiveDispatchMetrics
 from alpharidge_ai.utils.tweet_store import TweetStore
 from alpharidge_ai.utils.telegram_store import TelegramStore
@@ -2066,17 +2065,14 @@ class Validator(BaseValidatorNeuron):
             pass
 
     def _dispatch_eligible(self, epoch):
-        """Which miners are owed a share: those returning work, and those still starting.
+        """Which miners are owed a share: those returning work, those still starting,
+        and those not sent anything for a while.
 
         A miner that answers but never delivers keeps holding batches otherwise; it
-        falls back to the exploration slice, which is enough to re-measure it.
+        falls back to the exploration slice between probes.
         """
         tracker = self._article_cooldown
-
-        def eligible(hotkey):
-            return (tracker.delivered_since(hotkey, RECENCY_S)
-                    or tracker.starting_up(hotkey, epoch, TRIAL_EPOCHS))
-        return eligible
+        return lambda hotkey: owed_share(tracker, hotkey, epoch)
 
     def _credit_args(self, epoch):
         args = dict(floor_frac=FLOOR_FRAC, eligible=self._dispatch_eligible(epoch))

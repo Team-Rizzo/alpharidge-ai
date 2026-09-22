@@ -111,6 +111,16 @@ FLOOR_FRAC = 0.05
 # Long enough that an outage does not cost a miner its place in the rotation.
 RECENCY_S = 28800.0
 TRIAL_EPOCHS = 3
+# A miner sent nothing for this long is owed a share again, so one coming back from an
+# outage is re-measured within the hour instead of waiting on the floor slice.
+PROBE_EPOCHS = 6
+
+
+def owed_share(tracker, hotkey: str, epoch: int) -> bool:
+    """Whether a miner accrues a full share: returning work, starting up, or due a probe."""
+    return (tracker.delivered_since(hotkey, RECENCY_S)
+            or tracker.starting_up(hotkey, epoch, TRIAL_EPOCHS)
+            or int(epoch) - int(tracker.covered_epoch(hotkey)) > PROBE_EPOCHS)
 
 
 def credit_select(
