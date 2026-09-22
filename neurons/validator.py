@@ -55,7 +55,8 @@ from alpharidge_ai.utils.uids import get_random_uids, get_alive_uids
 from alpharidge_ai.utils.liveness import LivenessRoster
 from alpharidge_ai.utils.dispatch import (CARRY_MAX_BATCHES, FLOOR_FRAC, RECENCY_S,
                                           TRIAL_EPOCHS, ShadowCredit,
-                                          coverage_depth_select, credit_select)
+                                          coverage_depth_select, credit_select,
+                                          speed_weights)
 from alpharidge_ai.utils.dispatch_metrics import AdaptiveDispatchMetrics
 from alpharidge_ai.utils.tweet_store import TweetStore
 from alpharidge_ai.utils.telegram_store import TelegramStore
@@ -848,6 +849,9 @@ class Validator(BaseValidatorNeuron):
                 f"model={obs.grader_model} {obs.detail}"
                 f"{'' if v2 is None else f' v2={v2:.3f}'}"
                 f"{'' if live else ' (shadow)'}")
+            if obs.path == POOL_PATH:
+                self._article_cooldown.record_quality(
+                    miner_hotkey, float(obs.score if v2 is None else v2))
         if live and observations:
             for path, channel in ((POOL_PATH, channels.AUDIT), (KEEPER_PATH, channels.KEEPER)):
                 self._record_observations(
@@ -1695,6 +1699,8 @@ class Validator(BaseValidatorNeuron):
             self._adaptive_metrics.incr("valid")
             self._adaptive_metrics.mark_scored(miner_hotkey)
         self._article_cooldown.record_batch_valid(miner_hotkey, latency_s)
+        if not verification and deep_validated:
+            self._article_cooldown.record_speed(miner_hotkey, latency_s, len(sent_batch))
         gated_out = self._credit_gate(miner_hotkey, article_batch, validation_result)
 
         if triage_active and verification:
@@ -2054,7 +2060,21 @@ class Validator(BaseValidatorNeuron):
         return eligible
 
     def _credit_args(self, epoch):
-        return dict(floor_frac=FLOOR_FRAC, eligible=self._dispatch_eligible(epoch))
+        args = dict(floor_frac=FLOOR_FRAC, eligible=self._dispatch_eligible(epoch))
+        bonus = float(getattr(config, "DISPATCH_SPEED_BONUS", 0.0) or 0.0)
+        if bonus > 0.0:
+            weights = speed_weights(
+                self._article_cooldown, list(self.metagraph.hotkeys), min(bonus, 0.5),
+                float(getattr(config, "DISPATCH_QUALITY_GATE_Z", 3.0)), time.time())
+            args["weight_of"] = lambda hk: weights.get(hk, 1.0)
+            self._speed_ticks = getattr(self, "_speed_ticks", 0) + 1
+            if weights and self._speed_ticks % SHADOW_REPORT_TICKS == 1:
+                held = sum(1 for hk in weights if self._article_cooldown.gated_out(hk))
+                bt.logging.info(
+                    f"[DISPATCH] speed weight: {len(weights)} miner(s) weighted, {held} held "
+                    f"by the quality gate, range {min(weights.values()):.3f}-"
+                    f"{max(weights.values()):.3f}")
+        return args
 
     def _credit_assign(self, live, hotkeys, tracker, epoch, n_batches):
         assignments = credit_select(live, hotkeys, tracker, n_batches,

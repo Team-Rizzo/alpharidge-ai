@@ -204,8 +204,11 @@ def test_audit_paths_go_to_their_own_channels():
 
     recorded = []
 
+    from alpharidge_ai.utils.cooldown import MinerCooldownTracker
+
     class Fake:
         _log_audit = vm.Validator._log_audit
+        _article_cooldown = MinerCooldownTracker()
 
         def _record_observations(self, hotkey, observations, channel):
             recorded.extend((channel, o) for o in observations)

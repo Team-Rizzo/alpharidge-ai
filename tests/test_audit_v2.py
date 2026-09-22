@@ -10,6 +10,7 @@ from alpharidge_ai.models.article_intelligence import NumericClaim
 from alpharidge_ai.oracle import audit
 from alpharidge_ai.oracle.audit import Adjudication
 from alpharidge_ai.oracle.runner import Observation
+from alpharidge_ai.utils.cooldown import MinerCooldownTracker
 from alpharidge_ai.validator.reputation_store import ReputationStore
 from tests.test_profile_client import valid
 
@@ -225,7 +226,8 @@ def _validator(schema):
         block=100,
         _mechanism_profile=types.SimpleNamespace(
             resolve=lambda block: mp.parse(_raw(schema))),
-        _record_observations=lambda hk, obs, channel: recorded.append((channel, obs)))
+        _record_observations=lambda hk, obs, channel: recorded.append((channel, obs)),
+        _article_cooldown=MinerCooldownTracker())
     return Validator, fake, recorded
 
 

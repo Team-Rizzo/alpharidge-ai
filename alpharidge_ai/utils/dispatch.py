@@ -20,6 +20,7 @@ covered without sending it work. ``provisional`` mirrors what those acquisitions
 will be so we don't assign a miner more than ``floor(window)`` within one tick.
 """
 
+import math
 import random
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -199,6 +200,67 @@ def credit_select(
             break
 
     return assignments
+
+
+# ---- Speed weight --------------------------------------------------------------------
+
+SPEED_WINDOW_S = 48 * 3600.0
+# Log speed ratio to the field median that earns the full bonus.
+SPEED_SPAN = 0.35
+MIN_SPEED_SAMPLES = 10
+MIN_QUALITY_SAMPLES = 40
+MIN_FIELD_QUALITY_SAMPLES = 10
+# Hysteresis on the quality gate, in standard errors.
+GATE_REOPEN_MARGIN = 1.0
+
+
+def speed_weights(tracker, hotkeys: Sequence[str], bonus: float, gate_z: float,
+                  now: float) -> Dict[str, float]:
+    """Dispatch weight per hotkey: a bonus of up to +-`bonus` for speed relative to the
+    field, paid only while the miner's audited quality is not clearly below the field's.
+
+    A miner below the field by more than `gate_z` standard errors is held at the bottom
+    of the band however fast it is. Too little history reads as neutral. Updates the
+    tracker's gate state.
+    """
+    if bonus <= 0.0:
+        return {}
+    since = now - SPEED_WINDOW_S
+    speed, quality = {}, {}
+    for hk in hotkeys:
+        xs = tracker.speed_samples(hk, since)
+        if len(xs) >= MIN_SPEED_SAMPLES:
+            xs = sorted(xs)
+            speed[hk] = xs[len(xs) // 2]
+        qs = tracker.quality_samples(hk, since)
+        if qs:
+            quality[hk] = qs
+    field_means = sorted(sum(q) / len(q) for q in quality.values()
+                         if len(q) >= MIN_FIELD_QUALITY_SAMPLES)
+    if not speed or not field_means:
+        return {}
+    field_speed = sorted(speed.values())[len(speed) // 2]
+    field_q = field_means[len(field_means) // 2]
+    pooled = [x for q in quality.values() for x in q]
+    mean = sum(pooled) / len(pooled)
+    sd = (sum((x - mean) ** 2 for x in pooled) / len(pooled)) ** 0.5 or 1.0
+
+    out = {}
+    for hk, spa in speed.items():
+        qs = quality.get(hk, [])
+        if len(qs) < MIN_QUALITY_SAMPLES or spa <= 0.0:
+            continue
+        z = (sum(qs) / len(qs) - field_q) / (sd / len(qs) ** 0.5)
+        if z < -gate_z:
+            tracker.set_gated_out(hk, True)
+        elif z > -(gate_z - GATE_REOPEN_MARGIN):
+            tracker.set_gated_out(hk, False)
+        if tracker.gated_out(hk):
+            out[hk] = 1.0 - bonus
+        else:
+            lean = max(-1.0, min(1.0, math.log(field_speed / spa) / SPEED_SPAN))
+            out[hk] = 1.0 + bonus * lean
+    return out
 
 
 class ShadowCredit:
