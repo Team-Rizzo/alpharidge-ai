@@ -78,7 +78,8 @@ from alpharidge_ai.triage import TRIAGE_SCHEMA_VERSION, gazetteer_assets
 from alpharidge_ai.models.article_intelligence import SCHEMA_VERSION
 from alpharidge_ai.utils.api_models import NewsArticleAnalysisBase
 from alpharidge_ai.validator.triage_grader import (
-    CanaryPool, TriageConfig, fp_soft_event, grade_batch)
+    CanaryPool, TriageConfig, fp_soft_event, grade_batch, relevance_audit_factor,
+    relevance_factors)
 
 # Triage design constants — one instance, no env var or served key behind it.
 TRIAGE_CFG = TriageConfig()
@@ -1042,6 +1043,15 @@ class Validator(BaseValidatorNeuron):
             return None
         return auditor.relevance_verdict(item.get("title") or "", item.get("body") or "")
 
+    def _llm_irrelevant_item(self, item: dict) -> bool:
+        """True when the audit rejects relevance."""
+        auditor = self._get_triage_auditor()
+        if auditor is None:
+            return False
+        title, body = item.get("title") or "", item.get("body") or ""
+        return (auditor.relevance_verdict(title, body, framing="strict") is False
+                and auditor.relevance_verdict(title, body, framing="editorial") is False)
+
     def _confirm_clearly_irrelevant(self, aid_flags, sent_by_id) -> set:
         """Keep only 'clearly irrelevant' verdicts the reference TriageStage
         agrees with. Blocking — run in the validation executor."""
@@ -1247,7 +1257,12 @@ class Validator(BaseValidatorNeuron):
             items, canary_labels, self._det_relevant_item, self._llm_relevant_item,
             self._stage_label_item,
             random.Random(), self._triage_cfg(),
-            enforced=bool(getattr(config, "TRIAGE_ENFORCED", False)))
+            enforced=bool(getattr(config, "TRIAGE_ENFORCED", False)),
+            llm_irrelevant=self._llm_irrelevant_item,
+            audit_relevant_n=int(getattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 0) or 0))
+        if res.relevance_audited:
+            self._article_cooldown.record_relevance_audit(
+                miner_hotkey, res.relevance_audited, len(res.false_positive_ids))
         if res.events:
             bt.logging.info(
                 f"[TRIAGE] hk={miner_hotkey} events="
@@ -1311,8 +1326,11 @@ class Validator(BaseValidatorNeuron):
         # dispatch.
         total_pay = sum(TRIAGE_CFG.fee_points / self._k_for(a.id)
                         for a in article_batch)
-        rel_mult = TRIAGE_CFG.rel_point_mult
+        rel_mult = TRIAGE_CFG.rel_point_mult * self._relevance_factor(miner_hotkey)
         per_article: dict = {}
+        scored = [int(a.id) for a in article_batch if int(a.id) not in canary_ids]
+        self._article_cooldown.record_relevance(
+            miner_hotkey, len(set(scored) & keep_ids), len(scored))
 
         for article in article_batch:
             aid = int(article.id)
@@ -1377,9 +1395,13 @@ class Validator(BaseValidatorNeuron):
                                     gated_out=None):
         """Pay a verification response at the split rate and keep its analyses
         as variants. No store interaction — the primary owns the article."""
+        rel_factor = self._relevance_factor(miner_hotkey)
         keep_ids = set(triage_res.relevant_ids) | set(triage_res.borderline_valuable_ids)
         discard_ids = set(triage_res.borderline_discard_ids)
         canary_ids = set(triage_res.canary_ids)
+        scored = [int(a.id) for a in article_batch if int(a.id) not in canary_ids]
+        self._article_cooldown.record_relevance(
+            miner_hotkey, len(set(scored) & keep_ids), len(scored))
         # The floor gate is shared with every other lane; see _credit_gate.
         gated_out = gated_out or (lambda _aid: False)
         # No fee floor in this lane.
@@ -1397,8 +1419,8 @@ class Validator(BaseValidatorNeuron):
             weight = 3 if content_len >= 2000 else (2 if content_len >= 500 else 1)
             if (aid in keep_ids and not gated_out(aid)
                     and self._has_full_analysis(article)):
-                total_pay += TRIAGE_CFG.rel_point_mult * weight / k
-                per_article[aid] += TRIAGE_CFG.rel_point_mult * weight / k
+                total_pay += TRIAGE_CFG.rel_point_mult * rel_factor * weight / k
+                per_article[aid] += TRIAGE_CFG.rel_point_mult * rel_factor * weight / k
             variants.append(article)
         payout = int(round(total_pay))
         if payout > 0:
@@ -1593,14 +1615,16 @@ class Validator(BaseValidatorNeuron):
         # Reference-relevance verdicts feed FP events and the negative pool.
         fp_ids = set()
         if triage_active:
+            fp_ids.update(triage_res.false_positive_ids)
             sent_by_id = {int(a.id): a for a in sent_batch}
             confirmed_irrelevant = await loop.run_in_executor(
                 self._validation_executor, self._confirm_clearly_irrelevant,
                 (validation_result or {}).get("reference_irrelevant", []),
                 sent_by_id)
             for aid in sorted(confirmed_irrelevant):
+                if aid not in fp_ids:
+                    triage_res.events.append(fp_soft_event(aid))
                 fp_ids.add(aid)
-                triage_res.events.append(fp_soft_event(aid))
                 if (self._canary_pool.size("neg") < TRIAGE_CFG.neg_pool_target
                         and aid in sent_by_id):
                     self._canary_pool.add(aid, "neg", deterministic=False)
@@ -2050,6 +2074,37 @@ class Validator(BaseValidatorNeuron):
                    "ADAPTIVE_BATCH_SIZE_ENABLED is off")
                 + "; rations are not applied to dispatch")
         self._credit_warned = warned
+
+    def _relevance_factor(self, hotkey) -> float:
+        """This miner's relevance premium factor, refreshed every ten minutes."""
+        now = time.time()
+        if now - getattr(self, "_relevance_at", 0.0) >= 600:
+            bound = float(getattr(config, "TRIAGE_RELEVANCE_BOUND", 2.0) or 0.0)
+            tol = float(getattr(config, "TRIAGE_RELEVANCE_AUDIT_TOL", 0.06))
+            factors, rates = {}, []
+            try:
+                hotkeys = list(self.metagraph.hotkeys)
+                bounded = relevance_factors(self._article_cooldown, hotkeys, bound, now)
+                for hk in hotkeys:
+                    audited, failed = self._article_cooldown.relevance_audit(hk, now)
+                    if audited >= 5:
+                        rates.append(failed / audited)
+                    f = bounded.get(hk, 1.0) * relevance_audit_factor(audited, failed, tol)
+                    if f < 1.0:
+                        factors[hk] = f
+            except Exception as e:
+                bt.logging.warning(f"[TRIAGE] relevance factors unavailable: {e}")
+                factors = {}
+            self._relevance_factors = factors
+            self._relevance_at = now
+            self._relevance_reports = getattr(self, "_relevance_reports", 0) + 1
+            if self._relevance_reports % 6 == 1 and (factors or rates):
+                med = sorted(rates)[len(rates) // 2] if rates else 0.0
+                bt.logging.info(
+                    f"[TRIAGE] relevance premium reduced for {len(factors)} miner(s), "
+                    f"lowest factor {min(factors.values(), default=1.0):.2f}; "
+                    f"median rejected share {med:.3f} over {len(rates)} miner(s)")
+        return float(getattr(self, "_relevance_factors", {}).get(hotkey, 1.0))
 
     def _refund_credit(self, uid) -> None:
         """Give back a turn that was allocated but never sent.

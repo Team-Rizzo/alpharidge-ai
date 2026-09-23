@@ -14,6 +14,8 @@ import types
 
 import pytest
 
+from alpharidge_ai.utils.cooldown import MinerCooldownTracker
+
 from alpharidge_ai import config
 from alpharidge_ai.utils.api_models import NewsArticleForScoring
 from alpharidge_ai.validator.triage_grader import CanaryPool, TriageConfig
@@ -95,6 +97,7 @@ class HarnessValidator:
     _confirm_clearly_irrelevant = validator_module.Validator._confirm_clearly_irrelevant
     _get_triage_stage = validator_module.Validator._get_triage_stage
     _llm_relevant_item = validator_module.Validator._llm_relevant_item
+    _llm_irrelevant_item = validator_module.Validator._llm_irrelevant_item
     _get_triage_auditor = validator_module.Validator._get_triage_auditor
     _feed_pos_canaries = validator_module.Validator._feed_pos_canaries
     _inject_canaries = validator_module.Validator._inject_canaries
@@ -106,6 +109,7 @@ class HarnessValidator:
     _triage_only_analysis = staticmethod(validator_module.Validator._triage_only_analysis)
     _k_for = validator_module.Validator._k_for
     _attribute_pay = validator_module.Validator._attribute_pay
+    _relevance_factor = validator_module.Validator._relevance_factor
 
     def __init__(self):
         self._canary_pool = CanaryPool(TriageConfig())
@@ -118,6 +122,8 @@ class HarnessValidator:
         self._article_intel_analyzer = None
         self._article_store = FakeStore()
         self._miner_reward = FakeReward()
+        self._article_cooldown = MinerCooldownTracker()
+        self.metagraph = types.SimpleNamespace(hotkeys=[])
         self.observations = []
         self.channels = []
 
@@ -227,6 +233,29 @@ class TestEndToEnd:
         # Reference analysis refutes the two junk articles.
         v._apply_triage_outcome(returned, "hk4", res, fp_ids={2, 3})
         assert v._miner_reward.points == 1 + 6   # fee + only the real one
+
+    def test_audited_relevance_claims_on_junk_are_unpaid(self, stage, triage_on, monkeypatch):
+        monkeypatch.setattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 5, raising=False)
+        v = HarnessValidator()
+        v._triage_auditor = types.SimpleNamespace(
+            relevance_verdict=lambda title, body, framing="strict": title != JUNK_ARTICLE[0])
+        batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE),
+                 article(3, JUNK_ARTICLE)]
+        returned = mine(stage, batch, strategy="spam")
+        res = v._grade_triage(returned, batch, "hk4")
+        assert res.relevance_audited == 3 and sorted(res.false_positive_ids) == [2, 3]
+        assert v._article_cooldown.relevance_audit("hk4") == pytest.approx((3.0, 2.0), abs=1e-3)
+        v._apply_triage_outcome(returned, "hk4", res, fp_ids=set(res.false_positive_ids))
+        assert v._miner_reward.points == 1 + 6
+
+    def test_verification_lane_premium(self, stage, triage_on, monkeypatch):
+        monkeypatch.setattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 5, raising=False)
+        v = HarnessValidator()
+        v._triage_auditor = types.SimpleNamespace(
+            relevance_verdict=lambda title, body, framing="strict": title != JUNK_ARTICLE[0])
+        batch = [article(1, JUNK_ARTICLE), article(2, JUNK_ARTICLE)]
+        res = v._grade_triage(mine(stage, batch, strategy="spam"), batch, "hk5")
+        assert res.relevance_audited == 2 and sorted(res.false_positive_ids) == [1, 2]
 
     def test_pre_triage_miner_grace_then_enforced(self, stage, triage_on, monkeypatch):
         v = HarnessValidator()

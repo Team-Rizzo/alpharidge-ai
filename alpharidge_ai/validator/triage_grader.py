@@ -47,6 +47,44 @@ class TriageConfig:
     verification_ttl_s: float = 900.0
 
 
+# Relevance premium bound. A miner keeping far more than the field is paid the premium
+# on the share it would keep at the bound.
+RELEVANCE_MIN_FIELD_N = 48      # decayed articles before a miner counts toward the field
+RELEVANCE_PRIOR_N = 48          # prior weight, in articles, at the field rate
+RELEVANCE_REF_CAP = 0.25        # the field reference never exceeds this
+
+
+def relevance_factors(tracker, hotkeys, bound_mult: float, now: float) -> Dict[str, float]:
+    """Premium factor per hotkey, below 1.0 only for a miner keeping more than
+    `bound_mult` times the field's rate. Hotkeys absent from the result pay 1.0."""
+    if bound_mult <= 0:
+        return {}
+    stats = {hk: tracker.relevance(hk, now) for hk in hotkeys}
+    rates = sorted(k / n for k, n in stats.values() if n >= RELEVANCE_MIN_FIELD_N)
+    if not rates:
+        return {}
+    ref = min(rates[len(rates) // 2], RELEVANCE_REF_CAP)
+    bound = bound_mult * ref
+    out = {}
+    for hk, (kept, seen) in stats.items():
+        rate = (kept + RELEVANCE_PRIOR_N * ref) / (seen + RELEVANCE_PRIOR_N)
+        if rate > bound > 0:
+            out[hk] = bound / rate
+    return out
+
+
+# Relevance audit: the rejected share of a miner's audited claims scales its premium.
+RELEVANCE_AUDIT_TOL = 0.06      # rejected share paid in full (served as TRIAGE_RELEVANCE_AUDIT_TOL)
+RELEVANCE_AUDIT_SPAN = 0.35     # rejected share above the tolerance where the premium ends
+RELEVANCE_AUDIT_PRIOR_N = 10    # prior weight, in audits, at the tolerance
+
+
+def relevance_audit_factor(audited: float, failed: float, tol: float = RELEVANCE_AUDIT_TOL) -> float:
+    """Premium factor from a miner's decayed relevance-audit counts."""
+    rate = (failed + RELEVANCE_AUDIT_PRIOR_N * tol) / (audited + RELEVANCE_AUDIT_PRIOR_N)
+    return max(0.0, 1.0 - max(0.0, rate - tol) / RELEVANCE_AUDIT_SPAN)
+
+
 @dataclass
 class TriageEvent:
     kind: str        # "hard" | "soft"
@@ -67,6 +105,8 @@ class TriageGradeResult:
     borderline_discard_ids: List[int] = field(default_factory=list)
     grace: bool = False   # pre-triage batch before enforcement; legacy grading applies
     batch_size: int = 0
+    relevance_audited: int = 0
+    false_positive_ids: List[int] = field(default_factory=list)
 
     def flagged_ids(self) -> Set[int]:
         """Articles named by an event or a proof-of-read failure."""
@@ -132,6 +172,8 @@ def grade_batch(
     rng,
     cfg: TriageConfig,
     enforced: bool,
+    llm_irrelevant: Optional[Callable[[dict], bool]] = None,
+    audit_relevant_n: int = 0,
 ) -> TriageGradeResult:
     """Grade the triage layer of one returned miner batch.
 
@@ -140,6 +182,7 @@ def grade_batch(
     det_relevant(item): gazetteer check on the validator's copy.
     llm_relevant(item): audit-LLM verdict; None = no verdict.
     stage_label(item): reference TriageStage label on the validator's copy.
+    llm_irrelevant(item): True when the audit rejects relevance.
     """
     res = TriageGradeResult(canary_ids=list(canary_labels), batch_size=len(items))
 
@@ -251,6 +294,18 @@ def grade_batch(
         if llm_relevant(it) is True:
             res.events.append(TriageEvent("soft", "false_negative_llm",
                                           it["article_id"]))
+
+    # 4. audit a sample of relevant claims.
+    claimed = [it for it in items
+               if labels[it["article_id"]] == LABEL_RELEVANT
+               and it["article_id"] not in canary_labels
+               and it["article_id"] not in res.proof_failures]
+    if llm_irrelevant is not None and audit_relevant_n > 0:
+        for it in rng.sample(claimed, min(audit_relevant_n, len(claimed))):
+            res.relevance_audited += 1
+            if not det_relevant(it) and llm_irrelevant(it):
+                res.false_positive_ids.append(it["article_id"])
+                res.events.append(fp_soft_event(it["article_id"]))
 
     contradicted = {e.article_id for e in res.events}
     res.borderline_valuable_ids = [

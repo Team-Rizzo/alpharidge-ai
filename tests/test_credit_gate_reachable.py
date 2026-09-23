@@ -66,6 +66,8 @@ def _validator(**over):
         set_processed=lambda *a, **k: None, reset_to_unprocessed=lambda *a, **k: None,
         mark_rewarded=lambda *a, **k: None, is_rewarded=lambda *a, **k: False)
     v._article_store = store
+    v._relevance_factor = lambda hk: 1.0
+    v._article_cooldown = types.SimpleNamespace(record_relevance=lambda *a, **k: None)
     v.__dict__.update(over)
     return v
 

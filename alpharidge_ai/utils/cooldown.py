@@ -17,6 +17,7 @@ LATENCY_WINDOW = 20  # rolling per-miner batch round-trip samples for the median
 SPEED_SAMPLES_MAX = 200    # per-miner seconds-per-article samples kept for the speed weight
 QUALITY_SAMPLES_MAX = 400  # per-miner audit scores kept for the quality gate
 MIN_TIMED_ARTICLES = 8     # a batch smaller than this says little about speed
+RELEVANCE_HALF_LIFE_S = 12 * 3600.0   # decay of the per-miner triage keep and audit counts
 EVENT_BUFFER_MAX = 2000  # bound the display-only event buffer if the API is unreachable
 
 
@@ -59,6 +60,8 @@ class MinerCooldownTracker:
         self._speed: Dict[str, deque] = {}        # (unix, seconds per article), valid batches
         self._quality: Dict[str, deque] = {}      # (unix, audit score)
         self._gated_out: Dict[str, bool] = {}     # speed bonus withheld (quality gate)
+        self._relevance: Dict[str, list] = {}     # [kept, seen, unix] decayed triage counts
+        self._rel_audit: Dict[str, list] = {}     # [audited, failed, unix] decayed
         self._cap: float = None                   # per-tick anti-monopoly cap; None => from config
 
         # ---- Faithfulness cooldown (2026-07-09) ----
@@ -103,6 +106,8 @@ class MinerCooldownTracker:
                 "speed": {k: list(v) for k, v in self._speed.items()},
                 "quality": {k: list(v) for k, v in self._quality.items()},
                 "gated_out": self._gated_out,
+                "relevance": self._relevance,
+                "rel_audit": self._rel_audit,
             }))
             tmp.replace(path)
         except Exception as e:
@@ -143,6 +148,10 @@ class MinerCooldownTracker:
             self._quality = {k: deque(((float(t), float(x)) for t, x in v), maxlen=QUALITY_SAMPLES_MAX)
                              for k, v in (raw.get("quality") or {}).items()}
             self._gated_out = {k: bool(v) for k, v in (raw.get("gated_out") or {}).items()}
+            self._relevance = {k: [float(v[0]), float(v[1]), float(v[2])]
+                               for k, v in (raw.get("relevance") or {}).items() if len(v) == 3}
+            self._rel_audit = {k: [float(v[0]), float(v[1]), float(v[2])]
+                               for k, v in (raw.get("rel_audit") or {}).items() if len(v) == 3}
             bt.logging.info(
                 f"[COOLDOWN] restored dispatch state for {len(self._batch_size)} miner(s); "
                 f"mean batch {sum(self._batch_size.values())/max(len(self._batch_size),1):.1f}, "
@@ -561,6 +570,39 @@ class MinerCooldownTracker:
     def quality_samples(self, hotkey: str, since: float):
         return [x for t, x in self._quality.get(hotkey, ()) if t > since]
 
+    def record_relevance(self, hotkey: str, kept: int, seen: int, when: float = None) -> None:
+        """Triage articles a miner kept out of those it was sent, decayed over time."""
+        if seen > 0:
+            self._add_decayed(self._relevance, hotkey, kept, seen, when)
+
+    def relevance(self, hotkey: str, now: float = None):
+        """(kept, seen), decayed to `now`."""
+        return self._decayed(self._relevance, hotkey, now)
+
+    def record_relevance_audit(self, hotkey: str, audited: int, failed: int,
+                               when: float = None) -> None:
+        """Audited relevance claims and how many the audit rejected, decayed over time."""
+        if audited > 0:
+            self._add_decayed(self._rel_audit, hotkey, audited, failed, when)
+
+    def relevance_audit(self, hotkey: str, now: float = None):
+        """(audited, failed), decayed to `now`."""
+        return self._decayed(self._rel_audit, hotkey, now)
+
+    def _add_decayed(self, store, hotkey, a, b, when) -> None:
+        now = float(time.time() if when is None else when)
+        x, y = self._decayed(store, hotkey, now)
+        store[hotkey] = [x + float(a), y + float(b), now]
+
+    @staticmethod
+    def _decayed(store, hotkey, now):
+        entry = store.get(hotkey)
+        if not entry:
+            return 0.0, 0.0
+        now = float(time.time() if now is None else now)
+        decay = 0.5 ** (max(0.0, now - entry[2]) / RELEVANCE_HALF_LIFE_S)
+        return entry[0] * decay, entry[1] * decay
+
     def gated_out(self, hotkey: str) -> bool:
         return bool(self._gated_out.get(hotkey, False))
 
@@ -648,7 +690,7 @@ class MinerCooldownTracker:
         for hk in stale_inflight:
             del self._inflight[hk]
         for d in (self._credit, self._last_valid, self._first_ep,
-                  self._speed, self._quality, self._gated_out,
+                  self._speed, self._quality, self._gated_out, self._relevance, self._rel_audit,
                   self._window, self._consec_to, self._covered_ep,
                   self._consec_inv, self._inv_level, self._inv_until, self._last_faith,
                   self._batch_size, self._consec_fail, self._latency):

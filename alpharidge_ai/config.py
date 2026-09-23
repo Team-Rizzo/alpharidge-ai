@@ -329,6 +329,12 @@ DISPATCH_CREDIT_SHADOW = _as_bool(os.getenv("DISPATCH_CREDIT_SHADOW", "false"))
 # held back while its audited quality trails the field. 0 turns it off.
 DISPATCH_SPEED_BONUS = float(os.getenv("DISPATCH_SPEED_BONUS", "0.0"))
 DISPATCH_QUALITY_GATE_Z = float(os.getenv("DISPATCH_QUALITY_GATE_Z", "3.0"))
+# Triage relevance premium is paid in full up to this multiple of the field's keep rate.
+# 0 turns the bound off.
+TRIAGE_RELEVANCE_BOUND = float(os.getenv("TRIAGE_RELEVANCE_BOUND", "2.0"))
+# Relevance claims audited per triage batch, and the rejected share paid in full.
+TRIAGE_RELEVANCE_AUDIT_N = int(os.getenv("TRIAGE_RELEVANCE_AUDIT_N", "1"))
+TRIAGE_RELEVANCE_AUDIT_TOL = float(os.getenv("TRIAGE_RELEVANCE_AUDIT_TOL", "0.06"))
 # How long a dispatched article may sit in PROCESSING before it is reclaimed. Both readers
 # (article_store.get_timeouts, cooldown._late_threshold_s) used a hardcoded 900 fallback and it
 # was never declared here. Doubly-loaded: also scales the late-growth threshold (0.6 * TTL),
@@ -438,6 +444,9 @@ _REMOTE_CONFIG_KEYS = {
     "DISPATCH_CREDIT_SHADOW":     (_as_bool, "DISPATCH_CREDIT_SHADOW"),
     "DISPATCH_SPEED_BONUS":       (float, "DISPATCH_SPEED_BONUS"),
     "DISPATCH_QUALITY_GATE_Z":    (float, "DISPATCH_QUALITY_GATE_Z"),
+    "TRIAGE_RELEVANCE_BOUND":     (float, "TRIAGE_RELEVANCE_BOUND"),
+    "TRIAGE_RELEVANCE_AUDIT_N":   (int, "TRIAGE_RELEVANCE_AUDIT_N"),
+    "TRIAGE_RELEVANCE_AUDIT_TOL": (float, "TRIAGE_RELEVANCE_AUDIT_TOL"),
     "SCORING_LEASE_TTL_SECONDS":  (float, "SCORING_LEASE_TTL_SECONDS"),
     "DISPATCH_CHRONIC_TIMEOUT_N": (int,   "DISPATCH_CHRONIC_TIMEOUT_N"),
     "LIVENESS_TTL_S":             (int,   "LIVENESS_TTL_S"),

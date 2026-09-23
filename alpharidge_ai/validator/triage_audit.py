@@ -33,11 +33,13 @@ _TOOL = {
                 },
                 "confidence": {
                     "type": "number",
-                    "description": "Confidence in the judgement, 0.0 to 1.0.",
+                    "description": (
+                        "How sure you are of your `relevant` answer, 0.0 to 1.0 "
+                        "(1.0 = certain). Not the probability that the article is relevant."),
                 },
                 "reason": {"type": "string", "description": "Brief justification."},
             },
-            "required": ["relevant", "confidence", "reason"],
+            "required": ["relevant", "confidence"],
         },
     },
 }
@@ -91,7 +93,7 @@ class TriageAuditor:
                 tool_choice={"type": "function",
                              "function": {"name": "judge_market_relevance"}},
                 temperature=0,
-                max_tokens=200,
+                max_tokens=1000,
             )
             calls = response.choices[0].message.tool_calls
             if not calls:
@@ -102,5 +104,5 @@ class TriageAuditor:
                 return None
             return bool(payload["relevant"])
         except Exception as e:
-            bt.logging.debug(f"[TRIAGE_AUDIT] verdict unavailable: {e}")
+            bt.logging.warning(f"[TRIAGE_AUDIT] verdict unavailable: {e}")
             return None
