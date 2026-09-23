@@ -11,6 +11,7 @@ from alpharidge_ai import config
 from alpharidge_ai.models.reward import Reward
 from alpharidge_ai.utils import burn
 from alpharidge_ai.utils.reward import MinerReward
+from alpharidge_ai.validator.penalty_broadcast_store import PenaltyBroadcastStore
 from alpharidge_ai.validator.reward_broadcast_store import RewardBroadcastStore
 
 POINTS = [3, 7, 11, 2, 5]
@@ -204,6 +205,48 @@ def test_uid_that_changed_holder_inside_the_window_is_dropped(tmp_path):
 
     assert agg == {0: 10, 2: 9}
     assert rekeyed == 1
+
+
+def test_a_new_holder_keeps_its_epochs_after_registration(tmp_path):
+    store = RewardBroadcastStore(path=tmp_path / "b.json", keep_epochs=99)
+    store.by_epoch_by_sender = {e: {"v1": {0: 5, 1: 7}, "v2": {1: 1}} for e in range(10, 14)}
+    mg = FakeMetagraph(registered_at=[0, 11 * config.BLOCK_LENGTH + config.BLOCK_LENGTH // 2] + [0] * 254)
+
+    agg, skipped = store.aggregate_range(10, 13, mg)
+
+    assert agg == {0: 20, 1: 16}          # epochs 12 and 13 only
+    assert skipped == 1
+
+
+def test_registration_on_an_epoch_boundary_keeps_that_epoch(tmp_path):
+    store = RewardBroadcastStore(path=tmp_path / "b.json", keep_epochs=99)
+    store.by_epoch_by_sender = {e: {"v1": {1: 7}} for e in range(10, 14)}
+    mg = FakeMetagraph(registered_at=[0, 12 * config.BLOCK_LENGTH] + [0] * 254)
+
+    assert store.aggregate_range(10, 13, mg) == ({1: 14}, 1)
+
+
+def test_a_registration_after_the_window_keeps_nothing(tmp_path):
+    store = RewardBroadcastStore(path=tmp_path / "b.json", keep_epochs=99)
+    store.by_epoch_by_sender = {e: {"v1": {0: 5, 1: 7}} for e in range(10, 14)}
+    mg = FakeMetagraph(registered_at=[0, 14 * config.BLOCK_LENGTH + 1] + [0] * 254)
+
+    assert store.aggregate_range(10, 13, mg) == ({0: 20}, 1)
+
+
+def test_a_uid_missing_from_the_metagraph_is_kept(tmp_path):
+    store = RewardBroadcastStore(path=tmp_path / "b.json", keep_epochs=99)
+    store.by_epoch_by_sender = {10: {"v1": {300: 4}}}
+
+    assert store.aggregate_range(10, 10, FakeMetagraph()) == ({300: 4}, 0)
+
+
+def test_penalties_follow_the_same_registration_rule(tmp_path):
+    store = PenaltyBroadcastStore(path=tmp_path / "p.json", keep_epochs=99)
+    store.by_epoch_by_sender = {e: {"v1": {0: 1, 1: 2}} for e in range(10, 14)}
+    mg = FakeMetagraph(registered_at=[0, 11 * config.BLOCK_LENGTH + config.BLOCK_LENGTH // 2] + [0] * 254)
+
+    assert store.aggregate_range(10, 13, mg) == ({0: 4, 1: 4}, 1)
 
 
 def test_range_aggregate_without_a_metagraph_drops_nothing(tmp_path):

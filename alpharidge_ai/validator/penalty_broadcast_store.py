@@ -20,6 +20,7 @@ from typing import Dict, Tuple
 import bittensor as bt
 
 from alpharidge_ai import config
+from alpharidge_ai.validator.reward_broadcast_store import aggregate_since_registration
 
 # Defense-in-depth bounds on ingested broadcast data. A miner accrues at most a
 # handful of penalties per epoch; anything above MAX_COUNT_PER_UID is fabricated.
@@ -156,31 +157,12 @@ class PenaltyBroadcastStore:
         Aggregate uid->penalty_count over the inclusive epoch range.
 
         Mirrors RewardBroadcastStore.aggregate_range so points and penalties are
-        compared over the same window, including the UID re-key filter.
+        compared over the same window, including the registration filter.
 
-        Returns (uid -> count, count of UIDs dropped).
+        Returns (uid -> count, count of UIDs with skipped epochs).
         """
-        agg: Dict[int, int] = {}
-        for epoch in range(int(start_epoch), int(end_epoch) + 1):
-            senders = self.by_epoch_by_sender.get(epoch) or {}
-            for _sender, uid_penalties in senders.items():
-                for uid, cnt in uid_penalties.items():
-                    uid_i = int(uid)
-                    agg[uid_i] = agg.get(uid_i, 0) + int(cnt)
-
-        rekeyed = 0
-        if metagraph is not None:
-            start_block = int(start_epoch) * config.BLOCK_LENGTH
-            for uid in list(agg):
-                try:
-                    registered_at = int(metagraph.block_at_registration[uid])
-                except (IndexError, KeyError, TypeError, ValueError):
-                    continue
-                if registered_at >= start_block:
-                    del agg[uid]
-                    rekeyed += 1
-
-        return agg, rekeyed
+        return aggregate_since_registration(
+            self.by_epoch_by_sender, start_epoch, end_epoch, metagraph)
 
     # -------------------------------------------------------------------------
     # Remote reset helpers

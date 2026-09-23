@@ -30,6 +30,37 @@ MAX_POINTS_PER_UID = 5000
 MAX_SEQ_EPOCH_SKEW = 100
 
 
+def first_epoch_after_registration(metagraph, uid: int) -> Optional[int]:
+    """The first epoch that began at or after the UID's current registration."""
+    try:
+        registered_at = int(metagraph.block_at_registration[uid])
+    except (IndexError, KeyError, TypeError, ValueError):
+        return None
+    return -(-registered_at // config.BLOCK_LENGTH)
+
+
+def aggregate_since_registration(by_epoch_by_sender, start_epoch: int, end_epoch: int,
+                                 metagraph=None) -> Tuple[Dict[int, int], int]:
+    """Sum uid->value over the inclusive range across senders, skipping each UID's
+    epochs that began before its current registration when a metagraph is given."""
+    agg: Dict[int, int] = {}
+    first: Dict[int, Optional[int]] = {}
+    skipped = set()
+    for epoch in range(int(start_epoch), int(end_epoch) + 1):
+        senders = by_epoch_by_sender.get(epoch) or {}
+        for _sender, uid_values in senders.items():
+            for uid, value in uid_values.items():
+                uid_i = int(uid)
+                if metagraph is not None:
+                    if uid_i not in first:
+                        first[uid_i] = first_epoch_after_registration(metagraph, uid_i)
+                    if first[uid_i] is not None and epoch < first[uid_i]:
+                        skipped.add(uid_i)
+                        continue
+                agg[uid_i] = agg.get(uid_i, 0) + int(value)
+    return agg, len(skipped)
+
+
 def _default_path() -> Path:
     return Path(getattr(config, "BROADCAST_STATE_LOCATION", str(Path(__file__).resolve().parent.parent / ".broadcast_state.json")))
 
@@ -253,36 +284,18 @@ class RewardBroadcastStore:
         """
         Aggregate uid->points over the inclusive epoch range, summing across senders.
 
-        Broadcast points are keyed by UID rather than hotkey, so a UID that changed
-        holder inside the range would credit the previous holder's points to the new
-        one. When a metagraph is supplied, those UIDs are dropped.
+        Broadcast points are keyed by UID rather than hotkey, so points from before a
+        UID changed holder would credit the previous holder's work to the new one.
+        When a metagraph is supplied, a UID's epochs that began before its current
+        registration are skipped; its later epochs count.
 
-        Returns (uid -> points, count of UIDs dropped). Deliberately does not report
-        how many epochs were present: these stores are sparse whenever another
-        validator did not broadcast, which is normal and must never be mistaken for
-        missing local data.
+        Returns (uid -> points, count of UIDs with skipped epochs). Deliberately does
+        not report how many epochs were present: these stores are sparse whenever
+        another validator did not broadcast, which is normal and must never be
+        mistaken for missing local data.
         """
-        agg: Dict[int, int] = {}
-        for epoch in range(int(start_epoch), int(end_epoch) + 1):
-            senders = self.by_epoch_by_sender.get(epoch) or {}
-            for _sender, uid_points in senders.items():
-                for uid, pts in uid_points.items():
-                    uid_i = int(uid)
-                    agg[uid_i] = agg.get(uid_i, 0) + int(pts)
-
-        rekeyed = 0
-        if metagraph is not None:
-            start_block = int(start_epoch) * config.BLOCK_LENGTH
-            for uid in list(agg):
-                try:
-                    registered_at = int(metagraph.block_at_registration[uid])
-                except (IndexError, KeyError, TypeError, ValueError):
-                    continue
-                if registered_at >= start_block:
-                    del agg[uid]
-                    rekeyed += 1
-
-        return agg, rekeyed
+        return aggregate_since_registration(
+            self.by_epoch_by_sender, start_epoch, end_epoch, metagraph)
 
     # ---------------------------------------------------------------------
     # Remote reset helpers
