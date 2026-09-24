@@ -1818,7 +1818,8 @@ def validate_miner_article_intelligence_batch(
                                               reference, result, int(block)))
                     if observed is not None:
                         audit_observations.append(observed)
-                    if reference is not None and _cfg_get("STOCK_ANCHOR_ENABLED", True):
+                    if (reference is not None and _cfg_get("STOCK_ANCHOR_ENABLED", True)
+                            and random.random() < float(_cfg_get("STOCK_ANCHOR_RATE", 0.1))):
                         _log_stock_anchor(auditor, article.id, text, validator_intel,
                                           reference, int(block))
             except Exception as e:

@@ -86,11 +86,11 @@ class ModelAnalyzer:
                                      model=model or self.model)
 
 
-def _run(monkeypatch, auditor, analyzer, size=6):
+def _run(monkeypatch, auditor, analyzer, size=6, anchor_rate=1.0):
     from tests.test_floor_gating import _payload, TEXT, TITLE
 
-    monkeypatch.setattr(scoring, "_cfg_get",
-                        lambda k, d=None: 2 if k == "AUDIT_MAX_PER_BATCH" else d)
+    monkeypatch.setattr(scoring, "_cfg_get", lambda k, d=None: (
+        2 if k == "AUDIT_MAX_PER_BATCH" else anchor_rate if k == "STOCK_ANCHOR_RATE" else d))
     blob = _payload([{"metric_name": "revenue", "value": 1.2e9, "unit": "USD",
                       "confidence": 0.9}])
     batch = [_article(i, blob, TEXT) for i in range(1, size + 1)]
@@ -137,6 +137,14 @@ def test_the_stock_score_never_becomes_an_observation(monkeypatch):
     _anchor_lines(monkeypatch)
     with_anchor = _run(monkeypatch, DrawingAuditor("model-b"), ModelAnalyzer())
     assert len(with_anchor["audit_observations"]) == 1 + 2
+
+
+def test_the_stock_anchor_is_sampled(monkeypatch):
+    from alpharidge_ai import config
+    assert config.STOCK_ANCHOR_RATE == 0.1
+    lines = _anchor_lines(monkeypatch)
+    _run(monkeypatch, DrawingAuditor("model-b"), ModelAnalyzer(), anchor_rate=0.0)
+    assert not [l for l in lines if l.startswith("[ANCHOR]")]
 
 
 def test_the_stock_anchor_can_be_switched_off(monkeypatch):

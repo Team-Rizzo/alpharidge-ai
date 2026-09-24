@@ -412,6 +412,9 @@ AUDIT_SHADOW_ENABLED        = _as_bool(os.getenv("AUDIT_SHADOW_ENABLED", "false"
 # Reference analyses the audit may run per batch beyond the acceptance sample. Bounds
 # both the grader spend and how long one batch can take to validate.
 AUDIT_MAX_PER_BATCH         = int(os.getenv("AUDIT_MAX_PER_BATCH", "4"))
+# Share of audited articles on which the validator's own analysis is also scored, as a
+# reference point for the field. Report only.
+STOCK_ANCHOR_RATE           = float(os.getenv("STOCK_ANCHOR_RATE", "0.1"))
 VALIDATION_SAMPLE_SIZE      = int(os.getenv("VALIDATION_SAMPLE_SIZE", "1"))
 SUMMARY_AGREEMENT_FLOOR     = float(os.getenv("SUMMARY_AGREEMENT_FLOOR", "0.4"))
 SAMPLING_SUBSTANTIVE_WEIGHT = float(os.getenv("SAMPLING_SUBSTANTIVE_WEIGHT", "2.0"))
