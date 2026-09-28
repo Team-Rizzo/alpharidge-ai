@@ -57,6 +57,10 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 MAX_CONTENT_CHARS = 3000
 
 
+class ReferenceUnavailable(Exception):
+    """A validator-side call returned nothing usable, so there is no reference to grade against."""
+
+
 def count_entity_mentions(text: str, forms: List[str]) -> tuple:
     """Deterministic (count, first_offset) for an entity given its surface forms.
 
@@ -575,7 +579,7 @@ class ArticleIntelligenceAnalyzer:
                 f"Pre-detected (NER):\n{ner_hints}"
             )
             call1 = self._llm_call(call1_prompt, EXTRACT_CLASSIFY_TOOL, "extract_and_classify",
-                                   model)
+                                   model, strict=miner_hotkey is None)
 
             # Merge additional tickers from LLM
             for t in call1.get("additional_tickers", []):
@@ -593,7 +597,7 @@ class ArticleIntelligenceAnalyzer:
                     f"{fact_sheet}"
                 )
                 call2 = self._llm_call(call2_prompt, REASON_SUMMARIZE_TOOL,
-                                       "reason_and_summarize", model)
+                                       "reason_and_summarize", model, strict=miner_hotkey is None)
 
             # ── ASSEMBLY ──
             # Contagion + per-asset sentiment are computed off-LLM from the DETERMINISTIC
@@ -711,6 +715,9 @@ class ArticleIntelligenceAnalyzer:
                            f"{len(assets)} assets, {len(entities)} entities")
             return result
 
+        except ReferenceUnavailable as e:
+            bt.logging.warning(f"[ARTICLE_INTEL] No reference for article {article_id}: {e}")
+            return None
         except Exception as e:
             bt.logging.error(f"[ARTICLE_INTEL] Failed article {article_id}: {e}")
             bt.logging.error(f"[ARTICLE_INTEL] {traceback.format_exc()}")
@@ -721,24 +728,45 @@ class ArticleIntelligenceAnalyzer:
     # ========================================================================
 
     def _llm_call(self, prompt: str, tool: dict, tool_name: str,
-                  model: Optional[str] = None) -> dict:
-        try:
-            response = self.client.chat.completions.create(
-                model=model or self.model,
-                messages=[{"role": "user", "content": prompt}],
-                tools=[tool],
-                tool_choice={"type": "function", "function": {"name": tool_name}},
-                temperature=0,
-                max_tokens=4000,
-            )
-            tc = response.choices[0].message.tool_calls
-            if not tc:
-                bt.logging.warning(f"[ARTICLE_INTEL] {tool_name}: no tool calls returned")
+                  model: Optional[str] = None, strict: bool = False) -> dict:
+        """One forced tool call. A miner's call returns {} when the model gives nothing
+        usable. A validator's (`strict`) call is retried once and then raises
+        ReferenceUnavailable, so a failed call is never graded against as a reference."""
+        extra = {}
+        ignore = [p.strip() for p in os.getenv("REFERENCE_PROVIDER_IGNORE", "").split(",") if p.strip()]
+        if strict and ignore:
+            extra["extra_body"] = {"provider": {"ignore": ignore}}
+        problem = ""
+        for _attempt in range(2 if strict else 1):
+            response = None
+            try:
+                response = self.client.chat.completions.create(
+                    model=model or self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    tools=[tool],
+                    tool_choice={"type": "function", "function": {"name": tool_name}},
+                    temperature=0,
+                    max_tokens=4000,
+                    **extra,
+                )
+                choice = response.choices[0]
+                tc = choice.message.tool_calls
+                if strict and getattr(choice, "finish_reason", None) == "length":
+                    problem = "cut off at max_tokens"
+                elif not tc:
+                    problem = "no tool calls returned"
+                else:
+                    return json.loads(tc[0].function.arguments)
+            except Exception as e:
+                problem = f"failed: {e}"
+            detail = ""
+            if strict and response is not None:
+                detail = (f" (provider={getattr(response, 'provider', None)}, "
+                          f"finish_reason={getattr(response.choices[0], 'finish_reason', None)})")
+            bt.logging.warning(f"[ARTICLE_INTEL] {tool_name}: {problem}{detail}")
+            if not strict:
                 return {}
-            return json.loads(tc[0].function.arguments)
-        except Exception as e:
-            bt.logging.warning(f"[ARTICLE_INTEL] {tool_name} failed: {e}")
-            return {}
+        raise ReferenceUnavailable(f"{tool_name}: {problem}")
 
     # ========================================================================
     # Fact Sheet Builder (compact input for LLM Call 2)

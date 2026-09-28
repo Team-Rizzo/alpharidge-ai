@@ -1729,6 +1729,7 @@ def validate_miner_article_intelligence_batch(
     _log_floor_stats(miner_hotkey, floor_stats)
 
     matches = 0
+    skipped = 0
     total_composite = 0.0
     discrepancies = []
     observations = []  # (article_id, graded, weight) when graded_scorer is set
@@ -1768,7 +1769,10 @@ def validate_miner_article_intelligence_batch(
             raw_html=getattr(src, "raw_html", None),
         )
         if validator_intel is None:
-            discrepancies.append({"article_index": i, "reason": "validator_analysis_failed"})
+            # No usable reference: the sample is neither passed nor failed.
+            skipped += 1
+            bt.logging.warning(f"[V2_VALIDATE] no reference for {getattr(article, 'id', '')}; "
+                               f"sample skipped hk={miner_hotkey}")
             continue
 
         try:
@@ -1949,11 +1953,12 @@ def validate_miner_article_intelligence_batch(
                     "cosine": miner_cos,
                 })
 
-    batch_valid = matches == sample_size and len(discrepancies) == 0
+    batch_valid = matches == sample_size - skipped and len(discrepancies) == 0
     avg_composite = total_composite / max(matches, 1)
 
     result = {
-        "is_valid": batch_valid, "matches": matches, "total_sampled": sample_size,
+        "is_valid": batch_valid, "matches": matches, "total_sampled": sample_size - skipped,
+        "skipped_samples": skipped,
         "avg_composite_score": round(avg_composite, 4), "discrepancies": discrepancies,
         "observations": observations,
         "faithfulness_scores": faithfulness_scores,
