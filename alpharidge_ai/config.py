@@ -115,6 +115,9 @@ TORCH_NUM_THREADS = int(os.getenv("TORCH_NUM_THREADS", "0"))
 LLM_CACHE_TTL = float(os.getenv("LLM_CACHE_TTL", "300"))
 LLM_CACHE_MAX_SIZE = int(os.getenv("LLM_CACHE_MAX_SIZE", "1024"))
 
+DRAW_LOG_LOCATION = os.getenv("DRAW_LOG_LOCATION", str(_SUBNET_ROOT / ".triage_draws"))
+DRAW_LOG_KEEP_DAYS = int(os.getenv("DRAW_LOG_KEEP_DAYS", "14"))
+
 # Tweet store configuration
 TWEET_STORE_LOCATION = os.getenv("TWEET_STORE_LOCATION", str(_SUBNET_ROOT / ".tweet_store.json"))
 TWEET_MAX_PROCESS_TIME = float(os.getenv("TWEET_MAX_PROCESS_TIME", "300.0"))  # 5 minutes default
@@ -378,6 +381,8 @@ BATCH_SIZE_SHRINK_FACTOR = float(os.getenv("BATCH_SIZE_SHRINK_FACTOR", "0.75"))
 # validator uses the same threshold — divergent thresholds would score the same article
 # differently. Not gated by the dispatch flag (separate scoring track). Default 0.70.
 TIER3_THRESHOLD = float(os.getenv("TIER3_THRESHOLD", "0.70"))
+# Tier-3 mode. Off uses TIER3_THRESHOLD.
+TIER3_JUNK_FILTER = _as_bool(os.getenv("TIER3_JUNK_FILTER", "true"))
 
 # Cross-article cloned-embedding gate. The within-batch title-embedding similarity
 # above which a pair is a clone candidate (default 0.99 = current behavior). When
@@ -472,6 +477,7 @@ _REMOTE_CONFIG_KEYS = {
     "BATCH_SIZE_SHRINK_FACTOR":   (float, "BATCH_SIZE_SHRINK_FACTOR"),
     # Scoring track (not gated by the dispatch flag): served so all validators match.
     "TIER3_THRESHOLD":            (float, "TIER3_THRESHOLD"),
+    "TIER3_JUNK_FILTER":          (_as_bool, "TIER3_JUNK_FILTER"),
     "CLONE_COSINE_THRESHOLD":     (float, "CLONE_COSINE_THRESHOLD"),
     "CLONE_DIFFERENTIAL_ENABLED": (_as_bool, "CLONE_DIFFERENTIAL_ENABLED"),
     "CLONE_DIVERGENCE_MARGIN":    (float, "CLONE_DIVERGENCE_MARGIN"),

@@ -176,7 +176,8 @@ def test_a_failed_audit_is_visible(monkeypatch):
 def test_full_pay_within_tolerance():
     assert relevance_audit_factor(0, 0) == 1.0
     assert relevance_audit_factor(40, 2) == 1.0
-    assert relevance_audit_factor(3, 1) > 0.8
+    assert relevance_audit_factor(3, 2) == 1.0                 # too few audits to judge
+    assert relevance_audit_factor(12, 2) > 0.8
 
 
 def test_rejected_claims_cut_the_premium_steeply():
@@ -282,3 +283,25 @@ def test_the_audit_is_a_served_setting_on_by_default():
 def test_the_audit_confidence_is_about_the_answer():
     desc = triage_audit._TOOL["function"]["parameters"]["properties"]["confidence"]["description"]
     assert "Not the probability" in desc
+
+
+def test_the_audit_prompt_carries_the_article():
+    seen = {}
+
+    class Client:
+        base_url = "https://openrouter.ai/api/v1/"
+
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kw):
+                    seen.update(kw)
+                    call = types.SimpleNamespace(function=types.SimpleNamespace(
+                        arguments='{"relevant": true, "confidence": 0.9}'))
+                    msg = types.SimpleNamespace(tool_calls=[call])
+                    return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+    body = "Apple reported revenue of $94 billion for the quarter. " * 5
+    assert triage_audit.TriageAuditor(Client, "m").relevance_verdict("Apple beats", body) is True
+    prompt = seen["messages"][0]["content"]
+    assert "Apple beats" in prompt and "revenue of $94 billion" in prompt
+    assert seen["extra_body"] == {"usage": {"include": True}}

@@ -18,6 +18,7 @@ from alpharidge_ai.utils.cooldown import MinerCooldownTracker
 
 from alpharidge_ai import config
 from alpharidge_ai.utils.api_models import NewsArticleForScoring
+from alpharidge_ai.oracle.selector import Selector
 from alpharidge_ai.validator.triage_grader import CanaryPool, TriageConfig
 
 import neurons.validator as validator_module
@@ -105,6 +106,9 @@ class HarnessValidator:
     _record_triage_observations = validator_module.Validator._record_triage_observations
     _apply_triage_outcome = validator_module.Validator._apply_triage_outcome
     _mint_neg_canaries = validator_module.Validator._mint_neg_canaries
+    _keyed = validator_module.Validator._keyed
+    _canary_rng = validator_module.Validator._canary_rng
+    _seeded = validator_module.Validator._seeded
     _has_full_analysis = staticmethod(validator_module.Validator._has_full_analysis)
     _triage_only_analysis = staticmethod(validator_module.Validator._triage_only_analysis)
     _k_for = validator_module.Validator._k_for
@@ -114,6 +118,7 @@ class HarnessValidator:
     def __init__(self):
         self._canary_pool = CanaryPool(TriageConfig())
         self._canary_articles = {}
+        self._canary_selector = Selector(b"test-key")
         self._article_k = {}
         self._article_pay = {}
         self._triage_extractor = None
@@ -403,6 +408,47 @@ class TestCanaryFlow:
         assert any(int(a.id) == 10 for a in batch)
         assert len(batch) == 3                         # swap, not append
 
+    def test_canary_exposure(self, stage, canaries_certain):
+        v = HarnessValidator()
+        v._canary_seen = {}
+        v._feed_pos_canaries([article(10, ASSET_ARTICLE)])
+
+        def batch():
+            return [article(i, JUNK_ARTICLE) for i in (1, 2, 3)]
+        assert 10 in v._inject_canaries(batch(), random.Random(0), coldkey="ck-a")
+        assert v._inject_canaries(batch(), random.Random(0), coldkey="ck-a") == {}
+        assert 10 in v._inject_canaries(batch(), random.Random(0), coldkey="ck-b")
+
+    def test_keyed_injection(self, stage, canaries_certain, monkeypatch):
+        monkeypatch.setattr(validator_module.TRIAGE_CFG, "canary_pos_rate", 0.5)
+
+        def run(key):
+            v = HarnessValidator()
+            v._canary_selector = Selector(key)
+            v._feed_pos_canaries([article(i, ASSET_ARTICLE) for i in (10, 11, 12, 13)])
+            out = []
+            for n in range(20):
+                b = [article(100 + 3 * n + j, JUNK_ARTICLE) for j in range(3)]
+                v._inject_canaries(b, v._canary_rng("hk", b))
+                out.append([int(a.id) for a in b])
+            return out
+        assert run(b"k1") != run(b"k1")
+
+    def test_keyed_injection_replays(self, stage, canaries_certain, monkeypatch):
+        monkeypatch.setattr(validator_module.TRIAGE_CFG, "canary_pos_rate", 0.5)
+        v = HarnessValidator()
+        v._feed_pos_canaries([article(i, ASSET_ARTICLE) for i in (10, 11, 12, 13)])
+        b = [article(100 + j, JUNK_ARTICLE) for j in range(3)]
+        rng = v._canary_rng("hk", b)
+        ids = sorted(int(a.id) for a in b)
+        injected = v._inject_canaries(b, rng)
+        replay = Selector(b"test-key").rng("canary", rng.nonce, "hk", *ids)
+        if replay.random() < 0.5:
+            aid = replay.choice([10, 11, 12, 13])
+            assert aid in injected and int(b[replay.choice(range(3))].id) == aid
+        else:
+            assert not injected
+
     def test_lazy_miner_trips_injected_pos_canary(self, stage, canaries_certain):
         v = HarnessValidator()
         v._feed_pos_canaries([article(10, ASSET_ARTICLE)])
@@ -534,6 +580,7 @@ class TestDefectFixes:
         v._triage_auditor = FakeAuditor({"strict": False, "editorial": False})
         v._mint_neg_canaries([junk])
         assert v._canary_pool.size("neg") == 1   # both framings concur
+        assert v._canary_articles[20].model_dump() == junk.model_dump()
         assert set(v._triage_auditor.calls) == {"strict", "editorial"}
 
         v2 = HarnessValidator()

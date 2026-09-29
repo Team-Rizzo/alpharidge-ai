@@ -975,6 +975,8 @@ def _ev(x) -> str:
 # 0.70 cuts honest false-reject to ~4% while a skip-LLM miner still fails ~70% of
 # samples, so consistent failers are still sorted out. Env-overridable for tuning.
 TIER3_THRESHOLD = float(os.getenv("TIER3_THRESHOLD", "0.70"))
+SAMPLE_REPLACEMENTS = 2
+AUDIT_MAX_FAILED_REFERENCES = 2
 
 
 def _ordinal_score(pred: str, gold: str, ladder: List[str]) -> float:
@@ -1331,6 +1333,14 @@ def validate_article_intelligence(
     composite = sum(tier3_scores[k] * weights[k] for k in weights)
     details["tier3"] = {k: {"score": round(tier3_scores[k], 4), "weight": weights[k]} for k in weights}
     details["tier3"]["composite"] = round(composite, 4)
+    junk = (0.15 * tier3_scores["asset_extraction"] + 0.08 * tier3_scores["entities"]) / 0.23
+    details["tier3"]["junk_score"] = round(junk, 4)
+
+    if _cfg_get("TIER3_JUNK_FILTER", True):
+        details["verdict"] = "pass"
+        bt.logging.success(f"[V2_VALIDATE] Article ACCEPTED: composite={composite:.4f} "
+                           f"junk={junk:.4f}")
+        return True, composite, details
 
     # Quality floor. Read live from config (served subnet-wide / OVERRIDE-able) so it
     # can be recalibrated without a code change AND stays identical across validators;
@@ -1342,10 +1352,14 @@ def validate_article_intelligence(
     except Exception:
         _threshold = TIER3_THRESHOLD
     is_valid = composite >= _threshold
+    details["verdict"] = "pass" if is_valid else "junk"
+    details["shadow_verdict"] = "pass"
     if is_valid:
-        bt.logging.success(f"[V2_VALIDATE] Article ACCEPTED: composite={composite:.4f}")
+        bt.logging.success(f"[V2_VALIDATE] Article ACCEPTED: composite={composite:.4f} "
+                           f"junk={junk:.4f}")
     else:
-        bt.logging.warning(f"[V2_VALIDATE] Article REJECTED: composite={composite:.4f} < {_threshold}")
+        bt.logging.warning(f"[V2_VALIDATE] Article REJECTED: composite={composite:.4f} < {_threshold} "
+                           f"shadow=pass junk={junk:.4f}")
 
     return is_valid, composite, details
 
@@ -1716,6 +1730,8 @@ def validate_miner_article_intelligence_batch(
 
     sample_size = min(sample_size, len(miner_batch))
     sampled = random.sample(miner_batch, sample_size)
+    spares = [a for a in miner_batch if all(a is not s for s in sampled)]
+    random.shuffle(spares)
 
     bt.logging.info(f"[V2_VALIDATE] Sampling {sample_size} article(s) from batch of {len(miner_batch)}")
 
@@ -1773,6 +1789,8 @@ def validate_miner_article_intelligence_batch(
             skipped += 1
             bt.logging.warning(f"[V2_VALIDATE] no reference for {getattr(article, 'id', '')}; "
                                f"sample skipped hk={miner_hotkey}")
+            if spares and skipped <= SAMPLE_REPLACEMENTS:
+                sampled.append(spares.pop())
             continue
 
         try:
@@ -1857,6 +1875,7 @@ def validate_miner_article_intelligence_batch(
         budget = 2 * cap
         picked = 0
         spent = 0
+        failed = 0
         for article in _keyed_order(auditor, miner_batch):
             if picked >= cap or spent >= budget:
                 bt.logging.debug(
@@ -1887,12 +1906,15 @@ def validate_miner_article_intelligence_batch(
                                 schema_cutover_block=schema_cutover_block).get(aid):
                 continue
 
-            spent += 1
             try:
                 validator_intel = _reference_analysis(analyzer, auditor, article, src,
                                                       int(block))
                 if validator_intel is None:
+                    failed += 1
+                    if failed >= AUDIT_MAX_FAILED_REFERENCES:
+                        break
                     continue
+                spent += 1
                 result = oracle_floor.evaluate(miner_intel, text)
                 observed = auditor.audit(aid, text, miner_intel, validator_intel,
                                          result, int(block))
@@ -1953,12 +1975,14 @@ def validate_miner_article_intelligence_batch(
                     "cosine": miner_cos,
                 })
 
-    batch_valid = matches == sample_size - skipped and len(discrepancies) == 0
+    graded = len(sampled) - skipped
+    no_verdict = graded == 0 and len(sampled) > 0 and not discrepancies
+    batch_valid = matches == graded and len(discrepancies) == 0 and not no_verdict
     avg_composite = total_composite / max(matches, 1)
 
     result = {
-        "is_valid": batch_valid, "matches": matches, "total_sampled": sample_size - skipped,
-        "skipped_samples": skipped,
+        "is_valid": batch_valid, "matches": matches, "total_sampled": graded,
+        "skipped_samples": skipped, "no_verdict": no_verdict,
         "avg_composite_score": round(avg_composite, 4), "discrepancies": discrepancies,
         "observations": observations,
         "faithfulness_scores": faithfulness_scores,

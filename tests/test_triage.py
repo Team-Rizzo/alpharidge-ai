@@ -313,3 +313,42 @@ class TestCanaryPool:
         assert pool.draw("pos", rng, available={6}) == 6      # 5 not injectable
         assert pool.draw("pos", rng, available={6}) is None   # 6 spent; 5 intact
         assert pool.draw("pos", rng, available={5, 6}) == 5
+
+
+def test_canary_draw_age_limit():
+    clock = {"t": 0.0}
+    pool = CanaryPool(TriageConfig(), now=lambda: clock["t"])
+    pool.add(5, "neg", deterministic=False)
+    clock["t"] = 1000.0
+    assert pool.draw("neg", RNG(0), max_age_s=1200.0) == 5
+    clock["t"] = 2000.0
+    assert pool.draw("neg", RNG(0), max_age_s=1200.0) is None
+    assert pool.label_of(5) == ("neg", False)
+
+
+def test_canary_rates():
+    assert TriageConfig().canary_pos_rate == 0.0 and 0 < TriageConfig().canary_neg_rate < 0.7
+
+
+def test_stale_canaries_do_not_block_minting():
+    clock = {"t": 0.0}
+    pool = CanaryPool(TriageConfig(), now=lambda: clock["t"])
+    for aid in range(12):
+        pool.add(aid, "neg", deterministic=False)
+    assert pool.size("neg", 1200.0) == 12
+    clock["t"] = 1300.0
+    assert pool.size("neg", 1200.0) == 0 and pool.size("neg") == 12
+
+
+def test_used_up_canary_keeps_its_label():
+    clock = {"t": 0.0}
+    cfg = TriageConfig(canary_max_exposures=1)
+    pool = CanaryPool(cfg, now=lambda: clock["t"])
+    pool.add(5, "neg", deterministic=False)
+    assert pool.draw("neg", RNG(0)) == 5
+    pool.prune()
+    assert pool.label_of(5) == ("neg", False) and pool.draw("neg", RNG(0)) is None
+    assert pool.size("neg", 1200.0) == 0
+    clock["t"] = cfg.canary_ttl_s
+    pool.prune()
+    assert pool.label_of(5) is None

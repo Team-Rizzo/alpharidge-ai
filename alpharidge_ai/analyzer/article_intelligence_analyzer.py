@@ -47,6 +47,7 @@ from alpharidge_ai.analyzer.llm_cache import LLMCache
 from alpharidge_ai.analyzer.aspect_sentiment import AspectSentimentScorer, score_assets
 from alpharidge_ai.analyzer.horizon import reconcile_direction_with_horizons
 from alpharidge_ai.oracle import floor as oracle_floor
+from alpharidge_ai.utils import llm_spend
 
 try:
     from alpharidge_ai import config
@@ -579,11 +580,12 @@ class ArticleIntelligenceAnalyzer:
                 f"Pre-detected (NER):\n{ner_hints}"
             )
             call1 = self._llm_call(call1_prompt, EXTRACT_CLASSIFY_TOOL, "extract_and_classify",
-                                   model, strict=miner_hotkey is None)
+                                   model, strict=miner_hotkey is None,
+                                   purpose="reference:audit" if reference else "reference:tier3")
 
             # Merge additional tickers from LLM
             for t in call1.get("additional_tickers", []):
-                if t and t.upper() not in {x.upper() for x in all_tickers}:
+                if isinstance(t, str) and t and t.upper() not in {x.upper() for x in all_tickers}:
                     all_tickers.append(t.upper())
 
             # ── STAGE 3: LLM Call 2 — Reason & Summarize (~5-8s) ──
@@ -597,7 +599,8 @@ class ArticleIntelligenceAnalyzer:
                     f"{fact_sheet}"
                 )
                 call2 = self._llm_call(call2_prompt, REASON_SUMMARIZE_TOOL,
-                                       "reason_and_summarize", model, strict=miner_hotkey is None)
+                                       "reason_and_summarize", model, strict=miner_hotkey is None,
+                                       purpose="reference:tier3")
 
             # ── ASSEMBLY ──
             # Contagion + per-asset sentiment are computed off-LLM from the DETERMINISTIC
@@ -728,17 +731,29 @@ class ArticleIntelligenceAnalyzer:
     # ========================================================================
 
     def _llm_call(self, prompt: str, tool: dict, tool_name: str,
-                  model: Optional[str] = None, strict: bool = False) -> dict:
+                  model: Optional[str] = None, strict: bool = False,
+                  purpose: str = "reference:tier3") -> dict:
         """One forced tool call. A miner's call returns {} when the model gives nothing
         usable. A validator's (`strict`) call is retried once and then raises
         ReferenceUnavailable, so a failed call is never graded against as a reference."""
         extra = {}
-        ignore = [p.strip() for p in os.getenv("REFERENCE_PROVIDER_IGNORE", "").split(",") if p.strip()]
-        if strict and ignore:
-            extra["extra_body"] = {"provider": {"ignore": ignore}}
+        if strict:
+            prefs = {}
+            for key, env in (("ignore", "REFERENCE_PROVIDER_IGNORE"), ("order", "REFERENCE_PROVIDER_ORDER")):
+                names = [p.strip() for p in os.getenv(env, "").split(",") if p.strip()]
+                if names:
+                    prefs[key] = names
+            if "order" in prefs:
+                prefs["allow_fallbacks"] = True
+            body = dict(llm_spend.usage_body(self.client))
+            if prefs:
+                body["provider"] = prefs
+            if body:
+                extra["extra_body"] = body
         problem = ""
         for _attempt in range(2 if strict else 1):
             response = None
+            started = time.time()
             try:
                 response = self.client.chat.completions.create(
                     model=model or self.model,
@@ -749,6 +764,9 @@ class ArticleIntelligenceAnalyzer:
                     max_tokens=4000,
                     **extra,
                 )
+                if strict:
+                    llm_spend.record(purpose, model or self.model, response,
+                                     time.time() - started)
                 choice = response.choices[0]
                 tc = choice.message.tool_calls
                 if strict and getattr(choice, "finish_reason", None) == "length":
@@ -812,14 +830,15 @@ class ArticleIntelligenceAnalyzer:
         econ = call1.get("economic_data", [])
         if econ:
             parts = []
-            for d in econ[:5]:
+            for d in [d for d in econ if isinstance(d, dict)][:5]:
                 actual = f"{d.get('actual_value', '?')}" if d.get("actual_value") is not None else "?"
                 parts.append(f"{d.get('event_name', '?')}: {actual} {d.get('unit', '')}")
             lines.append("Economic Data: " + " | ".join(parts))
         quotes = call1.get("quotes", [])
         if quotes:
             for q in quotes[:2]:
-                lines.append(f"Quote: {q.get('speaker', '?')}: \"{q.get('text', '')[:100]}\"")
+                q = q if isinstance(q, dict) else {"text": str(q)}
+                lines.append(f"Quote: {q.get('speaker', '?')}: \"{str(q.get('text', ''))[:100]}\"")
         sents = ner_result.sentence_sentiments[:3]
         if sents:
             lines.append("FinBERT hints: " + ", ".join(f"{s['sentiment']}({s['score']:.2f})" for s in sents))

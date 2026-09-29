@@ -10,6 +10,8 @@ from typing import Optional
 
 import bittensor as bt
 
+from alpharidge_ai.utils import llm_spend
+
 _TOOL = {
     "type": "function",
     "function": {
@@ -84,6 +86,7 @@ class TriageAuditor:
                           framing: str = "strict") -> Optional[bool]:
         """True = confidently relevant, False = confidently not, None = no verdict."""
         try:
+            extra = llm_spend.usage_body(self._client)
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": _PROMPTS[framing].format(
@@ -94,7 +97,9 @@ class TriageAuditor:
                              "function": {"name": "judge_market_relevance"}},
                 temperature=0,
                 max_tokens=1000,
+                **({"extra_body": extra} if extra else {}),
             )
+            llm_spend.record("triage_audit", self._model, response)
             calls = response.choices[0].message.tool_calls
             if not calls:
                 return None

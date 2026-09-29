@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import random
 import re
 from dataclasses import dataclass
 from typing import Optional, Sequence
@@ -72,6 +73,11 @@ class Selector:
 
     def fraction(self, article_id, domain: str = "select") -> float:
         return _fraction(self._secret, article_id, domain)
+
+    def rng(self, domain: str, *parts) -> random.Random:
+        """A generator seeded from the key and `parts`."""
+        msg = ":".join([domain, *map(str, parts)]).encode("utf-8")
+        return random.Random(int.from_bytes(hmac.new(self._secret, msg, hashlib.sha256).digest(), "big"))
 
     def select(self, article_id, article_text: Optional[str], *,
                pool_tiers: Sequence[str], keyed_rate_pool: float,

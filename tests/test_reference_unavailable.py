@@ -99,11 +99,50 @@ def test_a_sample_without_a_reference_is_skipped(monkeypatch):
     assert not result["discrepancies"]
 
 
-def test_no_reference_at_all_neither_passes_nor_fails_on_tier3(monkeypatch):
+def test_no_reference_at_all_gives_no_verdict(monkeypatch):
     ok, result = _validate(monkeypatch, failing=[1, 2], verdict=(False, 0.1, {}))
-    assert ok and result["skipped_samples"] == 2 and result["matches"] == 0
+    assert not ok and result["no_verdict"] and result["skipped_samples"] == 2
+    assert not result["discrepancies"]
+
+
+def test_sample_replacement(monkeypatch):
+    from tests.test_floor_gating import _payload, TEXT, TITLE
+    from tests.test_keyed_audit_pass import _article
+    monkeypatch.setattr(scoring, "validate_article_intelligence", lambda m, v: (True, 1.0, {}))
+    monkeypatch.setattr(scoring, "_summary_agreement", lambda m, v: 1.0)
+    blob = _payload([{"metric_name": "revenue", "value": 1.2e9, "unit": "USD", "confidence": 0.9}])
+    batch = [_article(i, blob, TEXT) for i in (1, 2)]
+    for a in batch:
+        a.title = TITLE
+    refs = _Refs(failing=[])
+    first = []
+
+    def analyze(article_id=None, **kw):
+        if not first:
+            first.append(article_id)
+            return None
+        return types.SimpleNamespace(numeric_claims=[], quotes=[], assets=[], economic_data=[])
+    refs.analyze = analyze
+    ok, result = scoring.validate_miner_article_intelligence_batch(batch, refs, sample_size=1)
+    assert ok and result["skipped_samples"] == 1 and result["total_sampled"] == 1
 
 
 def test_a_real_miss_still_fails(monkeypatch):
     ok, result = _validate(monkeypatch, failing=[1], verdict=(False, 0.3, {}))
     assert not ok and result["discrepancies"][0]["reason"] == "validation_failed"
+
+
+def test_malformed_list_items_do_not_break_the_fact_sheet():
+    a = ArticleIntelligenceAnalyzer.__new__(ArticleIntelligenceAnalyzer)
+    ner = types.SimpleNamespace(resolved_entities=[], sentence_sentiments=[])
+    call1 = {"quotes": ["a bare quote", {"speaker": "CEO", "text": "we grew"}],
+             "economic_data": ["not an object", {"event_name": "CPI", "actual_value": 3.1}]}
+    sheet = a._build_fact_sheet("t", "s", None, {"symbol": "S"}, call1, ner, [])
+    assert 'Quote: ?: "a bare quote"' in sheet and "CPI: 3.1" in sheet
+
+
+def test_a_preferred_provider_keeps_fallbacks(monkeypatch):
+    monkeypatch.setenv("REFERENCE_PROVIDER_ORDER", "GoodCo")
+    seen = []
+    _analyzer([_reply("{}")], seen)._llm_call("p", {}, "t", strict=True)
+    assert seen[0]["extra_body"] == {"provider": {"order": ["GoodCo"], "allow_fallbacks": True}}

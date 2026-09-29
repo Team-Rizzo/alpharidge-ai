@@ -1,5 +1,6 @@
 """Keyed selection decides what is watched; the random sample still decides acceptance."""
 
+import sys
 import types
 
 import pytest
@@ -189,3 +190,25 @@ def test_an_empty_audit_does_not_use_a_slot(monkeypatch, sampled):
 def test_analyses_stay_bounded_when_nothing_is_observed(monkeypatch):
     analyzer, result = _run(monkeypatch, NeverObserves(), cap=2)
     assert analyzer.calls <= 2 + 2 * 2
+
+
+class FailingReferences(Analyzer):
+    """The validator's own analysis works; every audit reference fails."""
+
+    def analyze(self, **kwargs):
+        self.calls += 1
+        if kwargs.get("reference"):
+            return None
+        return types.SimpleNamespace(numeric_claims=[], quotes=[])
+
+
+def test_failed_references_stop_the_keyed_pass(monkeypatch):
+    monkeypatch.setattr(scoring, "_reference_analysis",
+                        lambda analyzer, auditor, article, src, block:
+                        analyzer.analyze(reference=True))
+    analyzer = FailingReferences()
+    monkeypatch.setattr(sys.modules[__name__], "Analyzer", lambda: analyzer)
+    _, result = _run(monkeypatch, Recorder(), cap=4)
+    keyed = analyzer.calls - 2          # the sample's own analysis and its reference
+    assert keyed == scoring.AUDIT_MAX_FAILED_REFERENCES
+    assert not result["audit_observations"]

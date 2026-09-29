@@ -141,3 +141,10 @@ def test_key_is_not_exposed_by_repr():
 def test_empty_key_is_refused():
     with pytest.raises(ValueError):
         sel.Selector(b"")
+
+
+def test_keyed_generator():
+    a, b = sel.Selector(b"k1"), sel.Selector(b"k2")
+    assert a.rng("d", 1, 2).random() == sel.Selector(b"k1").rng("d", 1, 2).random()
+    assert a.rng("d", 1, 2).random() != b.rng("d", 1, 2).random()
+    assert a.rng("d", 1, 2).random() != a.rng("d", 1, 3).random()

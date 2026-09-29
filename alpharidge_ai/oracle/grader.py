@@ -20,6 +20,7 @@ from typing import Dict, List, Optional
 import bittensor as bt
 
 from alpharidge_ai import config
+from alpharidge_ai.utils import llm_spend
 
 MAX_TOKENS = 2000
 RETRIES = 1
@@ -135,6 +136,7 @@ class Grader:
         name = tool["function"]["name"]
         for attempt in range(RETRIES + 1):
             try:
+                extra = llm_spend.usage_body(self.client)
                 response = self.client.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],
@@ -142,7 +144,9 @@ class Grader:
                     tool_choice={"type": "function", "function": {"name": name}},
                     temperature=0,
                     max_tokens=MAX_TOKENS,
+                    **({"extra_body": extra} if extra else {}),
                 )
+                llm_spend.record(f"grader:{name}", model, response)
                 calls = response.choices[0].message.tool_calls
                 if not calls:
                     continue

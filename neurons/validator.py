@@ -18,6 +18,7 @@ import concurrent.futures
 import copy
 import gc
 import random
+import secrets
 import time
 from typing import List, Optional, Set
 
@@ -52,6 +53,7 @@ if int(getattr(config, "TORCH_NUM_THREADS", 0) or 0) > 0:
 from alpharidge_ai.utils.api_models import TweetWithAuthor, CompletedTweetSubmission, TelegramMessageForScoring, CompletedTelegramMessageSubmission, TelegramMessageAnalysis, NewsArticleForScoring, CompletedNewsArticleSubmission
 from alpharidge_ai.protocol import TweetBatch, TelegramBatch, ArticleBatch
 from alpharidge_ai.utils.uids import get_random_uids, get_alive_uids
+from alpharidge_ai.utils import draw_log
 from alpharidge_ai.utils.liveness import LivenessRoster
 from alpharidge_ai.utils.dispatch import (CARRY_MAX_BATCHES, FLOOR_FRAC, ShadowCredit,
                                           coverage_depth_select, credit_select,
@@ -219,6 +221,7 @@ class Validator(BaseValidatorNeuron):
 
         # Article triage: in-memory canary pool + cached article objects.
         self._canary_pool = CanaryPool(self._triage_cfg())
+        self._canary_seen: dict = {}
         self._canary_articles: dict = {}
         self._triage_extractor = None
         self._triage_auditor = None
@@ -1180,6 +1183,7 @@ class Validator(BaseValidatorNeuron):
             live = self._canary_pool.ids()
             self._canary_articles = {
                 k: v for k, v in self._canary_articles.items() if k in live}
+            self._canary_seen = {k: v for k, v in getattr(self, "_canary_seen", {}).items() if k in live}
         except Exception as e:
             bt.logging.warning(f"[TRIAGE] canary refresh failed: {e}")
 
@@ -1187,14 +1191,14 @@ class Validator(BaseValidatorNeuron):
         """Mint negative canaries: the TriageStage and two audit-LLM passes
         must all concur. Bounded per tick."""
         budget, target = TRIAGE_CFG.neg_mint_budget, TRIAGE_CFG.neg_pool_target
-        if self._canary_pool.size("neg") >= target:
+        if self._canary_pool.size("neg", TRIAGE_CFG.canary_fresh_s) >= target:
             return
         auditor = self._get_triage_auditor()
         if auditor is None:
             return
         checked = 0
-        for article in articles:
-            if checked >= budget or self._canary_pool.size("neg") >= target:
+        for article in sorted(articles, key=lambda a: self._keyed().fraction(a.id, "mint")):
+            if checked >= budget or self._canary_pool.size("neg", TRIAGE_CFG.canary_fresh_s) >= target:
                 break
             aid = int(article.id)
             if aid in self._canary_pool.ids():
@@ -1213,24 +1217,49 @@ class Validator(BaseValidatorNeuron):
                     update={"analysis": None})
                 bt.logging.info(f"[TRIAGE] minted negative canary {aid}")
 
-    def _inject_canaries(self, miner_batch, rng, charge: int = 1) -> dict:
+    def _keyed(self):
+        if getattr(self, "_canary_selector", None) is None:
+            from alpharidge_ai.oracle import audit_key
+            from alpharidge_ai.oracle.selector import Selector
+            self._canary_selector = Selector(audit_key.load())
+        return self._canary_selector
+
+    def _seeded(self, domain, hotkey, *parts):
+        nonce = secrets.token_hex(8)
+        rng = self._keyed().rng(domain, nonce, hotkey, *parts)
+        rng.nonce = nonce
+        return rng
+
+    def _canary_rng(self, hotkey, miner_batch):
+        return self._seeded("canary", hotkey, *sorted(int(a.id) for a in miner_batch))
+
+    def _inject_canaries(self, miner_batch, rng, charge: int = 1, coldkey=None, hotkey=None) -> dict:
         """Swap canaries into a dispatch batch (in place). Returns the injected
         {article_id: (kind, deterministic)} labels for later grading."""
         injected = {}
+        seen = getattr(self, "_canary_seen", {})
         batch_ids = {int(a.id) for a in miner_batch}
+        sent_ids = sorted(batch_ids)
+        if coldkey is not None:
+            batch_ids |= {aid for aid, cks in seen.items() if coldkey in cks}
         for kind, rate in (("pos", TRIAGE_CFG.canary_pos_rate),
                            ("neg", TRIAGE_CFG.canary_neg_rate)):
             if len(miner_batch) < 3 or rng.random() >= rate:
                 continue
             available = set(self._canary_articles) - batch_ids
-            aid = self._canary_pool.draw(kind, rng, available=available, charge=charge)
+            aid = self._canary_pool.draw(kind, rng, available=available, charge=charge,
+                                         max_age_s=TRIAGE_CFG.canary_fresh_s)
             if aid is None:
                 continue
             free = [i for i, a in enumerate(miner_batch) if int(a.id) not in injected]
             slot = rng.choice(free)
+            draw_log.write("canary", hk=hotkey, n=getattr(rng, "nonce", ""), batch=sent_ids,
+                           candidates=self._canary_pool.last_candidates, canary=aid, slot=slot)
             miner_batch[slot] = self._canary_articles[aid]
             injected[aid] = self._canary_pool.label_of(aid)
             batch_ids.add(aid)
+            if coldkey is not None:
+                seen.setdefault(aid, set()).add(coldkey)
         return injected
 
     def _grade_triage(self, article_batch, sent_batch, miner_hotkey):
@@ -1253,13 +1282,18 @@ class Validator(BaseValidatorNeuron):
             label = self._canary_pool.label_of(it["article_id"])
             if label is not None:
                 canary_labels[it["article_id"]] = label
+        rng = self._seeded("triage", miner_hotkey)
         res = grade_batch(
             items, canary_labels, self._det_relevant_item, self._llm_relevant_item,
             self._stage_label_item,
-            random.Random(), self._triage_cfg(),
+            rng, self._triage_cfg(),
             enforced=bool(getattr(config, "TRIAGE_ENFORCED", False)),
             llm_irrelevant=self._llm_irrelevant_item,
             audit_relevant_n=int(getattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 0) or 0))
+        if res.picks:
+            auditor = self._get_triage_auditor()
+            draw_log.write("picks", hk=miner_hotkey, n=rng.nonce,
+                           model=getattr(auditor, "_model", None), **res.picks)
         if res.relevance_audited:
             self._article_cooldown.record_relevance_audit(
                 miner_hotkey, res.relevance_audited, len(res.false_positive_ids))
@@ -1625,15 +1659,32 @@ class Validator(BaseValidatorNeuron):
                 if aid not in fp_ids:
                     triage_res.events.append(fp_soft_event(aid))
                 fp_ids.add(aid)
-                if (self._canary_pool.size("neg") < TRIAGE_CFG.neg_pool_target
+                if (self._canary_pool.size("neg", TRIAGE_CFG.canary_fresh_s) < TRIAGE_CFG.neg_pool_target
                         and aid in sent_by_id):
                     self._canary_pool.add(aid, "neg", deterministic=False)
+                    try:
+                        ck = self.metagraph.coldkeys[self.metagraph.hotkeys.index(miner_hotkey)]
+                        self._canary_seen.setdefault(aid, set()).add(ck)
+                    except Exception:
+                        pass
                     self._canary_articles[aid] = sent_by_id[aid].model_copy(
                         update={"analysis": None})
             self._record_triage_observations(
                 miner_hotkey, triage_res, article_batch,
                 [] if audit_supersedes else ((validation_result or {}).get("observations") or []),
                 allow_clean=full_push)
+
+        if (validation_result or {}).get("no_verdict"):
+            # Nothing could be graded on our side: no pay, no penalty.
+            bt.logging.warning(f"[VALIDATION] no verdict for {miner_hotkey}: no reference for "
+                               f"any sample; batch returned to the queue")
+            if not verification:
+                for article in article_batch:
+                    try:
+                        self._article_store.reset_to_unprocessed(article.id)
+                    except Exception:
+                        pass
+            return False
 
         if not is_valid:
             discrepancies = validation_result.get("discrepancies", [])
@@ -1827,6 +1878,10 @@ class Validator(BaseValidatorNeuron):
         bt.logging.info(f"[VALIDATION] Processing {len(articles)} articles in batch")
         for article in articles:
             self._article_store.add_article(article, set_as_processing=False, overwrite=False)
+        await asyncio.get_running_loop().run_in_executor(
+            self._validation_executor, self._refresh_canaries, articles)
+        live_canaries = self._canary_pool.ids()
+        articles = [a for a in articles if int(a.id) not in live_canaries]
         # Split what is available across UIDs once, before anything is sliced.
         self._refresh_ration_plan(list(self.metagraph.hotkeys), len(articles))
         cooled_hotkeys = self._article_cooldown.get_cooled_down_hotkeys()
@@ -1864,10 +1919,7 @@ class Validator(BaseValidatorNeuron):
                 miner_batches.append(articles[i:i + config.MINER_BATCH_SIZE])
             targets = self._select_article_targets(miner_batches, exclude)
 
-        # Blocking (gazetteer-bound): run in the validation executor.
-        await asyncio.get_running_loop().run_in_executor(
-            self._validation_executor, self._refresh_canaries, articles)
-        canary_rng = random.Random()
+        verify_rng = random.Random()
 
         adaptive = getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False)
         epoch = self._current_epoch() if adaptive else 0
@@ -1903,7 +1955,12 @@ class Validator(BaseValidatorNeuron):
                 break
             miner_batch = list(miner_batch)
             self._count_live_served([(uid, miner_batch)])
-            self._inject_canaries(miner_batch, canary_rng, charge=overlap_k)
+            try:
+                hotkey, coldkey = self.metagraph.hotkeys[int(uid)], self.metagraph.coldkeys[int(uid)]
+            except Exception:
+                hotkey, coldkey = str(uid), None
+            self._inject_canaries(miner_batch, self._canary_rng(hotkey, miner_batch),
+                                  charge=overlap_k, coldkey=coldkey, hotkey=hotkey)
             pool = [u for u in eligible if u != int(uid)]
             n_verify = min(overlap_k - 1, len(pool)) if overlap_k > 1 else 0
             # Record each article's actual assignment count for pay.
@@ -1913,7 +1970,7 @@ class Validator(BaseValidatorNeuron):
                 self._article_k[str(a.id)] = (k_actual, now)
             task = asyncio.create_task(self._dispatch_article_miner_batch(miner_batch, int(uid)))
             self._track_task(task)
-            for vuid in (canary_rng.sample(pool, n_verify) if n_verify else []):
+            for vuid in (verify_rng.sample(pool, n_verify) if n_verify else []):
                 vbatch = [a.model_copy(update={"analysis": None}) for a in miner_batch]
                 vtask = asyncio.create_task(
                     self._dispatch_verification_batch(vbatch, int(vuid)))

@@ -35,9 +35,10 @@ class TriageConfig:
     clean_weight: float = 1.0
     hard_severity: float = 9.0
     canary_ttl_s: float = 6 * 3600.0
-    canary_max_exposures: int = 30
-    canary_pos_rate: float = 0.7
-    canary_neg_rate: float = 0.7
+    canary_max_exposures: int = 3
+    canary_pos_rate: float = 0.0
+    canary_neg_rate: float = 0.3
+    canary_fresh_s: float = 1200.0
     fee_points: float = 0.2
     rel_point_mult: int = 6
     audit_min_confidence: float = 0.75
@@ -77,10 +78,13 @@ def relevance_factors(tracker, hotkeys, bound_mult: float, now: float) -> Dict[s
 RELEVANCE_AUDIT_TOL = 0.06      # rejected share paid in full (served as TRIAGE_RELEVANCE_AUDIT_TOL)
 RELEVANCE_AUDIT_SPAN = 0.35     # rejected share above the tolerance where the premium ends
 RELEVANCE_AUDIT_PRIOR_N = 10    # prior weight, in audits, at the tolerance
+RELEVANCE_AUDIT_MIN_N = 10      # decayed audits before the factor applies
 
 
 def relevance_audit_factor(audited: float, failed: float, tol: float = RELEVANCE_AUDIT_TOL) -> float:
     """Premium factor from a miner's decayed relevance-audit counts."""
+    if audited < RELEVANCE_AUDIT_MIN_N:
+        return 1.0
     rate = (failed + RELEVANCE_AUDIT_PRIOR_N * tol) / (audited + RELEVANCE_AUDIT_PRIOR_N)
     return max(0.0, 1.0 - max(0.0, rate - tol) / RELEVANCE_AUDIT_SPAN)
 
@@ -107,6 +111,7 @@ class TriageGradeResult:
     batch_size: int = 0
     relevance_audited: int = 0
     false_positive_ids: List[int] = field(default_factory=list)
+    picks: dict = field(default_factory=dict)
 
     def flagged_ids(self) -> Set[int]:
         """Articles named by an event or a proof-of-read failure."""
@@ -273,6 +278,10 @@ def grade_batch(
         elif kind == "neg" and labels[aid] == LABEL_RELEVANT:
             res.events.append(TriageEvent("soft", "canary_neg_flagged", aid))
 
+    if canary_labels:
+        res.picks["canaries"] = {aid: [canary_labels[aid][0], labels[aid]]
+                                 for aid in canary_labels if aid in labels}
+
     # 3. gazetteer audit on every not-relevant claim; LLM audit on a sample
     # of irrelevant claims only. Flagged-valuable borderline is exempt (its
     # analysis is kept and deep-validated like a relevant claim).
@@ -290,8 +299,13 @@ def grade_batch(
                 "hard", "false_negative_deterministic", it["article_id"]))
         elif labels[it["article_id"]] == LABEL_IRRELEVANT:
             det_clean.append(it)
-    for it in rng.sample(det_clean, min(cfg.audit_irrelevant_n, len(det_clean))):
-        if llm_relevant(it) is True:
+    drawn = rng.sample(det_clean, min(cfg.audit_irrelevant_n, len(det_clean)))
+    verdicts = {}
+    res.picks["irrelevant"] = {"pool": [it["article_id"] for it in det_clean],
+                               "checked": [it["article_id"] for it in drawn], "verdicts": verdicts}
+    for it in drawn:
+        verdicts[it["article_id"]] = verdict = llm_relevant(it)
+        if verdict is True:
             res.events.append(TriageEvent("soft", "false_negative_llm",
                                           it["article_id"]))
 
@@ -301,9 +315,19 @@ def grade_batch(
                and it["article_id"] not in canary_labels
                and it["article_id"] not in res.proof_failures]
     if llm_irrelevant is not None and audit_relevant_n > 0:
-        for it in rng.sample(claimed, min(audit_relevant_n, len(claimed))):
+        drawn = rng.sample(claimed, min(audit_relevant_n, len(claimed)))
+        verdicts = {}
+        res.picks["relevant"] = {"pool": [it["article_id"] for it in claimed],
+                                 "audited": [it["article_id"] for it in drawn], "verdicts": verdicts}
+        for it in drawn:
             res.relevance_audited += 1
-            if not det_relevant(it) and llm_irrelevant(it):
+            if det_relevant(it):
+                verdicts[it["article_id"]] = "gazetteer"
+            elif llm_irrelevant(it):
+                verdicts[it["article_id"]] = "irrelevant"
+            else:
+                verdicts[it["article_id"]] = "relevant"
+            if verdicts[it["article_id"]] == "irrelevant":
                 res.false_positive_ids.append(it["article_id"])
                 res.events.append(fp_soft_event(it["article_id"]))
 
@@ -337,6 +361,7 @@ class CanaryPool:
         self._now = now
         # article_id -> {kind, deterministic, born, exposures}
         self._entries: Dict[int, dict] = {}
+        self.last_candidates: List[int] = []
 
     def add(self, article_id: int, kind: str, deterministic: bool) -> None:
         """Register a canary. Re-adding a known id is a no-op."""
@@ -353,20 +378,28 @@ class CanaryPool:
                 and e["exposures"] < self._cfg.canary_max_exposures)
 
     def prune(self) -> None:
-        self._entries = {k: v for k, v in self._entries.items() if self._alive(v)}
+        now = self._now()
+        self._entries = {k: v for k, v in self._entries.items()
+                         if now - v["born"] < self._cfg.canary_ttl_s}
 
     def ids(self) -> set:
         return set(self._entries)
 
-    def size(self, kind: str) -> int:
-        return sum(1 for e in self._entries.values() if e["kind"] == kind and self._alive(e))
+    def size(self, kind: str, max_age_s: Optional[float] = None) -> int:
+        now = self._now()
+        return sum(1 for e in self._entries.values() if e["kind"] == kind and self._alive(e)
+                   and (max_age_s is None or now - e["born"] <= max_age_s))
 
-    def draw(self, kind: str, rng, available=None, charge: int = 1) -> Optional[int]:
+    def draw(self, kind: str, rng, available=None, charge: int = 1,
+             max_age_s: Optional[float] = None) -> Optional[int]:
         """Pick a live canary and count the exposure. `available` restricts
         the draw to injectable ids; `charge` is how many miners will see it."""
-        alive = [aid for aid, e in self._entries.items()
+        now = self._now()
+        alive = sorted(aid for aid, e in self._entries.items()
                  if e["kind"] == kind and self._alive(e)
-                 and (available is None or aid in available)]
+                 and (available is None or aid in available)
+                 and (max_age_s is None or now - e["born"] <= max_age_s))
+        self.last_candidates = alive
         if not alive:
             return None
         aid = rng.choice(alive)

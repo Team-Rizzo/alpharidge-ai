@@ -1237,7 +1237,9 @@ class TestHybridValidationContract:
         import alpharidge_ai.analyzer.scoring as S
         assert S.TIER3_THRESHOLD == 0.70
 
-    def test_threshold_gates_exactly_at_composite(self):
+    def test_threshold_gates_exactly_at_composite(self, monkeypatch):
+        from alpharidge_ai import config as _c
+        monkeypatch.setattr(_c, "TIER3_JUNK_FILTER", False, raising=False)
         # The accept/reject boundary tracks the SERVED threshold. The module constant
         # in scoring.py is only a fallback for when config cannot be read, so patching
         # it proves nothing about what a validator actually does.
@@ -1256,7 +1258,9 @@ class TestHybridValidationContract:
                 cfg.TIER3_THRESHOLD = orig
         assert ok_lo and not ok_hi
 
-    def test_recalibration_rescues_honest_noise_pair(self):
+    def test_recalibration_rescues_honest_noise_pair(self, monkeypatch):
+        from alpharidge_ai import config as _c
+        monkeypatch.setattr(_c, "TIER3_JUNK_FILTER", False, raising=False)
         # A pair the old 0.75 floor rejected but 0.70 accepts -> the whole point.
         from alpharidge_ai import config as cfg
         miner, validator = self._noisy_miner(), _make_intel(narrative_keywords=["fed-policy"])
