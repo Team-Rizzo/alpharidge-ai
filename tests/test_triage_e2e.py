@@ -19,6 +19,7 @@ from alpharidge_ai.utils.cooldown import MinerCooldownTracker
 from alpharidge_ai import config
 from alpharidge_ai.utils.api_models import NewsArticleForScoring
 from alpharidge_ai.oracle.selector import Selector
+from alpharidge_ai.validator.triage_audit import TriageAuditor
 from alpharidge_ai.validator.triage_grader import CanaryPool, TriageConfig
 
 import neurons.validator as validator_module
@@ -45,6 +46,14 @@ MACRO_ARTICLE = (
     "The central bank of Brazil announced a surprise interest rate cut on "
     "Thursday, citing slowing inflation. Economists expect further easing.",
 )
+
+
+class _Judge:
+    """Audit LLM that finds only the junk article irrelevant."""
+    clearly_irrelevant = TriageAuditor.clearly_irrelevant
+
+    def relevance_verdict(self, title, body, framing="strict"):
+        return title != JUNK_ARTICLE[0]
 
 
 def stage_junk(_item):
@@ -242,8 +251,7 @@ class TestEndToEnd:
     def test_audited_relevance_claims_on_junk_are_unpaid(self, stage, triage_on, monkeypatch):
         monkeypatch.setattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 5, raising=False)
         v = HarnessValidator()
-        v._triage_auditor = types.SimpleNamespace(
-            relevance_verdict=lambda title, body, framing="strict": title != JUNK_ARTICLE[0])
+        v._triage_auditor = _Judge()
         batch = [article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE),
                  article(3, JUNK_ARTICLE)]
         returned = mine(stage, batch, strategy="spam")
@@ -256,8 +264,7 @@ class TestEndToEnd:
     def test_verification_lane_premium(self, stage, triage_on, monkeypatch):
         monkeypatch.setattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 5, raising=False)
         v = HarnessValidator()
-        v._triage_auditor = types.SimpleNamespace(
-            relevance_verdict=lambda title, body, framing="strict": title != JUNK_ARTICLE[0])
+        v._triage_auditor = _Judge()
         batch = [article(1, JUNK_ARTICLE), article(2, JUNK_ARTICLE)]
         res = v._grade_triage(mine(stage, batch, strategy="spam"), batch, "hk5")
         assert res.relevance_audited == 2 and sorted(res.false_positive_ids) == [1, 2]
@@ -357,6 +364,7 @@ class TestExploitResistance:
         # deterministic gazetteer must veto LLM 'clearly irrelevant' verdicts
         # before they mint canaries or false-positive charges.
         v = HarnessValidator()
+        v._triage_auditor = _Judge()
         asset_art, junk_art = article(1, ASSET_ARTICLE), article(2, JUNK_ARTICLE)
         sent_by_id = {1: asset_art, 2: junk_art}
         confirmed = v._confirm_clearly_irrelevant(
@@ -574,22 +582,23 @@ class TestDefectFixes:
             def relevance_verdict(self, title, body, framing="strict"):
                 self.calls.append(framing)
                 return self.verdicts.get(framing)
+            clearly_irrelevant = TriageAuditor.clearly_irrelevant
         junk = article(20, JUNK_ARTICLE)
 
         v = HarnessValidator()
-        v._triage_auditor = FakeAuditor({"strict": False, "editorial": False})
+        v._triage_auditor = FakeAuditor({"strict": False, "lenient": False})
         v._mint_neg_canaries([junk])
         assert v._canary_pool.size("neg") == 1   # both framings concur
         assert v._canary_articles[20].model_dump() == junk.model_dump()
-        assert set(v._triage_auditor.calls) == {"strict", "editorial"}
+        assert set(v._triage_auditor.calls) == {"strict", "lenient"}
 
         v2 = HarnessValidator()
-        v2._triage_auditor = FakeAuditor({"strict": False, "editorial": None})
+        v2._triage_auditor = FakeAuditor({"strict": False, "lenient": None})
         v2._mint_neg_canaries([junk])
         assert v2._canary_pool.size("neg") == 0  # one framing unsure: no mint
 
         v3 = HarnessValidator()
-        v3._triage_auditor = FakeAuditor({"strict": False, "editorial": False})
+        v3._triage_auditor = FakeAuditor({"strict": False, "lenient": False})
         asset = article(21, ASSET_ARTICLE)
         v3._mint_neg_canaries([asset])
         assert v3._canary_pool.size("neg") == 0  # stage says relevant: never a neg

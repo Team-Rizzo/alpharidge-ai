@@ -1051,9 +1051,7 @@ class Validator(BaseValidatorNeuron):
         auditor = self._get_triage_auditor()
         if auditor is None:
             return False
-        title, body = item.get("title") or "", item.get("body") or ""
-        return (auditor.relevance_verdict(title, body, framing="strict") is False
-                and auditor.relevance_verdict(title, body, framing="editorial") is False)
+        return auditor.clearly_irrelevant(item.get("title") or "", item.get("body") or "")
 
     def _confirm_clearly_irrelevant(self, aid_flags, sent_by_id) -> set:
         """Keep only 'clearly irrelevant' verdicts the reference TriageStage
@@ -1068,7 +1066,8 @@ class Validator(BaseValidatorNeuron):
                 continue
             rec, _, _ = self._get_triage_stage().evaluate(
                 art.title or "", art.content or "")
-            if rec["label"] == "irrelevant":
+            if rec["label"] == "irrelevant" and self._llm_irrelevant_item(
+                    {"title": art.title, "body": art.content or ""}):
                 confirmed.add(aid)
         return confirmed
 
@@ -1208,10 +1207,7 @@ class Validator(BaseValidatorNeuron):
             if rec["label"] != "irrelevant":
                 continue
             checked += 1
-            if (auditor.relevance_verdict(article.title, article.content or "",
-                                          framing="strict") is False
-                    and auditor.relevance_verdict(article.title, article.content or "",
-                                                  framing="editorial") is False):
+            if auditor.clearly_irrelevant(article.title, article.content or ""):
                 self._canary_pool.add(aid, "neg", deterministic=False)
                 self._canary_articles[aid] = article.model_copy(
                     update={"analysis": None})

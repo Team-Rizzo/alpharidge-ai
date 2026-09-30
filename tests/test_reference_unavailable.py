@@ -196,3 +196,16 @@ def test_routing_is_served_and_can_be_overridden_locally(monkeypatch):
     monkeypatch.setattr(config, "_remote_config_last_fetch", 0.0)
     config.refresh_remote_config(force=True)
     assert config.REFERENCE_PROVIDER_ORDER == "Local"
+
+
+def test_a_price_ceiling_is_sent(monkeypatch):
+    from alpharidge_ai.utils import llm_spend
+    monkeypatch.setattr(config, "REFERENCE_PROVIDER_ORDER", "", raising=False)
+    monkeypatch.setattr(config, "REFERENCE_PROVIDER_IGNORE", "Bad", raising=False)
+    monkeypatch.setattr(config, "REFERENCE_PROVIDER_MAX_PRICE", "0.15, 0.7", raising=False)
+    body = llm_spend.request_body(types.SimpleNamespace(base_url="https://openrouter.ai/api/v1"))
+    assert body["provider"] == {"ignore": ["Bad"], "max_price": {"prompt": 0.15, "completion": 0.7}}
+    for broken in ("", "0.15", "a,b", "1,2,3"):
+        monkeypatch.setattr(config, "REFERENCE_PROVIDER_MAX_PRICE", broken, raising=False)
+        body = llm_spend.request_body(types.SimpleNamespace(base_url="https://openrouter.ai/api/v1"))
+        assert "max_price" not in body["provider"]

@@ -135,6 +135,8 @@ class Grader:
     def _call(self, model: str, prompt: str, tool: dict) -> Optional[dict]:
         name = tool["function"]["name"]
         for attempt in range(RETRIES + 1):
+            if llm_spend.paused():
+                return None
             try:
                 extra = llm_spend.request_body(self.client)
                 response = self.client.chat.completions.create(
@@ -152,6 +154,9 @@ class Grader:
                     continue
                 return json.loads(calls[0].function.arguments)
             except Exception as e:
+                if llm_spend.is_key_limit(e):
+                    llm_spend.pause(e)
+                    return None
                 if attempt >= RETRIES:
                     bt.logging.warning(f"[GRADER] {model} {name} failed: {e}")
         return None

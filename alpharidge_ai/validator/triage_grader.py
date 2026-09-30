@@ -96,6 +96,9 @@ class TriageEvent:
     article_id: int
 
 
+UNSCORED_EVENTS = frozenset({"canary_neg_flagged"})
+
+
 @dataclass
 class TriageGradeResult:
     events: List[TriageEvent] = field(default_factory=list)
@@ -144,7 +147,8 @@ class TriageGradeResult:
 
         failed = sorted({int(aid) for aid in self.proof_failures})
         failed_set = set(failed)
-        flagged = sorted({int(e.article_id) for e in self.events} - failed_set)
+        flagged = sorted({int(e.article_id) for e in self.events
+                          if e.code not in UNSCORED_EVENTS} - failed_set)
         hard = sorted({int(e.article_id) for e in self.events
                        if e.kind == "hard"} - failed_set)
         bad = len(flagged) + len(failed)

@@ -22,6 +22,8 @@ _totals = defaultdict(lambda: [0.0, 0])      # (purpose, model) -> [usd, calls]
 _latency = deque(maxlen=SLOW_WINDOW)          # reference-call seconds
 _last_report = [time.time()]
 _last_slow_warn = [0.0]
+_paused_until = [0.0]
+PAUSE_S = 600.0
 
 
 def usage_body(client) -> dict:
@@ -43,6 +45,12 @@ def request_body(client) -> dict:
             prefs[key] = names
     if "order" in prefs:
         prefs["allow_fallbacks"] = True
+    cap = [p.strip() for p in str(getattr(config, "REFERENCE_PROVIDER_MAX_PRICE", "") or "").split(",")]
+    try:
+        if len(cap) == 2:
+            prefs["max_price"] = {"prompt": float(cap[0]), "completion": float(cap[1])}
+    except ValueError:
+        pass
     if prefs:
         body["provider"] = prefs
     return body
@@ -87,3 +95,24 @@ def record(purpose: str, model: str, response=None, seconds: float = None) -> No
         total = sum(v[0] for _, v in rows)
         bt.logging.info(f"[LLM_SPEND] ${total:.3f} over {span / 3600:.1f}h: " + "; ".join(
             f"{p} {m.split('/')[-1]} ${v[0]:.3f} ({v[1]} calls)" for (p, m), v in rows))
+
+
+def is_key_limit(error) -> bool:
+    """An OpenRouter reply saying the key is out of credit or over its limit."""
+    status = getattr(error, "status_code", None)
+    text = str(error).lower()
+    return status in (402, 403) and ("limit" in text or "credit" in text)
+
+
+def pause(error) -> None:
+    """Stop the validator's own LLM calls for a while; retrying cannot succeed."""
+    with _lock:
+        first = time.time() >= _paused_until[0]
+        _paused_until[0] = time.time() + PAUSE_S
+    if first:
+        bt.logging.error(f"[LLM_SPEND] API key limit reached, pausing validator LLM calls for "
+                         f"{PAUSE_S / 60:.0f} min: {error}")
+
+
+def paused() -> bool:
+    return time.time() < _paused_until[0]

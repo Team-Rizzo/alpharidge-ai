@@ -6,6 +6,7 @@ replies, and transport errors all return None (no event).
 from __future__ import annotations
 
 import json
+import re
 from typing import Optional
 
 import bittensor as bt
@@ -58,18 +59,33 @@ BODY: {body}
 Answer with the judge_market_relevance tool. Be strict: most general news is \
 NOT market-relevant. Only say relevant when a tradeable asset or a named-economy \
 macro/policy event is genuinely the subject of the article.""",
-    "editorial": """You are the desk editor of a trading floor's news terminal. \
-A story only makes the terminal if a portfolio manager could act on it: it moves \
-a listed company, a currency, a commodity, rates, or follows from economic data \
-or government economic policy of a named economy.
+    "lenient": """Judge whether this news article has any plausible connection to \
+financial markets. The article may be in any language.
 
-STORY HEADLINE: {title}
+TITLE: {title}
 
-STORY TEXT: {body}
+BODY: {body}
 
-Would this story make the terminal? Answer with the judge_market_relevance tool \
-— `relevant` means it makes the terminal.""",
+Answer with the judge_market_relevance tool. Say relevant if the article involves, \
+even briefly, a named company or brand, a listed security, an industry or sector, a \
+commodity, energy or food supply, a currency, interest rates, prices, trade, \
+regulation, or the economic policy or economic conditions of a country or region. \
+Say not relevant only when it clearly has none of these: for example sports results, \
+entertainment, crime, weather without economic effect, religion, or local community \
+news.""",
 }
+
+
+_LISTING = re.compile(
+    r"<[A-Z0-9]{1,6}\.[A-Z]{1,3}>"
+    r"|\b(?:NYSE|NASDAQ|Nasdaq|AMEX|TSXV?|LSE|HKEX|SEHK|SGX|ASX|NSE|BSE|TSE|TYO|KRX|KOSDAQ"
+    r"|SSE|SZSE|XETRA|Xetra|Euronext|SIX|OTC(?:QX|QB)?|B3|BMV|JSE|TASE|MOEX)\s*:\s*[A-Z0-9.]{1,10}"
+    r"|\$[A-Z]{2,5}\b")
+
+
+def names_a_listing(title: str, body: str) -> bool:
+    """Ticker or exchange notation anywhere in the article."""
+    return bool(_LISTING.search(f"{title or ''} {body or ''}"))
 
 
 class TriageAuditor:
@@ -82,11 +98,21 @@ class TriageAuditor:
         self._min_confidence = min_confidence
         self._body_chars = body_chars
 
+    def clearly_irrelevant(self, title: str, body: str) -> bool:
+        """Irrelevant beyond reasonable doubt: no listing named, and both the strict
+        and the lenient reading say so with confidence."""
+        if names_a_listing(title, body):
+            return False
+        return (self.relevance_verdict(title, body, framing="strict") is False
+                and self.relevance_verdict(title, body, framing="lenient") is False)
+
     def relevance_verdict(self, title: str, body: str,
                           framing: str = "strict") -> Optional[bool]:
         """True = confidently relevant, False = confidently not, None = no verdict."""
+        if llm_spend.paused():
+            return None
         try:
-            extra = llm_spend.usage_body(self._client)
+            extra = llm_spend.request_body(self._client)
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": _PROMPTS[framing].format(
@@ -109,5 +135,8 @@ class TriageAuditor:
                 return None
             return bool(payload["relevant"])
         except Exception as e:
+            if llm_spend.is_key_limit(e):
+                llm_spend.pause(e)
+                return None
             bt.logging.warning(f"[TRIAGE_AUDIT] verdict unavailable: {e}")
             return None

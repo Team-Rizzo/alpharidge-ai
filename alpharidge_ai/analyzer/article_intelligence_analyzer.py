@@ -742,6 +742,8 @@ class ArticleIntelligenceAnalyzer:
             if body:
                 extra["extra_body"] = body
         problem = ""
+        if strict and llm_spend.paused():
+            raise ReferenceUnavailable(f"{tool_name}: paused")
         for _attempt in range(2 if strict else 1):
             response = None
             started = time.time()
@@ -767,6 +769,9 @@ class ArticleIntelligenceAnalyzer:
                 else:
                     return json.loads(tc[0].function.arguments)
             except Exception as e:
+                if strict and llm_spend.is_key_limit(e):
+                    llm_spend.pause(e)
+                    raise ReferenceUnavailable(f"{tool_name}: key limit")
                 problem = f"failed: {e}"
             detail = ""
             if strict and response is not None:

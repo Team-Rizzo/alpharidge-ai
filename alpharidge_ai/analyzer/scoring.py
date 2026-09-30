@@ -21,6 +21,7 @@ import threading
 import bittensor as bt
 import numpy as np
 
+from alpharidge_ai.utils import llm_spend
 from alpharidge_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring
 from .relevance import AssetRelevanceAnalyzer, PostClassification
 from .telegram_relevance import TelegramRelevanceAnalyzer, MessageGroupClassification
@@ -1789,7 +1790,7 @@ def validate_miner_article_intelligence_batch(
             skipped += 1
             bt.logging.warning(f"[V2_VALIDATE] no reference for {getattr(article, 'id', '')}; "
                                f"sample skipped hk={miner_hotkey}")
-            if spares and skipped <= SAMPLE_REPLACEMENTS:
+            if spares and skipped <= SAMPLE_REPLACEMENTS and not llm_spend.paused():
                 sampled.append(spares.pop())
             continue
 
