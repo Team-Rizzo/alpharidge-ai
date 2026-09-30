@@ -383,6 +383,8 @@ BATCH_SIZE_SHRINK_FACTOR = float(os.getenv("BATCH_SIZE_SHRINK_FACTOR", "0.75"))
 TIER3_THRESHOLD = float(os.getenv("TIER3_THRESHOLD", "0.70"))
 # Tier-3 mode. Off uses TIER3_THRESHOLD.
 TIER3_JUNK_FILTER = _as_bool(os.getenv("TIER3_JUNK_FILTER", "true"))
+REFERENCE_PROVIDER_ORDER = os.getenv("REFERENCE_PROVIDER_ORDER", "")
+REFERENCE_PROVIDER_IGNORE = os.getenv("REFERENCE_PROVIDER_IGNORE", "")
 
 # Cross-article cloned-embedding gate. The within-batch title-embedding similarity
 # above which a pair is a clone candidate (default 0.99 = current behavior). When
@@ -478,6 +480,8 @@ _REMOTE_CONFIG_KEYS = {
     # Scoring track (not gated by the dispatch flag): served so all validators match.
     "TIER3_THRESHOLD":            (float, "TIER3_THRESHOLD"),
     "TIER3_JUNK_FILTER":          (_as_bool, "TIER3_JUNK_FILTER"),
+    "REFERENCE_PROVIDER_ORDER":   (str,   "REFERENCE_PROVIDER_ORDER"),
+    "REFERENCE_PROVIDER_IGNORE":  (str,   "REFERENCE_PROVIDER_IGNORE"),
     "CLONE_COSINE_THRESHOLD":     (float, "CLONE_COSINE_THRESHOLD"),
     "CLONE_DIFFERENTIAL_ENABLED": (_as_bool, "CLONE_DIFFERENTIAL_ENABLED"),
     "CLONE_DIVERGENCE_MARGIN":    (float, "CLONE_DIVERGENCE_MARGIN"),

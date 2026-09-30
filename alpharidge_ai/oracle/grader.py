@@ -136,7 +136,7 @@ class Grader:
         name = tool["function"]["name"]
         for attempt in range(RETRIES + 1):
             try:
-                extra = llm_spend.usage_body(self.client)
+                extra = llm_spend.request_body(self.client)
                 response = self.client.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],

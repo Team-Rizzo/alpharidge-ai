@@ -30,6 +30,24 @@ def usage_body(client) -> dict:
     return {"usage": {"include": True}} if "openrouter" in base else {}
 
 
+def request_body(client) -> dict:
+    """`extra_body` for the validator's own calls: cost accounting and provider routing."""
+    body = usage_body(client)
+    if not body:
+        return {}
+    from alpharidge_ai import config
+    prefs = {}
+    for key, name in (("ignore", "REFERENCE_PROVIDER_IGNORE"), ("order", "REFERENCE_PROVIDER_ORDER")):
+        names = [p.strip() for p in str(getattr(config, name, "") or "").split(",") if p.strip()]
+        if names:
+            prefs[key] = names
+    if "order" in prefs:
+        prefs["allow_fallbacks"] = True
+    if prefs:
+        body["provider"] = prefs
+    return body
+
+
 def _cost(response) -> float:
     usage = getattr(response, "usage", None)
     value = getattr(usage, "cost", None)

@@ -738,16 +738,7 @@ class ArticleIntelligenceAnalyzer:
         ReferenceUnavailable, so a failed call is never graded against as a reference."""
         extra = {}
         if strict:
-            prefs = {}
-            for key, env in (("ignore", "REFERENCE_PROVIDER_IGNORE"), ("order", "REFERENCE_PROVIDER_ORDER")):
-                names = [p.strip() for p in os.getenv(env, "").split(",") if p.strip()]
-                if names:
-                    prefs[key] = names
-            if "order" in prefs:
-                prefs["allow_fallbacks"] = True
-            body = dict(llm_spend.usage_body(self.client))
-            if prefs:
-                body["provider"] = prefs
+            body = llm_spend.request_body(self.client)
             if body:
                 extra["extra_body"] = body
         problem = ""
