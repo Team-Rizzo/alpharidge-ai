@@ -9,7 +9,10 @@ tests cannot see.
 
 Run with: pytest tests/test_triage_e2e.py -v
 """
+import collections
+import concurrent.futures
 import random
+import time
 import types
 
 import pytest
@@ -106,6 +109,11 @@ class HarnessValidator:
     _record_triage_observations = validator_module.Validator._record_triage_observations
     _apply_triage_outcome = validator_module.Validator._apply_triage_outcome
     _mint_neg_canaries = validator_module.Validator._mint_neg_canaries
+    _mint_picks = validator_module.Validator._mint_picks
+    _mint_check = validator_module.Validator._mint_check
+    _mint_apply = validator_module.Validator._mint_apply
+    _canary_tick = validator_module.Validator._canary_tick
+    _prune_canaries = validator_module.Validator._prune_canaries
     _keyed = validator_module.Validator._keyed
     _canary_rng = validator_module.Validator._canary_rng
     _seeded = validator_module.Validator._seeded
@@ -119,6 +127,10 @@ class HarnessValidator:
         self._canary_pool = CanaryPool(TriageConfig())
         self._canary_articles = {}
         self._canary_selector = Selector(b"test-key")
+        self._canary_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self._mint_future = None
+        self._mint_checks = collections.deque()
+        self._canary_seen = {}
         self._article_k = {}
         self._article_pay = {}
         self._triage_extractor = None

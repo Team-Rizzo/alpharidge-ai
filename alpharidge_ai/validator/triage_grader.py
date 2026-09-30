@@ -35,7 +35,7 @@ class TriageConfig:
     clean_weight: float = 1.0
     hard_severity: float = 9.0
     canary_ttl_s: float = 6 * 3600.0
-    canary_max_exposures: int = 3
+    canary_max_exposures: int = 6
     canary_pos_rate: float = 0.0
     canary_neg_rate: float = 0.3
     canary_fresh_s: float = 1200.0
@@ -44,6 +44,8 @@ class TriageConfig:
     audit_min_confidence: float = 0.75
     neg_pool_target: int = 12
     neg_mint_budget: int = 3
+    neg_mint_scan: int = 8
+    neg_mint_checks_per_hour: int = 40
     overlap_k: int = 3                # assignees per article once enforced
     verification_ttl_s: float = 900.0
 

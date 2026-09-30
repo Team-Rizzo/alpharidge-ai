@@ -17,6 +17,7 @@ import asyncio
 import concurrent.futures
 import copy
 import gc
+import collections
 import random
 import secrets
 import time
@@ -115,6 +116,10 @@ class Validator(BaseValidatorNeuron):
             thread_name_prefix="validation_"
         )
         bt.logging.info(f"[INIT] Created validation executor with {_vw} workers")
+        self._canary_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="canary_")
+        self._mint_future = None
+        self._mint_checks = collections.deque()
 
         bt.logging.info("load_state()")
         self.load_state()
@@ -1173,49 +1178,98 @@ class Validator(BaseValidatorNeuron):
                 self._canary_pool.add(int(article.id), "pos", deterministic=True)
                 self._canary_articles[int(article.id)] = article
 
-    def _refresh_canaries(self, articles):
-        """Top up both canary pools and expire stale entries. Blocking —
-        run off the event loop."""
-        try:
-            self._feed_pos_canaries(articles)
-            self._mint_neg_canaries(articles)
-            self._canary_pool.prune()
-            live = self._canary_pool.ids()
-            self._canary_articles = {
-                k: v for k, v in self._canary_articles.items() if k in live}
-            self._canary_seen = {k: v for k, v in getattr(self, "_canary_seen", {}).items() if k in live}
-        except Exception as e:
-            bt.logging.warning(f"[TRIAGE] canary refresh failed: {e}")
+    def _prune_canaries(self):
+        self._canary_pool.prune()
+        live = self._canary_pool.ids()
+        self._canary_articles = {
+            k: v for k, v in self._canary_articles.items() if k in live}
+        self._canary_seen = {k: v for k, v in getattr(self, "_canary_seen", {}).items() if k in live}
+
+    def _mint_picks(self, articles):
+        """Articles to check for minting, or [] when no check is due."""
+        if self._canary_pool.size("neg", TRIAGE_CFG.canary_fresh_s) >= TRIAGE_CFG.neg_pool_target:
+            return []
+        if self._get_triage_auditor() is None:
+            return []
+        now = time.time()
+        checks = getattr(self, "_mint_checks", collections.deque())
+        while checks and now - checks[0][0] > 3600:
+            checks.popleft()
+        if sum(n for _, n in checks) >= TRIAGE_CFG.neg_mint_checks_per_hour:
+            return []
+        live = self._canary_pool.ids()
+        pool = [a for a in articles if int(a.id) not in live]
+        return sorted(pool, key=lambda a: self._keyed().fraction(a.id, "mint"))[:TRIAGE_CFG.neg_mint_scan]
+
+    def _mint_check(self, picks, budget):
+        """Stage label and two audit verdicts per candidate. Returns (minted,
+        returned, checked); touches no shared state, so it can run on any thread."""
+        auditor = self._get_triage_auditor()
+        minted, returned, checked = [], [], 0
+        for article in picks:
+            if auditor is not None and checked < budget:
+                rec, _, _ = self._get_triage_stage().evaluate(
+                    article.title or "", article.content or "")
+                if rec["label"] == "irrelevant":
+                    checked += 1
+                    body = article.content or ""
+                    if (auditor.relevance_verdict(article.title, body, framing="strict") is False
+                            and auditor.relevance_verdict(article.title, body,
+                                                          framing="editorial") is False):
+                        minted.append(article)
+                        continue
+            returned.append(article)
+        return minted, returned, checked
+
+    def _mint_apply(self, minted, checked):
+        if checked:
+            getattr(self, "_mint_checks", collections.deque()).append((time.time(), checked))
+        for article in minted:
+            aid = int(article.id)
+            self._canary_pool.add(aid, "neg", deterministic=False)
+            self._canary_articles[aid] = article.model_copy(update={"analysis": None})
+            bt.logging.info(f"[TRIAGE] minted negative canary {aid}")
 
     def _mint_neg_canaries(self, articles):
         """Mint negative canaries: the TriageStage and two audit-LLM passes
-        must all concur. Bounded per tick."""
-        budget, target = TRIAGE_CFG.neg_mint_budget, TRIAGE_CFG.neg_pool_target
-        if self._canary_pool.size("neg", TRIAGE_CFG.canary_fresh_s) >= target:
-            return
-        auditor = self._get_triage_auditor()
-        if auditor is None:
-            return
-        checked = 0
-        for article in sorted(articles, key=lambda a: self._keyed().fraction(a.id, "mint")):
-            if checked >= budget or self._canary_pool.size("neg", TRIAGE_CFG.canary_fresh_s) >= target:
-                break
-            aid = int(article.id)
-            if aid in self._canary_pool.ids():
+        must all concur. Bounded per call."""
+        picks = self._mint_picks(articles)
+        if picks:
+            minted, _, checked = self._mint_check(picks, TRIAGE_CFG.neg_mint_budget)
+            self._mint_apply(minted, checked)
+
+    def _canary_tick(self, articles):
+        """Runs on the event loop at the start of a dispatch tick. Collects the
+        previous background check, starts the next one, and returns the
+        articles to dispatch."""
+        returned = []
+        fut = self._mint_future
+        if fut is not None and fut.done():
+            self._mint_future = None
+            try:
+                minted, returned, checked = fut.result()
+                self._mint_apply(minted, checked)
+            except Exception as e:
+                bt.logging.warning(f"[TRIAGE] canary check failed: {e}")
+                returned = list(getattr(fut, "picks", []))
+        self._prune_canaries()
+        held = set()
+        if self._mint_future is None:
+            picks = self._mint_picks(articles)
+            if picks:
+                self._mint_future = self._canary_executor.submit(
+                    self._mint_check, picks, TRIAGE_CFG.neg_mint_budget)
+                self._mint_future.picks = picks
+                held = {int(a.id) for a in picks}
+        live = self._canary_pool.ids()
+        seen, out = set(), []
+        for a in returned + list(articles):
+            aid = int(a.id)
+            if aid in live or aid in held or aid in seen:
                 continue
-            rec, _, _ = self._get_triage_stage().evaluate(
-                article.title or "", article.content or "")
-            if rec["label"] != "irrelevant":
-                continue
-            checked += 1
-            if (auditor.relevance_verdict(article.title, article.content or "",
-                                          framing="strict") is False
-                    and auditor.relevance_verdict(article.title, article.content or "",
-                                                  framing="editorial") is False):
-                self._canary_pool.add(aid, "neg", deterministic=False)
-                self._canary_articles[aid] = article.model_copy(
-                    update={"analysis": None})
-                bt.logging.info(f"[TRIAGE] minted negative canary {aid}")
+            seen.add(aid)
+            out.append(a)
+        return out
 
     def _keyed(self):
         if getattr(self, "_canary_selector", None) is None:
@@ -1878,10 +1932,10 @@ class Validator(BaseValidatorNeuron):
         bt.logging.info(f"[VALIDATION] Processing {len(articles)} articles in batch")
         for article in articles:
             self._article_store.add_article(article, set_as_processing=False, overwrite=False)
-        await asyncio.get_running_loop().run_in_executor(
-            self._validation_executor, self._refresh_canaries, articles)
-        live_canaries = self._canary_pool.ids()
-        articles = [a for a in articles if int(a.id) not in live_canaries]
+        if TRIAGE_CFG.canary_pos_rate > 0:
+            await asyncio.get_running_loop().run_in_executor(
+                self._validation_executor, self._feed_pos_canaries, articles)
+        articles = self._canary_tick(articles)
         # Split what is available across UIDs once, before anything is sliced.
         self._refresh_ration_plan(list(self.metagraph.hotkeys), len(articles))
         cooled_hotkeys = self._article_cooldown.get_cooled_down_hotkeys()
