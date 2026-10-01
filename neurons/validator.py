@@ -1305,7 +1305,8 @@ class Validator(BaseValidatorNeuron):
             rng, self._triage_cfg(),
             enforced=bool(getattr(config, "TRIAGE_ENFORCED", False)),
             llm_irrelevant=self._llm_irrelevant_item,
-            audit_relevant_n=int(getattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 0) or 0))
+            audit_relevant_n=int(getattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 0) or 0),
+            overrule_det=self._llm_irrelevant_item)
         if res.picks:
             auditor = self._get_triage_auditor()
             draw_log.write("picks", hk=miner_hotkey, n=rng.nonce,

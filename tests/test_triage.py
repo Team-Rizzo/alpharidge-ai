@@ -189,6 +189,17 @@ class TestGradeBatch:
             [("hard", "false_negative_deterministic")]
         assert 1 not in res.retire_candidate_ids
 
+    def test_a_gazetteer_hit_the_judge_finds_clearly_irrelevant_is_not_penalised(self):
+        items = [make_item(1, LABEL_IRRELEVANT, "non_economic"), make_item(2, LABEL_RELEVANT)]
+        det = lambda i: i["article_id"] == 1
+        res = grade_batch(items, {}, det, lambda i: False, stage_junk, RNG(0), CFG, enforced=True,
+                          overrule_det=lambda i: True)
+        assert not [e for e in res.events if e.code == "false_negative_deterministic"]
+        assert res.picks["overruled"] == [1]
+        kept = grade_batch(items, {}, det, lambda i: False, stage_junk, RNG(0), CFG, enforced=True,
+                           overrule_det=lambda i: False)
+        assert ("hard", "false_negative_deterministic") in [(e.kind, e.code) for e in kept.events]
+
     def test_audit_llm_false_negative_is_always_soft(self):
         items = [make_item(1, LABEL_IRRELEVANT, "non_economic")]
         res = grade_batch(items, {}, never_relevant, lambda i: True, stage_junk, RNG(0), CFG, enforced=True)

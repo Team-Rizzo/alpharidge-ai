@@ -183,6 +183,7 @@ def grade_batch(
     enforced: bool,
     llm_irrelevant: Optional[Callable[[dict], bool]] = None,
     audit_relevant_n: int = 0,
+    overrule_det: Optional[Callable[[dict], bool]] = None,
 ) -> TriageGradeResult:
     """Grade the triage layer of one returned miner batch.
 
@@ -299,8 +300,11 @@ def grade_batch(
     det_clean = []
     for it in not_relevant:
         if det_relevant(it):
-            res.events.append(TriageEvent(
-                "hard", "false_negative_deterministic", it["article_id"]))
+            if overrule_det is not None and overrule_det(it):
+                res.picks.setdefault("overruled", []).append(it["article_id"])
+            else:
+                res.events.append(TriageEvent(
+                    "hard", "false_negative_deterministic", it["article_id"]))
         elif labels[it["article_id"]] == LABEL_IRRELEVANT:
             det_clean.append(it)
     drawn = rng.sample(det_clean, min(cfg.audit_irrelevant_n, len(det_clean)))
