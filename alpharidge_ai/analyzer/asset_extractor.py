@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import functools
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -153,6 +154,20 @@ class AssetMatch:
     in_title: bool = field(default=False, repr=False)
 
 
+@functools.lru_cache(maxsize=1)
+def known_symbols() -> frozenset:
+    """Every ticker the analyzer can resolve: the gazetteer plus the NER mapping tables."""
+    symbols = {a["symbol"] for f in ("assets_expanded.json", "assets_traditional.json",
+                                     "assets_sp1500.json") for a in _load_json(f)}
+    for f in ("financial_overrides.json", "wikidata_ticker_map.json"):
+        path = os.path.join(DATA_DIR, f)
+        if os.path.exists(path):
+            with open(path) as fh:
+                entities = json.load(fh).get("entities", {})
+            symbols.update(e["ticker"] for e in entities.values() if isinstance(e, dict) and e.get("ticker"))
+    return frozenset(symbols)
+
+
 def _load_json(filename: str) -> list:
     path = os.path.join(DATA_DIR, filename)
     if not os.path.exists(path):
@@ -224,6 +239,13 @@ class AssetExtractor:
                 except re.error:
                     pass
 
+        self._cashtag_patterns = [
+            (tag_lower, aid, re.compile(re.escape(tag_lower) + r"(?![a-z0-9])"))
+            for tag_lower, aid in self._cashtag_index.items()]
+        self._case_sensitive_patterns = [
+            (cs_id, aid, ambiguous, re.compile(rf"\b{re.escape(cs_id)}\b"))
+            for cs_id, (aid, ambiguous) in self._case_sensitive_index.items()]
+
     def extract_assets(
         self,
         title: str,
@@ -274,8 +296,7 @@ class AssetExtractor:
         # Phase 1: Cashtag matching (highest confidence, unambiguous by design).
         # Boundary-anchored so "$M" (Macy's) does NOT match inside "$MQ", nor "$A"
         # inside "$AMD" — substring matching spawned spurious single-letter tickers.
-        for tag_lower, aid in self._cashtag_index.items():
-            tag_re = re.compile(re.escape(tag_lower) + r"(?![a-z0-9])")
+        for tag_lower, aid, tag_re in self._cashtag_patterns:
             if tag_re.search(text_lower):
                 m = _get_or_create(aid)
                 m.evidence_spans.append(tag_lower)
@@ -288,8 +309,7 @@ class AssetExtractor:
                     m.in_title = True
 
         # Phase 2: Case-sensitive identifiers (exact-case tickers)
-        for cs_id, (aid, ambiguous) in self._case_sensitive_index.items():
-            pattern = re.compile(rf"\b{re.escape(cs_id)}\b")
+        for cs_id, aid, ambiguous, pattern in self._case_sensitive_patterns:
             hits = list(pattern.finditer(full_text))
             if hits:
                 m = _get_or_create(aid)

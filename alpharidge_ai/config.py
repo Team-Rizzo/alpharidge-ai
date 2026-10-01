@@ -386,6 +386,7 @@ TIER3_JUNK_FILTER = _as_bool(os.getenv("TIER3_JUNK_FILTER", "true"))
 REFERENCE_PROVIDER_ORDER = os.getenv("REFERENCE_PROVIDER_ORDER", "")
 REFERENCE_PROVIDER_IGNORE = os.getenv("REFERENCE_PROVIDER_IGNORE", "")
 REFERENCE_PROVIDER_MAX_PRICE = os.getenv("REFERENCE_PROVIDER_MAX_PRICE", "")
+REPUTATION_PEERS = os.getenv("REPUTATION_PEERS", "")
 
 # Cross-article cloned-embedding gate. The within-batch title-embedding similarity
 # above which a pair is a clone candidate (default 0.99 = current behavior). When
@@ -484,6 +485,7 @@ _REMOTE_CONFIG_KEYS = {
     "REFERENCE_PROVIDER_ORDER":   (str,   "REFERENCE_PROVIDER_ORDER"),
     "REFERENCE_PROVIDER_IGNORE":  (str,   "REFERENCE_PROVIDER_IGNORE"),
     "REFERENCE_PROVIDER_MAX_PRICE": (str, "REFERENCE_PROVIDER_MAX_PRICE"),
+    "REPUTATION_PEERS":           (str,   "REPUTATION_PEERS"),
     "CLONE_COSINE_THRESHOLD":     (float, "CLONE_COSINE_THRESHOLD"),
     "CLONE_DIFFERENTIAL_ENABLED": (_as_bool, "CLONE_DIFFERENTIAL_ENABLED"),
     "CLONE_DIVERGENCE_MARGIN":    (float, "CLONE_DIVERGENCE_MARGIN"),
