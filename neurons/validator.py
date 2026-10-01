@@ -413,10 +413,22 @@ class Validator(BaseValidatorNeuron):
         v_sent: List[NewsArticleForScoring] = []
         v_accepted: List = []
         skipped = 0
+        repeated = 0
+        seen = set()
+        limit = max(256, 4 * int(getattr(config, "MINER_BATCH_SIZE", 24) or 24))
+        if len(synapse.article_batch) > limit:
+            bt.logging.warning(f"[VALIDATION] {miner_hotkey[:12]}.. pushed {len(synapse.article_batch)} "
+                               f"articles (limit {limit}); ignored")
+            return synapse
         for returned in synapse.article_batch:
             aid = str(getattr(returned, "id", ""))
             if not aid:
                 continue
+            if aid in seen:
+                repeated += 1
+                continue
+            seen.add(aid)
+            analysis = getattr(returned, "analysis", None)
             # A held lease outranks a verification assignment.
             is_primary = False
             try:
@@ -428,15 +440,23 @@ class Validator(BaseValidatorNeuron):
                 if aid in self._validating_article_ids:
                     skipped += 1
                     continue
-                sent_batch.append(self._article_store.get_article(aid))
-                accepted.append(returned)
+                ours = self._article_store.get_article(aid)
+                if ours is None:
+                    skipped += 1
+                    continue
+                sent_batch.append(ours)
+                accepted.append(ours.model_copy(update={"analysis": analysis}))
                 continue
             v_copy = self._pop_verification(miner_hotkey, aid)
             if v_copy is not None:
                 v_sent.append(v_copy)
-                v_accepted.append(returned)
+                v_accepted.append(v_copy.model_copy(update={"analysis": analysis}))
             else:
                 skipped += 1
+
+        if repeated:
+            bt.logging.warning(f"[VALIDATION] {miner_hotkey[:12]}.. repeated {repeated} article id(s); "
+                               f"counted once")
 
         if skipped:
             bt.logging.info(
@@ -496,7 +516,7 @@ class Validator(BaseValidatorNeuron):
             try:
                 exc = t.exception()
                 if exc is not None:
-                    bt.logging.debug(f"[VALIDATION] Miner dispatch task failed: {exc}")
+                    bt.logging.warning(f"[VALIDATION] Miner dispatch task failed: {exc!r}")
             except asyncio.CancelledError:
                 pass
             except Exception:
@@ -1285,7 +1305,8 @@ class Validator(BaseValidatorNeuron):
             rng, self._triage_cfg(),
             enforced=bool(getattr(config, "TRIAGE_ENFORCED", False)),
             llm_irrelevant=self._llm_irrelevant_item,
-            audit_relevant_n=int(getattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 0) or 0))
+            audit_relevant_n=int(getattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 0) or 0),
+            overrule_det=self._llm_irrelevant_item)
         if res.picks:
             auditor = self._get_triage_auditor()
             draw_log.write("picks", hk=miner_hotkey, n=rng.nonce,
@@ -1601,15 +1622,19 @@ class Validator(BaseValidatorNeuron):
             sample_size = int(getattr(config, "VALIDATION_SAMPLE_SIZE", 1))
             gscorer = self._get_graded_scorer() if config.REPUTATION_SCORING_ENABLED else None
             reference_by_id = {str(a.id): a for a in sent_batch}
-            is_valid, validation_result = await loop.run_in_executor(
-                self._validation_executor,
-                validate_miner_article_intelligence_batch,
-                track_batch, self._article_intel_analyzer, sample_size, None, gscorer,
-                reference_by_id, miner_hotkey,
-                auditor,
-                int(self.block),
-                (_profile.oracle.schema_cutover_block if _profile else 0),
-            )
+            try:
+                is_valid, validation_result = await loop.run_in_executor(
+                    self._validation_executor,
+                    validate_miner_article_intelligence_batch,
+                    track_batch, self._article_intel_analyzer, sample_size, None, gscorer,
+                    reference_by_id, miner_hotkey,
+                    auditor,
+                    int(self.block),
+                    (_profile.oracle.schema_cutover_block if _profile else 0),
+                )
+            except Exception as e:
+                bt.logging.warning(f"[VALIDATION] validation raised for {miner_hotkey}: {e!r}")
+                is_valid, validation_result = False, {"no_verdict": True, "discrepancies": []}
             self._log_audit(miner_hotkey,
                             (validation_result or {}).get("audit_observations"),
                             live=oracle_live)
@@ -2916,6 +2941,8 @@ class Validator(BaseValidatorNeuron):
         """
         try:
             authenticated_hotkey = synapse.dendrite.hotkey
+            if not self._trusted_peer(authenticated_hotkey):
+                return synapse
             accepted, reason = self._penalty_broadcasts.ingest(
                 sender_hotkey=authenticated_hotkey,
                 epoch=synapse.epoch,
@@ -2938,13 +2965,23 @@ class Validator(BaseValidatorNeuron):
             bt.logging.debug(f"[PENALTY_BROADCAST] Failed to ingest penalties: {e}")
         return synapse
 
+    @staticmethod
+    def _trusted_peer(hotkey) -> bool:
+        peers = [h.strip() for h in str(getattr(config, "REPUTATION_PEERS", "") or "").split(",") if h.strip()]
+        return not peers or str(hotkey) in peers
+
     async def forward_validator_reputation_obs(self, synapse: ValidatorReputationObs) -> ValidatorReputationObs:
         """Receive graded observations from other validators and buffer for aggregation."""
         if not getattr(config, "REPUTATION_SCORING_ENABLED", False):
             return synapse
         try:
             sender = synapse.dendrite.hotkey
-            targets = {t: [tuple(o) for o in lst] for t, lst in (synapse.observations or {}).items()}
+            if not self._trusted_peer(sender):
+                bt.logging.warning(f"[REPUTATION_BROADCAST] Ignored from {str(sender)[:12]}..: not a listed peer")
+                return synapse
+            registered = set(self.metagraph.hotkeys)
+            targets = {t: [tuple(o) for o in lst] for t, lst in (synapse.observations or {}).items()
+                       if t in registered}
             accepted, reason = self._reputation_store.ingest(
                 sender, int(synapse.epoch), targets, seq=int(synapse.seq))
             self._reputation_store.save()

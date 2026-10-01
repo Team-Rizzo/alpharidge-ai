@@ -426,6 +426,9 @@ class ArticleIntelligenceAnalyzer:
         self._aspect_scorer = AspectSentimentScorer(device="cpu")
         self.source_profiles = _load_json("source_profiles.json").get("profiles", {})
         self.dependency_graph = _load_json("dependency_graph.json").get("dependencies", {})
+        if not self.dependency_graph:
+            bt.logging.error("[ARTICLE_INTEL] dependency_graph.json is missing or empty: "
+                             "no contagion links will be built. Restore it from the repository.")
         self._init_narrative_index()
 
         bt.logging.info(f"[ARTICLE_INTEL] Ready: model={self.model} endpoint={self.llm_base}")

@@ -1169,16 +1169,27 @@ class TestHybridValidationContract:
         assert not ok and comp == 0.0
         assert details["tier1"]["primary_sector_id"]["match"] is False
 
+    @staticmethod
+    def _eth_link():
+        return ContagionLink(source_ticker="ETH", target_ticker="STETH",
+                             target_asset_class=AssetClass.CRYPTO,
+                             mechanism=ContagionMechanism.PROTOCOL_DEPENDENCY,
+                             direction=SentimentDirection.NEUTRAL, strength=0.7, confidence=0.7,
+                             reasoning="dependency_graph")
+
     def test_contagion_determinism_gate(self):
-        miner = _make_intel(contagion_links=[
-            ContagionLink(source_ticker="ETH", target_ticker="STETH",
-                          target_asset_class=AssetClass.CRYPTO,
-                          mechanism=ContagionMechanism.PROTOCOL_DEPENDENCY,
-                          direction=SentimentDirection.NEUTRAL, strength=0.7, confidence=0.7,
-                          reasoning="dependency_graph")])
-        validator = _make_intel()  # no contagion links
+        validator = _make_intel(contagion_links=[self._eth_link()])
+        miner = _make_intel()  # omits the reference's links
         ok, comp, details = validate_article_intelligence(miner, validator)
         assert not ok and details["tier2"]["contagion_determinism"]["jaccard"] < 0.9
+
+    def test_contagion_is_not_judged_without_reference_links(self):
+        miner = _make_intel(contagion_links=[self._eth_link()])
+        ok, comp, details = validate_article_intelligence(miner, _make_intel())
+        assert details["tier2"]["contagion_determinism"]["reference_links"] == 0
+        assert "contagion" not in str(details.get("tier2", {}).get("fail_reason", ""))
+        same = validate_article_intelligence(_make_intel(), _make_intel())
+        assert ok == same[0]
 
     @staticmethod
     def _nvda(direction):

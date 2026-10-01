@@ -44,7 +44,8 @@ Obs = Tuple[int, float, float, int]
 # with seq == epoch, so a distant seq is a rogue or replayed payload; the volume caps
 # bound how much EMA movement one sender can buy in a single epoch.
 MAX_SEQ_EPOCH_SKEW = 100
-MAX_OBS_PER_TARGET = 512
+MAX_OBS_PER_TARGET = 64
+MAX_EPOCH_LEAD = 4
 MAX_TARGETS_PER_SENDER = 1024
 
 # Stands in for "no registration" on a record nobody currently holds.
@@ -186,6 +187,8 @@ class ReputationStore:
         epoch_i = int(epoch)
         if epoch_i in self.finalized:
             return False, f"epoch_already_finalized({epoch_i})"
+        if self.finalized and not (max(self.finalized) < epoch_i <= max(self.finalized) + MAX_EPOCH_LEAD):
+            return False, f"epoch_out_of_range({epoch_i})"
 
         if seq is not None:
             seq_i = int(seq)

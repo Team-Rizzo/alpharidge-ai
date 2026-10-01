@@ -21,6 +21,7 @@ import threading
 import bittensor as bt
 import numpy as np
 
+from alpharidge_ai.analyzer.asset_extractor import known_symbols
 from alpharidge_ai.utils import llm_spend
 from alpharidge_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring
 from .relevance import AssetRelevanceAnalyzer, PostClassification
@@ -1157,6 +1158,12 @@ def validate_article_intelligence(
     # clear a threshold, tolerating adjacent-class jitter.
     m_assets = {a.ticker: a for a in m.assets}
     v_assets = {a.ticker: a for a in v.assets}
+    unknown = sorted(str(t) for t in m_assets if t not in known_symbols())
+    if unknown:
+        details["tier2"]["asset_tickers"] = {"status": "fail", "reason": "unknown_ticker",
+                                             "tickers": [t[:12] for t in unknown[:5]]}
+        bt.logging.warning(f"[V2_VALIDATE] Tier 2 FAIL: unknown ticker(s) {unknown[:5]}")
+        return False, 0.0, details
     # Anti-cheat presence check (asymmetric, mirrors the Tier-2.5 embedding check):
     # if the validator resolved assets but the miner submitted none, the miner is
     # skipping the agreement gate below (which is a no-op with no common assets).
@@ -1179,8 +1186,9 @@ def validate_article_intelligence(
     DETERMINISM_TOL = 0.9
     m_cont = {(l.source_ticker, l.target_ticker) for l in m.contagion_links}
     v_cont = {(l.source_ticker, l.target_ticker) for l in v.contagion_links}
-    cont_jac = _jaccard(m_cont, v_cont)
-    details["tier2"]["contagion_determinism"] = {"jaccard": round(cont_jac, 4)}
+    cont_jac = _jaccard(m_cont, v_cont) if v_cont else 1.0
+    details["tier2"]["contagion_determinism"] = {"jaccard": round(cont_jac, 4),
+                                                 "reference_links": len(v_cont)}
     if cont_jac < DETERMINISM_TOL:
         bt.logging.warning(f"[V2_VALIDATE] Tier 2 FAIL: contagion determinism jaccard={cont_jac:.2f}")
         return False, 0.0, details
@@ -1215,6 +1223,9 @@ def validate_article_intelligence(
         """Return cosine sim, or None if absent. Hard-fail (raise) on bad format."""
         if not (m_emb and v_emb and len(m_emb) == EMBEDDING_DIM and len(v_emb) == EMBEDDING_DIM):
             return None
+        if not np.all(np.isfinite(m_emb)):
+            details["tier2_5"][name] = {"status": "fail", "reason": "non_finite"}
+            raise ValueError("non_finite")
         m_norm = float(np.linalg.norm(m_emb))
         v_norm = float(np.linalg.norm(v_emb))
         if m_norm < 0.01 or v_norm < 0.01:
@@ -1452,7 +1463,10 @@ def _titles_match(record, reference) -> bool:
     if reference is None:
         return True
     blob = getattr(getattr(record, "analysis", None), "analysis_data", None)
-    a = _normalize_text((blob.get("title") if isinstance(blob, dict) else "") or "")
+    title = blob.get("title") if isinstance(blob, dict) else ""
+    if not isinstance(title, str):
+        return False
+    a = _normalize_text(title or "")
     b = _normalize_text(getattr(reference, "title", "") or "")
     return a != "" and a == b
 
@@ -1942,7 +1956,14 @@ def validate_miner_article_intelligence_batch(
         if ad and isinstance(ad, dict):
             te = ad.get("title_embedding")
             if te and isinstance(te, list) and len(te) == EMBEDDING_DIM:
-                indexed.append((idx, article, np.array(te, dtype=np.float32)))
+                try:
+                    vec = np.array(te, dtype=np.float32)
+                except (TypeError, ValueError):
+                    vec = None
+                if vec is None or not np.all(np.isfinite(vec)):
+                    discrepancies.append({"article_index": idx, "reason": "malformed_analysis"})
+                    continue
+                indexed.append((idx, article, vec))
 
     if len(indexed) >= 3:
         for a in range(len(indexed)):

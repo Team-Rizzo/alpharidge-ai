@@ -33,8 +33,16 @@ _STOP = frozenset(
 Adjudicator = Callable[[str, List[dict]], List[dict]]
 
 
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+
+
+def _spaced(name) -> str:
+    """snake_case and camelCase written as words."""
+    return _CAMEL.sub(" ", str(name or "")).replace("_", " ")
+
+
 def _metric(name) -> str:
-    return _WS.sub(" ", str(name or "").strip().lower())
+    return _WS.sub(" ", _spaced(name).strip().lower())
 
 
 def _values_match(a: float, b: float) -> bool:
@@ -65,7 +73,7 @@ def claims_match(left, right) -> bool:
 
 
 def _words(name) -> frozenset:
-    text = unicodedata.normalize("NFKD", str(name or "").lower())
+    text = unicodedata.normalize("NFKD", _spaced(name).lower())
     text = "".join(c for c in text if not unicodedata.combining(c))
     return frozenset(w for w in _WORD.findall(text)
                      if len(w) >= 3 and w not in _STOP and not w.isdigit())
