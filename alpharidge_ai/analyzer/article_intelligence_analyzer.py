@@ -747,15 +747,17 @@ class ArticleIntelligenceAnalyzer:
         problem = ""
         if strict and llm_spend.paused():
             raise ReferenceUnavailable(f"{tool_name}: paused")
-        for _attempt in range(2 if strict else 1):
+        own_model = (model or self.model) == self.model
+        for attempt in range(2 if strict else 1):
+            auto = strict and own_model and attempt == 0 and llm_spend.auto_tools()
             response = None
             started = time.time()
             try:
                 response = self.client.chat.completions.create(
                     model=model or self.model,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[{"role": "user", "content": llm_spend.ask_for_tool(prompt, tool_name, auto)}],
                     tools=[tool],
-                    tool_choice={"type": "function", "function": {"name": tool_name}},
+                    tool_choice=llm_spend.tool_choice(tool_name, auto),
                     temperature=0,
                     max_tokens=4000,
                     **extra,
@@ -770,12 +772,19 @@ class ArticleIntelligenceAnalyzer:
                 elif not tc:
                     problem = "no tool calls returned"
                 else:
-                    return json.loads(tc[0].function.arguments)
+                    parsed = json.loads(tc[0].function.arguments)
+                    if auto:
+                        llm_spend.note_auto(True)
+                    return parsed
             except Exception as e:
                 if strict and llm_spend.is_key_limit(e):
                     llm_spend.pause(e)
                     raise ReferenceUnavailable(f"{tool_name}: key limit")
                 problem = f"failed: {e}"
+            if auto:
+                llm_spend.note_auto(False)
+                bt.logging.debug(f"[ARTICLE_INTEL] {tool_name}: {problem}; asking again")
+                continue
             detail = ""
             if strict and response is not None:
                 detail = (f" (provider={getattr(response, 'provider', None)}, "

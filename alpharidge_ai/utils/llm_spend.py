@@ -24,6 +24,7 @@ _last_report = [time.time()]
 _last_slow_warn = [0.0]
 _paused_until = [0.0]
 PAUSE_S = 600.0
+_auto = [0, 0]                               # tool calls answered on the first ask, retried
 
 
 def usage_body(client) -> dict:
@@ -93,8 +94,12 @@ def record(purpose: str, model: str, response=None, seconds: float = None) -> No
                            f"over the last {len(_latency)} calls")
     if due:
         total = sum(v[0] for _, v in rows)
+        with _lock:
+            answered, retried = _auto
+            _auto[0] = _auto[1] = 0
         bt.logging.info(f"[LLM_SPEND] ${total:.3f} over {span / 3600:.1f}h: " + "; ".join(
-            f"{p} {m.split('/')[-1]} ${v[0]:.3f} ({v[1]} calls)" for (p, m), v in rows))
+            f"{p} {m.split('/')[-1]} ${v[0]:.3f} ({v[1]} calls)" for (p, m), v in rows)
+            + f"; tool calls {answered} first ask, {retried} retried")
 
 
 def is_key_limit(error) -> bool:
@@ -116,3 +121,22 @@ def pause(error) -> None:
 
 def paused() -> bool:
     return time.time() < _paused_until[0]
+
+
+def auto_tools() -> bool:
+    """Whether the validator's own-model calls first ask without forcing the tool."""
+    from alpharidge_ai import config
+    return bool(getattr(config, "REFERENCE_TOOL_AUTO", True))
+
+
+def tool_choice(name: str, auto: bool):
+    return "auto" if auto else {"type": "function", "function": {"name": name}}
+
+
+def ask_for_tool(prompt: str, name: str, auto: bool) -> str:
+    return f"{prompt}\n\nAnswer only by calling {name}." if auto else prompt
+
+
+def note_auto(answered: bool) -> None:
+    with _lock:
+        _auto[0 if answered else 1] += 1

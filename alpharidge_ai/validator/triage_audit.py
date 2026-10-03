@@ -83,6 +83,14 @@ _LISTING = re.compile(
     r"|\$[A-Z]{2,5}\b")
 
 
+def _as_verdict(value) -> Optional[bool]:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in ("true", "false"):
+        return value.strip().lower() == "true"
+    return None
+
+
 def names_a_listing(title: str, body: str) -> bool:
     """Ticker or exchange notation anywhere in the article."""
     return bool(_LISTING.search(f"{title or ''} {body or ''}"))
@@ -111,32 +119,45 @@ class TriageAuditor:
         """True = confidently relevant, False = confidently not, None = no verdict."""
         if llm_spend.paused():
             return None
-        try:
-            extra = llm_spend.request_body(self._client)
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=[{"role": "user", "content": _PROMPTS[framing].format(
-                    title=(title or "")[:300],
-                    body=(body or "")[:self._body_chars])}],
-                tools=[_TOOL],
-                tool_choice={"type": "function",
-                             "function": {"name": "judge_market_relevance"}},
-                temperature=0,
-                max_tokens=1000,
-                **({"extra_body": extra} if extra else {}),
-            )
-            llm_spend.record("triage_audit", self._model, response)
-            calls = response.choices[0].message.tool_calls
-            if not calls:
+        name = "judge_market_relevance"
+        prompt = _PROMPTS[framing].format(title=(title or "")[:300],
+                                          body=(body or "")[:self._body_chars])
+        for auto in ((True, False) if llm_spend.auto_tools() else (False,)):
+            try:
+                extra = llm_spend.request_body(self._client)
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=[{"role": "user", "content": llm_spend.ask_for_tool(prompt, name, auto)}],
+                    tools=[_TOOL],
+                    tool_choice=llm_spend.tool_choice(name, auto),
+                    temperature=0,
+                    max_tokens=1000,
+                    **({"extra_body": extra} if extra else {}),
+                )
+                llm_spend.record("triage_audit", self._model, response)
+                calls = response.choices[0].message.tool_calls
+                payload = json.loads(calls[0].function.arguments) if calls else None
+            except Exception as e:
+                if llm_spend.is_key_limit(e):
+                    llm_spend.pause(e)
+                    return None
+                if auto:
+                    llm_spend.note_auto(False)
+                    continue
+                bt.logging.warning(f"[TRIAGE_AUDIT] verdict unavailable: {e}")
                 return None
-            payload = json.loads(calls[0].function.arguments)
-            confidence = float(payload.get("confidence", 0.0))
+            if payload is None:
+                if auto:
+                    llm_spend.note_auto(False)
+                    continue
+                return None
+            if auto:
+                llm_spend.note_auto(True)
+            try:
+                confidence = float(payload.get("confidence", 0.0))
+            except (TypeError, ValueError):
+                return None
             if confidence < self._min_confidence:
                 return None
-            return bool(payload["relevant"])
-        except Exception as e:
-            if llm_spend.is_key_limit(e):
-                llm_spend.pause(e)
-                return None
-            bt.logging.warning(f"[TRIAGE_AUDIT] verdict unavailable: {e}")
-            return None
+            return _as_verdict(payload.get("relevant"))
+        return None
