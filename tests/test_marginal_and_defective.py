@@ -146,3 +146,29 @@ def test_a_repeatedly_defective_article_is_retired(monkeypatch):
     assert v.retired == []
     v._note_defective(["5", "6"])
     assert v.retired == ["5"]
+
+
+def test_a_broken_confirming_article_moves_to_another_spare(monkeypatch):
+    # spares are drawn 2, 3, 4; article 2 is garbled, so 3 confirms
+    ok, r = _run(monkeypatch, {1: 0.38, 2: 0.9, 3: 0.9, 4: 0.9}, texts={2: GARBLED})
+    assert ok and r["marginal_used"] and r["defective_ids"] == ["2"]
+    assert not r["discrepancies"]
+
+
+def test_with_no_spare_left_the_first_result_stands(monkeypatch):
+    ok, r = _run(monkeypatch, {1: 0.38, 2: 0.9}, n=2, texts={2: GARBLED})
+    assert not ok and [d["summary_agreement"] for d in r["discrepancies"]] == [0.38]
+
+
+def test_the_marginal_draw_does_not_use_a_replacement(monkeypatch):
+    # marginal on 1 -> confirm on 2 (garbled) -> replaced by 3 (garbled) -> replaced by 4
+    ok, r = _run(monkeypatch, {1: 0.38, 2: 0.9, 3: 0.9, 4: 0.9, 5: 0.9},
+                 n=5, texts={2: GARBLED, 3: GARBLED})
+    assert ok and r["defective_ids"] == ["2", "3"] and not r["discrepancies"]
+
+
+def test_no_replacement_while_spending_is_paused(monkeypatch):
+    from alpharidge_ai.utils import llm_spend
+    monkeypatch.setattr(llm_spend, "paused", lambda: True)
+    ok, r = _run(monkeypatch, {1: 0.9, 2: 0.9}, n=2, texts={1: GARBLED})
+    assert not ok and r["no_verdict"] and r["total_sampled"] == 0

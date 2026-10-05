@@ -1791,12 +1791,26 @@ def validate_miner_article_intelligence_batch(
     band_low = float(_cfg_get("MARGINAL_BAND_LOW", 0.35))
     confirm_floor = float(_cfg_get("MARGINAL_CONFIRM_FLOOR", 0.50))
 
+    replaced = 0              # replacement draws for samples we could not grade
+
     def _reinstate():
         nonlocal skipped, confirm
         if confirm is not None:
             skipped -= 1
             discrepancies.append(confirm["discrepancy"])
             confirm = None
+
+    def _replace(is_confirm):
+        """Draw a spare for a sample we could not grade. A confirmation that hit our own
+        problem moves to the spare; with none left, the first result stands."""
+        nonlocal replaced
+        if spares and replaced < SAMPLE_REPLACEMENTS and not llm_spend.paused():
+            replaced += 1
+            sampled.append(spares.pop())
+            if is_confirm:
+                confirm["index"] = len(sampled) - 1
+        elif is_confirm:
+            _reinstate()
 
     for i, article in enumerate(sampled):
         miner_analysis = article.analysis
@@ -1826,10 +1840,7 @@ def validate_miner_article_intelligence_batch(
             defective_ids.append(str(getattr(article, "id", "")))
             bt.logging.warning(f"[V2_VALIDATE] {defect} article {getattr(article, 'id', '')}; "
                                f"sample set aside hk={miner_hotkey}")
-            if is_confirm:
-                _reinstate()
-            elif spares and skipped <= SAMPLE_REPLACEMENTS:
-                sampled.append(spares.pop())
+            _replace(is_confirm)
             continue
         validator_intel = analyzer.analyze(
             article_id=article.id,
@@ -1846,10 +1857,7 @@ def validate_miner_article_intelligence_batch(
             skipped += 1
             bt.logging.warning(f"[V2_VALIDATE] no reference for {getattr(article, 'id', '')}; "
                                f"sample skipped hk={miner_hotkey}")
-            if is_confirm:
-                _reinstate()
-            elif spares and skipped <= SAMPLE_REPLACEMENTS and not llm_spend.paused():
-                sampled.append(spares.pop())
+            _replace(is_confirm)
             continue
 
         try:
