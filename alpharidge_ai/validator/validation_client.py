@@ -98,6 +98,21 @@ class ValidationClient:
         except Exception as e:
             bt.logging.warning(f"[CONTROLLER] Could not report the step: {e}")
 
+    def _channel_summary(self, registered) -> str:
+        """Per-channel reputation across registered hotkeys: p10/p50/p90 of each channel."""
+        state = getattr(self._validator._reputation_store, "state", {}) or {}
+        by = {}
+        for hk in registered:
+            for name, ch in ((state.get(hk) or {}).get("c") or {}).items():
+                if name != "legacy" and isinstance(ch, dict) and ch.get("n"):
+                    by.setdefault(name, []).append(float(ch.get("r", 0.0)))
+        parts = []
+        for name in sorted(by):
+            xs = sorted(by[name])
+            q = lambda f: xs[min(len(xs) - 1, int(f * len(xs)))]
+            parts.append(f"{name}={q(0.1):.3f}/{q(0.5):.3f}/{q(0.9):.3f}(n={len(xs)})")
+        return "[REPUTATION] channels p10/p50/p90 " + " ".join(parts)
+
     def _weights_for(self, rewards, window_blocks: int, context: str):
         """The weight vector to set, from whichever settlement is in force.
 
@@ -961,6 +976,8 @@ class ValidationClient:
                                 f"{name}={warm}/{total}"
                                 for name, (warm, total) in ready.items()
                                 if name != "legacy"))
+                        bt.logging.info(self._channel_summary(
+                            list(getattr(self._validator.metagraph, "hotkeys", ()) or ())))
                     except Exception as e:
                         bt.logging.debug(f"[REPUTATION] finalize failed: {e}")
                     if int(target_epoch) != getattr(self, "_last_rep_snapshot_epoch", -1):

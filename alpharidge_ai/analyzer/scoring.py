@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 import os
 import random
+import re
 import threading
 import bittensor as bt
 import numpy as np
@@ -980,6 +981,20 @@ TIER3_THRESHOLD = float(os.getenv("TIER3_THRESHOLD", "0.70"))
 SAMPLE_REPLACEMENTS = 2
 AUDIT_MAX_FAILED_REFERENCES = 2
 
+# UTF-8 Cyrillic decoded as a single-byte charset. No false positives on 400
+# Vietnamese, Polish, Romanian and Turkish articles.
+_MOJIBAKE = re.compile(r"(đ[ŤťĺşžŻŞ░▓]|Đ[ÇĂŇĆ]){2}")
+
+
+def defective_text(text) -> str:
+    """Why an article cannot be analysed, judged from its text alone, or "" if it can."""
+    body = (text or "").strip()
+    if len(body) < int(_cfg_get("DEFECTIVE_MIN_CHARS", 40)):
+        return "empty"
+    if _MOJIBAKE.search(body[:4000]):
+        return "garbled"
+    return ""
+
 
 def _ordinal_score(pred: str, gold: str, ladder: List[str]) -> float:
     """1.0 on exact match; otherwise 1 - normalized ladder distance. 0.0 if off-ladder."""
@@ -1713,6 +1728,7 @@ def validate_miner_article_intelligence_batch(
     auditor=None,
     block=0,
     schema_cutover_block=0,
+    marginal_allowed=False,
 ) -> Tuple[bool, Dict]:
     """Validate a miner's article batch using V2 4-tier validation.
 
@@ -1769,6 +1785,18 @@ def validate_miner_article_intelligence_batch(
     reference_irrelevant = []  # (article_id, bool) — True when our own reference
     # says the article is clearly outside the rubric; feeds triage FP events
     # and negative-canary selection
+    defective_ids = []        # samples set aside because the article itself is broken
+    confirm = None            # a marginal content mismatch awaiting its second sample
+    marginal_used = False
+    band_low = float(_cfg_get("MARGINAL_BAND_LOW", 0.35))
+    confirm_floor = float(_cfg_get("MARGINAL_CONFIRM_FLOOR", 0.50))
+
+    def _reinstate():
+        nonlocal skipped, confirm
+        if confirm is not None:
+            skipped -= 1
+            discrepancies.append(confirm["discrepancy"])
+            confirm = None
 
     for i, article in enumerate(sampled):
         miner_analysis = article.analysis
@@ -1789,6 +1817,20 @@ def validate_miner_article_intelligence_batch(
 
         ref = (reference_by_id or {}).get(str(getattr(article, "id", "")))
         src = ref or article
+        is_confirm = confirm is not None and confirm["index"] == i
+        # Only our own copy can show a defect; a miner's copy could be blanked to dodge.
+        defect = defective_text(getattr(ref, "content", None)) if ref is not None else ""
+        if defect:
+            # The article, not the miner: neither passed nor failed, and replaced.
+            skipped += 1
+            defective_ids.append(str(getattr(article, "id", "")))
+            bt.logging.warning(f"[V2_VALIDATE] {defect} article {getattr(article, 'id', '')}; "
+                               f"sample set aside hk={miner_hotkey}")
+            if is_confirm:
+                _reinstate()
+            elif spares and skipped <= SAMPLE_REPLACEMENTS:
+                sampled.append(spares.pop())
+            continue
         validator_intel = analyzer.analyze(
             article_id=article.id,
             url=src.url,
@@ -1804,7 +1846,9 @@ def validate_miner_article_intelligence_batch(
             skipped += 1
             bt.logging.warning(f"[V2_VALIDATE] no reference for {getattr(article, 'id', '')}; "
                                f"sample skipped hk={miner_hotkey}")
-            if spares and skipped <= SAMPLE_REPLACEMENTS and not llm_spend.paused():
+            if is_confirm:
+                _reinstate()
+            elif spares and skipped <= SAMPLE_REPLACEMENTS and not llm_spend.paused():
                 sampled.append(spares.pop())
             continue
 
@@ -1818,17 +1862,38 @@ def validate_miner_article_intelligence_batch(
             agreement = _summary_agreement(miner_intel, validator_intel)
             if agreement is not None:
                 bt.logging.info(f"[V2_VALIDATE] summary_agreement={agreement:.3f} id={getattr(article, 'id', '')} hk={miner_hotkey}")
-                if agreement < float(_cfg_get("SUMMARY_AGREEMENT_FLOOR", 0.4)):
-                    discrepancies.append({
+                floor_gate = float(_cfg_get("SUMMARY_AGREEMENT_FLOOR", 0.4))
+                if is_confirm and agreement < confirm_floor:
+                    _reinstate()
+                if agreement < floor_gate:
+                    disc = {
                         "article_index": i,
                         "resource_id": str(getattr(article, "id", "")),
                         "reason": "article_content_mismatch",
                         "article_preview": (getattr(src, "title", "") or "")[:100],
                         "summary_agreement": agreement,   # display-only: how close vs the 0.40 floor
-                    })
+                    }
+                    if (marginal_allowed and not marginal_used and not is_confirm
+                            and agreement >= band_low and spares and not llm_spend.paused()):
+                        # Close to the gate: a second sample decides, at a stricter bar.
+                        marginal_used = True
+                        skipped += 1
+                        sampled.append(spares.pop())
+                        confirm = {"index": len(sampled) - 1, "discrepancy": disc}
+                        bt.logging.info(f"[V2_VALIDATE] marginal mismatch {agreement:.3f}; "
+                                        f"confirming on a second sample hk={miner_hotkey}")
+                        continue
+                    discrepancies.append(disc)
                     continue
+            elif is_confirm:
+                _reinstate()
 
         is_valid, composite, details = validate_article_intelligence(miner_intel, validator_intel)
+        if is_confirm and confirm is not None:
+            if is_valid:
+                confirm = None            # cleared: the first sample was a close call
+            else:
+                _reinstate()
         if is_valid:
             matches += 1
             total_composite += composite
@@ -1997,6 +2062,7 @@ def validate_miner_article_intelligence_batch(
                     "cosine": miner_cos,
                 })
 
+    _reinstate()      # a confirmation that never reached a verdict leaves the first result
     graded = len(sampled) - skipped
     no_verdict = graded == 0 and len(sampled) > 0 and not discrepancies
     batch_valid = matches == graded and len(discrepancies) == 0 and not no_verdict
@@ -2010,6 +2076,8 @@ def validate_miner_article_intelligence_batch(
         "faithfulness_scores": faithfulness_scores,
         "reference_irrelevant": reference_irrelevant,
         "floor_results": floor_results,
+        "defective_ids": defective_ids,
+        "marginal_used": marginal_used,
         "floor_quality": batch_floor_quality(floor_stats),
         "audit_observations": audit_observations,
     }

@@ -87,3 +87,45 @@ class AdaptiveDispatchMetrics:
             f"on_cooldown={on_cooldown}",
         ]
         return " ".join(parts)
+
+
+class DispatchHealth:
+    """Dispatch volume against this validator's own recent baseline.
+
+    Counts batches and article cycles in hourly buckets and reports when the last hour
+    falls below `min_fraction` of the median hour, once enough history exists.
+    """
+
+    def __init__(self, bucket_s: float = 3600.0, history: int = 24, min_history: int = 6,
+                 repeat_s: float = 1800.0):
+        self._bucket_s = float(bucket_s)
+        self._history = int(history)
+        self._min_history = int(min_history)
+        self._repeat_s = float(repeat_s)
+        self._buckets: Dict[int, Dict[str, int]] = {}
+        self._last_alert = float("-inf")
+
+    def note(self, kind: str, now: float, n: int = 1) -> None:
+        b = int(now // self._bucket_s)
+        counts = self._buckets.setdefault(b, {})
+        counts[kind] = counts.get(kind, 0) + n
+        for old in [k for k in self._buckets if k < b - self._history]:
+            del self._buckets[old]
+
+    def check(self, now: float, min_fraction: float) -> List[str]:
+        """Alerts for the hour that just ended, at most once per `repeat_s`."""
+        current = int(now // self._bucket_s)
+        last = current - 1
+        past = [k for k in self._buckets if k < last]
+        if len(past) < self._min_history or now - self._last_alert < self._repeat_s:
+            return []
+        out = []
+        for kind in ("batches", "cycles"):
+            base = statistics.median(self._buckets[k].get(kind, 0) for k in past)
+            got = self._buckets.get(last, {}).get(kind, 0)
+            if base > 0 and got < min_fraction * base:
+                out.append(f"[DISPATCH_HEALTH] {kind} last hour {got} vs typical {base:.0f} "
+                           f"({100.0 * got / base:.0f}%)")
+        if out:
+            self._last_alert = now
+        return out

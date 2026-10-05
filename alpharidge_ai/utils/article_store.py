@@ -132,10 +132,23 @@ class ArticleStore:
         """
         article_id = str(article_id)
         if article_id in self._articles:
+            if article_id in getattr(self, "_retired", ()):
+                return
             self._articles[article_id].status = ArticleStatus.UNPROCESSED
             self._articles[article_id].start_time = None
         else:
             raise KeyError(f"Article ID {article_id} not found")
+
+    def retire(self, article_id: str) -> None:
+        """Take an article out of dispatch for good: it is not sent to another miner."""
+        article_id = str(article_id)
+        if article_id in self._articles:
+            retired = self.__dict__.setdefault("_retired", set())
+            if len(retired) > 50000:
+                retired.clear()
+            retired.add(article_id)
+            self._articles[article_id].status = ArticleStatus.PROCESSED
+            self._articles[article_id].start_time = None
 
     def get_article(self, article_id: str) -> NewsArticleForScoring:
         """

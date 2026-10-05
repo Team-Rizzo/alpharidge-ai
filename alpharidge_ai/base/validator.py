@@ -688,6 +688,12 @@ class BaseValidatorNeuron(BaseNeuron):
                 f"Scores contain NaN values. This may be due to a lack of responses from miners, or a bug in your reward functions."
             )
 
+        # All-zero scores carry no information, and the chain would read them as a
+        # uniform vector. Keep the last weights until there is something to set.
+        if not np.any(np.nan_to_num(self.scores) > 0):
+            bt.logging.warning("set_weights skipped: no scores yet (keeping last on-chain weights)")
+            return
+
         # Calculate the average reward for each uid across non-zero values.
         # Replace any NaN values with 0.
         # Compute the norm of the scores

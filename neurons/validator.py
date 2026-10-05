@@ -19,6 +19,7 @@ import copy
 import gc
 import random
 import secrets
+import functools
 import time
 from typing import List, Optional, Set
 
@@ -56,9 +57,9 @@ from alpharidge_ai.utils.uids import get_random_uids, get_alive_uids
 from alpharidge_ai.utils import draw_log
 from alpharidge_ai.utils.liveness import LivenessRoster
 from alpharidge_ai.utils.dispatch import (CARRY_MAX_BATCHES, FLOOR_FRAC, ShadowCredit,
-                                          coverage_depth_select, credit_select,
+                                          coverage_depth_select, credit_select, deal,
                                           owed_share, speed_weights)
-from alpharidge_ai.utils.dispatch_metrics import AdaptiveDispatchMetrics
+from alpharidge_ai.utils.dispatch_metrics import AdaptiveDispatchMetrics, DispatchHealth
 from alpharidge_ai.utils.tweet_store import TweetStore
 from alpharidge_ai.utils.telegram_store import TelegramStore
 from alpharidge_ai.utils.article_store import ArticleStore
@@ -218,6 +219,7 @@ class Validator(BaseValidatorNeuron):
         self._liveness = LivenessRoster()
         # Per-cycle pilot metrics (adaptive dispatch).
         self._adaptive_metrics = AdaptiveDispatchMetrics()
+        self._dispatch_health = DispatchHealth()
 
         # Article triage: in-memory canary pool + cached article objects.
         self._canary_pool = CanaryPool(self._triage_cfg())
@@ -1622,10 +1624,13 @@ class Validator(BaseValidatorNeuron):
             sample_size = int(getattr(config, "VALIDATION_SAMPLE_SIZE", 1))
             gscorer = self._get_graded_scorer() if config.REPUTATION_SCORING_ENABLED else None
             reference_by_id = {str(a.id): a for a in sent_batch}
+            marginal_ok = not verification and self._marginal_available(miner_hotkey)
             try:
                 is_valid, validation_result = await loop.run_in_executor(
                     self._validation_executor,
-                    validate_miner_article_intelligence_batch,
+                    functools.partial(
+                        validate_miner_article_intelligence_batch,
+                        marginal_allowed=marginal_ok),
                     track_batch, self._article_intel_analyzer, sample_size, None, gscorer,
                     reference_by_id, miner_hotkey,
                     auditor,
@@ -1635,6 +1640,9 @@ class Validator(BaseValidatorNeuron):
             except Exception as e:
                 bt.logging.warning(f"[VALIDATION] validation raised for {miner_hotkey}: {e!r}")
                 is_valid, validation_result = False, {"no_verdict": True, "discrepancies": []}
+            if (validation_result or {}).get("marginal_used"):
+                self._spend_marginal(miner_hotkey)
+            self._note_defective((validation_result or {}).get("defective_ids") or [])
             self._log_audit(miner_hotkey,
                             (validation_result or {}).get("audit_observations"),
                             live=oracle_live)
@@ -1892,11 +1900,54 @@ class Validator(BaseValidatorNeuron):
             task = asyncio.create_task(self._dispatch_telegram_miner_batch(miner_batch, int(uid)))
             self._track_task(task)
 
+    def _marginal_available(self, hotkey) -> bool:
+        """Whether this miner still has today's marginal second sample."""
+        per_day = int(getattr(config, "MARGINAL_PER_DAY", 1) or 0)
+        if per_day <= 0 or not hotkey:
+            return False
+        day, used = getattr(self, "_marginal_used", {}).get(hotkey, (None, 0))
+        return day != int(time.time() // 86400) or used < per_day
+
+    def _spend_marginal(self, hotkey) -> None:
+        book = self.__dict__.setdefault("_marginal_used", {})
+        today = int(time.time() // 86400)
+        day, used = book.get(hotkey, (None, 0))
+        book[hotkey] = (today, (used if day == today else 0) + 1)
+
+    def _note_defective(self, article_ids) -> None:
+        """Count defective samples per article and stop dispatching repeat offenders."""
+        limit = int(getattr(config, "DEFECTIVE_RETRY_LIMIT", 2) or 0)
+        counts = self.__dict__.setdefault("_defective_counts", {})
+        for aid in article_ids:
+            counts[aid] = counts.get(aid, 0) + 1
+            if limit and counts[aid] >= limit:
+                try:
+                    self._article_store.retire(aid)
+                    bt.logging.warning(f"[DEFECTIVE] article {aid} retired after "
+                                       f"{counts[aid]} defective sample(s)")
+                except Exception:
+                    pass
+        if len(counts) > 50000:
+            counts.clear()
+
+    @staticmethod
+    def _cut_batches(articles, sizes):
+        """Batches of the given sizes: dealt across the tick's articles, or contiguous
+        runs when dealing is switched off."""
+        if getattr(config, "DISPATCH_DEAL", True):
+            return deal(articles, sizes)
+        out, i = [], 0
+        for n in sizes:
+            out.append(list(articles[i:i + n]))
+            i += n
+        return out
+
     async def _on_articles(self, articles: List[NewsArticleForScoring]):
         if not articles:
             return
 
         bt.logging.info(f"[VALIDATION] Processing {len(articles)} articles in batch")
+        self._dispatch_health.note("cycles", time.time())
         for article in articles:
             self._article_store.add_article(article, set_as_processing=False, overwrite=False)
         await asyncio.get_running_loop().run_in_executor(
@@ -1917,7 +1968,7 @@ class Validator(BaseValidatorNeuron):
             base = max(1, int(getattr(config, "MINER_BATCH_SIZE", 12)))
             n_slots = max(1, -(-len(articles) // base))  # upper bound on batches this tick
             ordered = self._select_article_targets([None] * n_slots, exclude)
-            targets = []
+            chosen, sizes = [], []
             cursor = 0
             for uid, _placeholder in ordered:
                 if cursor >= len(articles):
@@ -1928,17 +1979,18 @@ class Validator(BaseValidatorNeuron):
                 except Exception:
                     self._refund_credit(uid)
                     continue
-                miner_batch = articles[cursor:cursor + self._article_cooldown.batch_size(hk)]
-                if not miner_batch:
+                size = min(self._article_cooldown.batch_size(hk), len(articles) - cursor)
+                if size <= 0:
                     self._refund_credit(uid)
                     continue
-                cursor += len(miner_batch)
-                targets.append((int(uid), miner_batch))
+                cursor += size
+                chosen.append(int(uid))
+                sizes.append(size)
+            targets = list(zip(chosen, self._cut_batches(articles, sizes)))
         else:
-            miner_batches = []
-            for i in range(0, len(articles), config.MINER_BATCH_SIZE):
-                miner_batches.append(articles[i:i + config.MINER_BATCH_SIZE])
-            targets = self._select_article_targets(miner_batches, exclude)
+            size = config.MINER_BATCH_SIZE
+            sizes = [min(size, len(articles) - i) for i in range(0, len(articles), size)]
+            targets = self._select_article_targets(self._cut_batches(articles, sizes), exclude)
 
         verify_rng = random.Random()
 
@@ -2610,6 +2662,7 @@ class Validator(BaseValidatorNeuron):
                 timeout=send_timeout,
                 deserialize=True
             )
+            self._dispatch_health.note("batches", time.time())
             if adaptive:
                 self._adaptive_metrics.incr("dispatched")
             if not responses[0].dendrite.status_code == 200:
@@ -2829,6 +2882,11 @@ class Validator(BaseValidatorNeuron):
                 self._telegram_analyzer._cache.log_stats("TELEGRAM_LLM_CACHE")
             if hasattr(self._news_analyzer, '_cache'):
                 self._news_analyzer._cache.log_stats("NEWS_LLM_CACHE")
+
+        frac = float(getattr(config, "DISPATCH_HEALTH_MIN_FRACTION", 0.5) or 0.0)
+        if frac > 0:
+            for line in self._dispatch_health.check(time.time(), frac):
+                bt.logging.error(line)
 
         # Adaptive dispatch pilot metrics: one parseable line per cycle, then reset.
         if self.step % 100 == 0 and getattr(config, "ADAPTIVE_DISPATCH_ENABLED", False):

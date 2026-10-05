@@ -302,6 +302,17 @@ def _as_bool(v) -> bool:
 # defaults reproduce today's behaviour exactly. Served by the API at
 # /config/subnet and overridable per-validator via OVERRIDE_<key>.
 ADAPTIVE_DISPATCH_ENABLED = _as_bool(os.getenv("ADAPTIVE_DISPATCH_ENABLED", "false"))
+# Deal each tick's articles across its batches instead of cutting contiguous runs.
+DISPATCH_DEAL = _as_bool(os.getenv("DISPATCH_DEAL", "true"))
+# Alert when an hour's dispatch falls below this share of the typical hour (0 = off).
+DISPATCH_HEALTH_MIN_FRACTION = float(os.getenv("DISPATCH_HEALTH_MIN_FRACTION", "0.5"))
+# A content-mismatch sample in [MARGINAL_BAND_LOW, SUMMARY_AGREEMENT_FLOOR) is confirmed on a
+# second sample that must reach MARGINAL_CONFIRM_FLOOR; at most MARGINAL_PER_DAY per miner.
+MARGINAL_BAND_LOW = float(os.getenv("MARGINAL_BAND_LOW", "0.35"))
+MARGINAL_CONFIRM_FLOOR = float(os.getenv("MARGINAL_CONFIRM_FLOOR", "0.50"))
+MARGINAL_PER_DAY = int(os.getenv("MARGINAL_PER_DAY", "1"))
+# An article set aside as defective this many times is no longer dispatched.
+DEFECTIVE_RETRY_LIMIT = int(os.getenv("DEFECTIVE_RETRY_LIMIT", "2"))
 DISPATCH_WINDOW_MIN = int(os.getenv("DISPATCH_WINDOW_MIN", "1"))
 DISPATCH_WINDOW_CAP_PCT = float(os.getenv("DISPATCH_WINDOW_CAP_PCT", "0.15"))
 # Budget DISPATCH_WINDOW_CAP_PCT is a percentage of. Was hardwired to
@@ -454,6 +465,12 @@ _REMOTE_CONFIG_KEYS = {
     "DISPATCH_LATE_FRACTION":     (float, "DISPATCH_LATE_FRACTION"),
     "DISPATCH_ACK_TIMEOUT_S":     (float, "DISPATCH_ACK_TIMEOUT_S"),
     "DISPATCH_MODE":              (str,   "DISPATCH_MODE"),
+    "DISPATCH_DEAL":              (_as_bool, "DISPATCH_DEAL"),
+    "DISPATCH_HEALTH_MIN_FRACTION": (float, "DISPATCH_HEALTH_MIN_FRACTION"),
+    "MARGINAL_BAND_LOW":          (float, "MARGINAL_BAND_LOW"),
+    "MARGINAL_CONFIRM_FLOOR":     (float, "MARGINAL_CONFIRM_FLOOR"),
+    "MARGINAL_PER_DAY":           (int,   "MARGINAL_PER_DAY"),
+    "DEFECTIVE_RETRY_LIMIT":      (int,   "DEFECTIVE_RETRY_LIMIT"),
     "DISPATCH_CREDIT_SHADOW":     (_as_bool, "DISPATCH_CREDIT_SHADOW"),
     "DISPATCH_SPEED_BONUS":       (float, "DISPATCH_SPEED_BONUS"),
     "DISPATCH_QUALITY_GATE_Z":    (float, "DISPATCH_QUALITY_GATE_Z"),

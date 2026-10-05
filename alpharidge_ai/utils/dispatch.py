@@ -116,6 +116,27 @@ TRIAL_EPOCHS = 3
 PROBE_EPOCHS = 6
 
 
+def deal(items: Sequence, sizes: Sequence[int]) -> List[list]:
+    """Deal items round-robin into batches of the given sizes.
+
+    The same items go out as a contiguous cut of the same sizes would send (the first
+    `sum(sizes)`), but each batch draws from across the whole list, so no batch is a
+    run of consecutive items from one stretch of the feed.
+    """
+    sizes = [max(0, int(s)) for s in sizes]
+    items = list(items)[:sum(sizes)]
+    batches: List[list] = [[] for _ in sizes]
+    open_slots = [j for j, s in enumerate(sizes) if s > 0]
+    k = 0
+    for item in items:
+        while len(batches[open_slots[k]]) >= sizes[open_slots[k]]:
+            open_slots.pop(k)
+            k %= len(open_slots)
+        batches[open_slots[k]].append(item)
+        k = (k + 1) % len(open_slots)
+    return batches
+
+
 def owed_share(tracker, hotkey: str, epoch: int) -> bool:
     """Whether a miner accrues a full share: returning work, starting up, or due a probe."""
     return (tracker.delivered_since(hotkey, RECENCY_S)

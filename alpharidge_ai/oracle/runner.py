@@ -190,7 +190,9 @@ def audit_article(article_id: int, article_text: str, miner_intel, grader_intel,
         path=selector.POOL, grader_model=choice.grader_model,
         detail=(f"p={score.precision:.2f} r={score.recall:.2f} "
                 f"conf={score.confidence:.2f} residual={len(decided.residual)} "
-                f"submitted={len(first[0]) + len(q_miner)} schema={verdict.reason}"),
+                f"submitted={len(first[0]) + len(q_miner)} schema={verdict.reason}"
+                + ("" if score_v2 is None else
+                   f" v2_p={score_v2.precision:.2f} v2_r={score_v2.recall:.2f}")),
         score_v2=(None if score_v2 is None
                   else score_v2.observation * getattr(model, "audit_v2_scale", model.scale)))
 
