@@ -787,8 +787,9 @@ class ArticleIntelligenceAnalyzer:
                 continue
             detail = ""
             if strict and response is not None:
+                first = (getattr(response, "choices", None) or [None])[0]
                 detail = (f" (provider={getattr(response, 'provider', None)}, "
-                          f"finish_reason={getattr(response.choices[0], 'finish_reason', None)})")
+                          f"finish_reason={getattr(first, 'finish_reason', None)})")
             bt.logging.warning(f"[ARTICLE_INTEL] {tool_name}: {problem}{detail}")
             if not strict:
                 return {}

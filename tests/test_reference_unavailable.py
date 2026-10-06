@@ -209,3 +209,11 @@ def test_a_price_ceiling_is_sent(monkeypatch):
         monkeypatch.setattr(config, "REFERENCE_PROVIDER_MAX_PRICE", broken, raising=False)
         body = llm_spend.request_body(types.SimpleNamespace(base_url="https://openrouter.ai/api/v1"))
         assert "max_price" not in body["provider"]
+
+
+def test_an_error_body_without_choices_is_a_clean_no_reference():
+    empty = types.SimpleNamespace(provider="p1", choices=None)
+    seen = []
+    with pytest.raises(ReferenceUnavailable):
+        _analyzer([empty, empty], seen)._llm_call("p", {}, "t", strict=True)
+    assert len(seen) == 2
