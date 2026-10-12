@@ -112,6 +112,11 @@ class HarnessValidator:
     _feed_pos_canaries = validator_module.Validator._feed_pos_canaries
     _inject_canaries = validator_module.Validator._inject_canaries
     _grade_triage = validator_module.Validator._grade_triage
+    _value_grounded_item = validator_module.Validator._value_grounded_item
+    _judge_claims = validator_module.Validator._judge_claims
+    _get_relevance_judge = validator_module.Validator._get_relevance_judge
+    _premium_ok = validator_module.Validator._premium_ok
+    _batch_zeroed = validator_module.Validator._batch_zeroed
     _record_triage_observations = validator_module.Validator._record_triage_observations
     _apply_triage_outcome = validator_module.Validator._apply_triage_outcome
     _mint_neg_canaries = validator_module.Validator._mint_neg_canaries
@@ -249,6 +254,7 @@ class TestEndToEnd:
         assert v._miner_reward.points == 1 + 6   # fee + only the real one
 
     def test_audited_relevance_claims_on_junk_are_unpaid(self, stage, triage_on, monkeypatch):
+        monkeypatch.setattr(config, "TRIAGE_JUDGE_ALL", False, raising=False)   # sampled-audit mode
         monkeypatch.setattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 5, raising=False)
         v = HarnessValidator()
         v._triage_auditor = _Judge()
@@ -256,12 +262,14 @@ class TestEndToEnd:
                  article(3, JUNK_ARTICLE)]
         returned = mine(stage, batch, strategy="spam")
         res = v._grade_triage(returned, batch, "hk4")
-        assert res.relevance_audited == 3 and sorted(res.false_positive_ids) == [2, 3]
-        assert v._article_cooldown.relevance_audit("hk4") == pytest.approx((3.0, 2.0), abs=1e-3)
+        # Audits are drawn among claims the gazetteer does not already confirm.
+        assert res.relevance_audited == 2 and sorted(res.false_positive_ids) == [2, 3]
+        assert v._article_cooldown.relevance_audit("hk4") == pytest.approx((2.0, 2.0), abs=1e-3)
         v._apply_triage_outcome(returned, "hk4", res, fp_ids=set(res.false_positive_ids))
         assert v._miner_reward.points == 1 + 6
 
     def test_verification_lane_premium(self, stage, triage_on, monkeypatch):
+        monkeypatch.setattr(config, "TRIAGE_JUDGE_ALL", False, raising=False)   # sampled-audit mode
         monkeypatch.setattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 5, raising=False)
         v = HarnessValidator()
         v._triage_auditor = _Judge()
@@ -623,6 +631,7 @@ class TestBorderlineLane:
         returned = [self._flagged(art, MACRO_ARTICLE, "valuable", {
             "event_fingerprint": {"content_hash": "x"},
             "economic_data": [{"event_name": "rate decision"}],
+            "assets": [{"ticker": "BRL", "asset_name": "central bank of Brazil"}],
         })]
         res = v._grade_triage(returned, [art], "hk")
         assert res.borderline_valuable_ids == [1] and not res.events
@@ -664,7 +673,8 @@ class TestBorderlineLane:
         assert v._miner_reward.points == 1              # fee only
         assert 5 in v._article_store.reset
 
-    def test_flag_contradicting_own_analysis_is_flagged_and_resets(self, stage, triage_on):
+    def test_flag_contradicting_own_analysis_is_flagged_and_resets(self, stage, triage_on, monkeypatch):
+        monkeypatch.setattr(validator_module.config, "BORDERLINE_VALUE_GROUNDED", False, raising=False)
         v = HarnessValidator()
         art = article(3, JUNK_ARTICLE)
         # Claims not_valuable while the analysis shows economic data.

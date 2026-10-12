@@ -62,6 +62,7 @@ class MinerCooldownTracker:
         self._gated_out: Dict[str, bool] = {}     # speed bonus withheld (quality gate)
         self._relevance: Dict[str, list] = {}     # [kept, seen, unix] decayed triage counts
         self._rel_audit: Dict[str, list] = {}     # [audited, failed, unix] decayed
+        self._judged: Dict[str, list] = {}        # [judged, not relevant, unix] decayed
         self._cap: float = None                   # per-tick anti-monopoly cap; None => from config
 
         # ---- Faithfulness cooldown (2026-07-09) ----
@@ -108,6 +109,7 @@ class MinerCooldownTracker:
                 "gated_out": self._gated_out,
                 "relevance": self._relevance,
                 "rel_audit": self._rel_audit,
+                "judged": self._judged,
             }))
             tmp.replace(path)
         except Exception as e:
@@ -152,6 +154,8 @@ class MinerCooldownTracker:
                                for k, v in (raw.get("relevance") or {}).items() if len(v) == 3}
             self._rel_audit = {k: [float(v[0]), float(v[1]), float(v[2])]
                                for k, v in (raw.get("rel_audit") or {}).items() if len(v) == 3}
+            self._judged = {k: [float(v[0]), float(v[1]), float(v[2])]
+                            for k, v in (raw.get("judged") or {}).items() if len(v) == 3}
             bt.logging.info(
                 f"[COOLDOWN] restored dispatch state for {len(self._batch_size)} miner(s); "
                 f"mean batch {sum(self._batch_size.values())/max(len(self._batch_size),1):.1f}, "
@@ -585,6 +589,20 @@ class MinerCooldownTracker:
         if audited > 0:
             self._add_decayed(self._rel_audit, hotkey, audited, failed, when)
 
+    def record_judgement(self, hotkey: str, judged: int, non_market: int,
+                         when: float = None) -> None:
+        """Judged relevance claims and how many were found not relevant, decayed over time."""
+        if judged > 0:
+            self._add_decayed(self._judged, hotkey, judged, non_market, when)
+
+    def non_market_rate(self, hotkey: str, threshold: float, prior_n: float,
+                        prior_mult: float, now: float = None) -> float:
+        """Decayed share of judged claims found not relevant. A hotkey starts above the
+        threshold and earns its way down."""
+        judged, bad = self._decayed(self._judged, hotkey, now)
+        prior = max(0.0, float(prior_n))
+        return (bad + prior * prior_mult * threshold) / max(1e-9, judged + prior)
+
     def relevance_audit(self, hotkey: str, now: float = None):
         """(audited, failed), decayed to `now`."""
         return self._decayed(self._rel_audit, hotkey, now)
@@ -691,7 +709,7 @@ class MinerCooldownTracker:
             del self._inflight[hk]
         for d in (self._credit, self._last_valid, self._first_ep,
                   self._speed, self._quality, self._gated_out, self._relevance, self._rel_audit,
-                  self._window, self._consec_to, self._covered_ep,
+                  self._judged, self._window, self._consec_to, self._covered_ep,
                   self._consec_inv, self._inv_level, self._inv_until, self._last_faith,
                   self._batch_size, self._consec_fail, self._latency):
             for hk in [h for h in d if h not in active_hotkeys]:

@@ -17,6 +17,7 @@ import alpharidge_ai
 
 # import base miner class which takes care of most of the boilerplate
 from alpharidge_ai.base.miner import BaseMinerNeuron
+from alpharidge_ai import config
 from alpharidge_ai.analyzer.aspect_sentiment import install_meta_init_guard
 from alpharidge_ai.analyzer import setup_analyzer
 from alpharidge_ai.analyzer import setup_telegram_analyzer
@@ -25,7 +26,8 @@ from alpharidge_ai.analyzer import setup_article_intelligence_analyzer
 from alpharidge_ai.utils.api_models import TweetAnalysisBase, TelegramMessageAnalysis, NewsArticleAnalysisBase
 from alpharidge_ai.models.article_intelligence import SCHEMA_VERSION
 from alpharidge_ai.triage import (
-    FLAG_DISCARD, FLAG_VALUABLE, TRIAGE_SCHEMA_VERSION, analysis_indicates_value)
+    FLAG_DISCARD, FLAG_VALUABLE, TRIAGE_SCHEMA_VERSION, analysis_indicates_value,
+    analysis_value_grounded)
 
 # Must precede every model load — see install_meta_init_guard. A miner that loses the
 # race returns nothing for the affected articles and earns no points for them.
@@ -219,6 +221,20 @@ class Miner(BaseMinerNeuron):
         
         bt.logging.info(f"[Miner] Started background processing for TelegramBatch, returning immediately")
         return synapse
+
+    def _relevance_check_on(self) -> bool:
+        return bool(getattr(config, "MINER_RELEVANCE_CHECK", True)) and self.article_intel_analyzer is not None
+
+    def _relevance_verdict(self, title, body):
+        """The market-relevance check for the triage label, or None when it has no answer."""
+        if not self._relevance_check_on():
+            return None
+        if getattr(self, "_relevance_check", None) is None:
+            from alpharidge_ai.analyzer.relevance_check import RelevanceCheck
+            self._relevance_check = RelevanceCheck(
+                self.article_intel_analyzer.client,
+                getattr(config, "MINER_RELEVANCE_MODEL", "") or self.article_intel_analyzer.model)
+        return self._relevance_check.keep(title, body)
 
     async def forward_articles(self, synapse: alpharidge_ai.protocol.ArticleBatch) -> alpharidge_ai.protocol.ArticleBatch:
         validator_hotkey = synapse.dendrite.hotkey if synapse.dendrite else None
@@ -453,6 +469,7 @@ class Miner(BaseMinerNeuron):
         try:
             bt.logging.info(f"[Miner] Background: Processing {len(synapse.article_batch)} articles")
 
+            fallback_borderline = 0
             for article in synapse.article_batch:
                 if not article.title:
                     # Never skip: an absent response fails the size check. A
@@ -473,6 +490,26 @@ class Miner(BaseMinerNeuron):
                 # analysis; borderline is then flagged from the analysis result.
                 triage_rec, proof, _ = self.triage_stage.evaluate(
                     article.title, article.content or "")
+                checked = self._relevance_verdict(article.title, article.content or "")
+                if checked is not None:
+                    triage_rec = dict(triage_rec, label="relevant" if checked else "irrelevant",
+                                      confidence=0.9)
+                elif (self._relevance_check_on() and triage_rec["label"] != "irrelevant"
+                      and fallback_borderline < 3):
+                    # No verdict: claim nothing that earns a premium, within the borderline cap.
+                    fallback_borderline += 1
+                    triage_rec = dict(triage_rec, label="borderline", confidence=0.5)
+                    triage_rec.pop("flag", None)
+                    article.analysis = NewsArticleAnalysisBase(
+                        sentiment="neutral",
+                        analysisData={
+                            "schema_version": SCHEMA_VERSION,
+                            "triage_schema_version": TRIAGE_SCHEMA_VERSION,
+                            "triage": triage_rec,
+                            "proof_of_read": proof,
+                        },
+                    )
+                    continue
                 if triage_rec["label"] == "irrelevant":
                     article.analysis = NewsArticleAnalysisBase(
                         sentiment="neutral",
@@ -515,7 +552,8 @@ class Miner(BaseMinerNeuron):
                         analysis_blob = intel.model_dump()
                         if triage_rec["label"] == "borderline":
                             triage_rec["flag"] = (
-                                FLAG_VALUABLE if analysis_indicates_value(analysis_blob)
+                                FLAG_VALUABLE if analysis_value_grounded(
+                                    analysis_blob, article.title, article.content or "")
                                 else FLAG_DISCARD)
                         analysis_blob["triage_schema_version"] = TRIAGE_SCHEMA_VERSION
                         analysis_blob["triage"] = triage_rec

@@ -67,6 +67,67 @@ def analysis_indicates_value(analysis_data: Optional[dict]) -> bool:
     sector = (analysis_data.get("topic_signature") or {}).get("primary_sector_symbol")
     return sector in MARKET_ADJACENT_SECTORS
 
+def analysis_value_grounded(analysis_data: Optional[dict], title: str, body: str) -> bool:
+    """Whether the analysis shows value the article itself carries: an asset named in the
+    text, or an economic datum whose value appears in it. A sector tag alone does not count."""
+    if not isinstance(analysis_data, dict):
+        return False
+    import re
+    from alpharidge_ai.oracle import floor
+    raw = f"{title or ''}\n{body or ''}"
+    text = floor.normalize(raw).text
+    low = text.lower()
+    for a in analysis_data.get("assets") or []:
+        if not isinstance(a, dict):
+            continue
+        name = (a.get("asset_name") or "").strip().lower()
+        tick = (a.get("ticker") or "").strip()
+        if name and len(name) >= 3 and name in low:
+            return True
+        if len(tick) >= 2 and re.search(
+                r"(?<![A-Za-z0-9])\$?" + re.escape(tick) + r"(?![A-Za-z0-9])", raw):
+            return True
+    econ = [e for e in analysis_data.get("economic_data") or [] if isinstance(e, dict)]
+    if econ:
+        try:
+            numbers = floor.parse_numbers(text)
+        except Exception:
+            numbers = []
+        for e in econ:
+            try:
+                v = float(e.get("actual_value"))
+            except (TypeError, ValueError):
+                continue
+            if any(floor.value_grounded(v, n.value) for n in numbers):
+                return True
+    return False
+
+
+def premium_consistent(analysis_data: Optional[dict]) -> bool:
+    """False when the miner's own analysis rates the page negligible and finds nothing
+    market-related in it."""
+    if not isinstance(analysis_data, dict):
+        return True
+    negligible = str(analysis_data.get("impact_potential") or "").lower() == "negligible"
+    return not (negligible and not analysis_data.get("assets")
+                and not analysis_data.get("economic_data"))
+
+
+_INDEX_TITLE = None
+
+
+def is_index_page(title: str, body: str) -> bool:
+    """A tag, listing or index page rather than an article: no premium."""
+    global _INDEX_TITLE
+    if _INDEX_TITLE is None:
+        import re
+        _INDEX_TITLE = re.compile(
+            r"^\s*(тег|тэг|метка|теги|tag|tags|schlagwort|étiquette|etiqueta)\s*[:：]", re.I)
+    if _INDEX_TITLE.match(title or ""):
+        return True
+    return len((body or "").strip()) < 120
+
+
 # Deterministic R1 evidence: asset entries resolved by the keyword gazetteer.
 DETERMINISTIC_ASSET_SOURCES = frozenset({"keyword"})
 

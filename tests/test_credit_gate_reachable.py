@@ -67,6 +67,8 @@ def _validator(**over):
         mark_rewarded=lambda *a, **k: None, is_rewarded=lambda *a, **k: False)
     v._article_store = store
     v._relevance_factor = lambda hk: 1.0
+    v._premium_ok = lambda a, copy=None: True
+    v._batch_zeroed = lambda res: False
     v._article_cooldown = types.SimpleNamespace(record_relevance=lambda *a, **k: None)
     v.__dict__.update(over)
     return v

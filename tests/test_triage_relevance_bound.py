@@ -95,6 +95,8 @@ def _validator(factor):
     v._article_cooldown = MinerCooldownTracker()
     v._relevance_factor = lambda hk: factor
     v._buffer_variants = lambda *a, **k: None
+    v._premium_ok = lambda a, copy=None: True
+    v._batch_zeroed = lambda res: False
     return v, paid
 
 
@@ -276,7 +278,7 @@ def test_the_validator_combines_both_factors(monkeypatch):
 
 
 def test_the_audit_is_a_served_setting_on_by_default():
-    assert config.TRIAGE_RELEVANCE_AUDIT_N == 1
+    assert config.TRIAGE_RELEVANCE_AUDIT_N == 2
     assert "TRIAGE_RELEVANCE_AUDIT_N" in config._REMOTE_CONFIG_KEYS
 
 

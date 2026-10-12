@@ -114,6 +114,9 @@ class TriageGradeResult:
     batch_size: int = 0
     relevance_audited: int = 0
     false_positive_ids: List[int] = field(default_factory=list)
+    judged: int = 0                                             # claims judged against the definition
+    non_market_ids: List[int] = field(default_factory=list)     # claims judged not relevant
+    zeroed: bool = False                                        # repeat offender: batch earns nothing
     picks: dict = field(default_factory=dict)
 
     def flagged_ids(self) -> Set[int]:
@@ -184,6 +187,9 @@ def grade_batch(
     llm_irrelevant: Optional[Callable[[dict], bool]] = None,
     audit_relevant_n: int = 0,
     overrule_det: Optional[Callable[[dict], bool]] = None,
+    audit_borderline: bool = False,
+    skip_gazetteer: bool = False,
+    value_check: Optional[Callable[[dict], bool]] = None,
 ) -> TriageGradeResult:
     """Grade the triage layer of one returned miner batch.
 
@@ -248,7 +254,9 @@ def grade_batch(
             if analysed[aid] and flag:
                 # Analyze-then-flag lane. The flag must match the miner's own
                 # submitted analysis.
-                if (flag == FLAG_VALUABLE) != analysis_indicates_value(it.get("analysis_data")):
+                shows_value = (value_check(it) if value_check is not None
+                               else analysis_indicates_value(it.get("analysis_data")))
+                if (flag == FLAG_VALUABLE) != shows_value:
                     res.events.append(TriageEvent("soft", "borderline_flag_mismatch", aid))
                 elif flag == FLAG_VALUABLE:
                     res.borderline_valuable_ids.append(aid)
@@ -318,12 +326,14 @@ def grade_batch(
                                           it["article_id"]))
 
     # 4. audit a sample of relevant claims.
+    valuable = set(res.borderline_valuable_ids) if audit_borderline else set()
     claimed = [it for it in items
-               if labels[it["article_id"]] == LABEL_RELEVANT
+               if (labels[it["article_id"]] == LABEL_RELEVANT or it["article_id"] in valuable)
                and it["article_id"] not in canary_labels
                and it["article_id"] not in res.proof_failures]
     if llm_irrelevant is not None and audit_relevant_n > 0:
-        drawn = rng.sample(claimed, min(audit_relevant_n, len(claimed)))
+        pool = [it for it in claimed if not det_relevant(it)] if skip_gazetteer else claimed
+        drawn = rng.sample(pool, min(audit_relevant_n, len(pool)))
         verdicts = {}
         res.picks["relevant"] = {"pool": [it["article_id"] for it in claimed],
                                  "audited": [it["article_id"] for it in drawn], "verdicts": verdicts}
