@@ -31,6 +31,12 @@ def _grade(items, det=lambda it: False, irrelevant=lambda it: False, **kw):
 
 
 @pytest.fixture(autouse=True)
+def enforcing(monkeypatch):
+    """These tests check enforcement; the shadow tests switch it back on themselves."""
+    monkeypatch.setattr(config, "TRIAGE_JUDGE_SHADOW", False, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def no_proof_check(monkeypatch):
     import alpharidge_ai.validator.triage_grader as tg
     monkeypatch.setattr(tg, "verify_proof_of_read", lambda *a, **k: True)
@@ -313,3 +319,15 @@ def test_shadow_grades_like_3_9_12(monkeypatch):
     assert not v._judging_enforced() and not v._enforcing("TRIAGE_AUDIT_BORDERLINE")
     monkeypatch.setattr(config, "TRIAGE_JUDGE_SHADOW", False, raising=False)
     assert v._judging_enforced() and v._enforcing("BORDERLINE_VALUE_GROUNDED")
+
+
+def test_shadow_is_the_default_until_served_off():
+    import importlib, os
+    saved = os.environ.pop("TRIAGE_JUDGE_SHADOW", None)
+    try:
+        fresh = importlib.reload(config)
+        assert fresh.TRIAGE_JUDGE_SHADOW is True
+    finally:
+        if saved is not None:
+            os.environ["TRIAGE_JUDGE_SHADOW"] = saved
+        importlib.reload(config)

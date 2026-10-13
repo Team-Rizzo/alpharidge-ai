@@ -259,6 +259,7 @@ class TestEndToEnd:
 
     def test_audited_relevance_claims_on_junk_are_unpaid(self, stage, triage_on, monkeypatch):
         monkeypatch.setattr(config, "TRIAGE_JUDGE_ALL", False, raising=False)   # sampled-audit mode
+        monkeypatch.setattr(config, "TRIAGE_JUDGE_SHADOW", False, raising=False)
         monkeypatch.setattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 5, raising=False)
         v = HarnessValidator()
         v._triage_auditor = _Judge()

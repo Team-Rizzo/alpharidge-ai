@@ -356,8 +356,9 @@ TRIAGE_AUDIT_SKIP_GAZETTEER = _as_bool(os.getenv("TRIAGE_AUDIT_SKIP_GAZETTEER", 
 # relevant twice earns no premium. Unjudged claims (the model unavailable) are paid and
 # not counted.
 TRIAGE_JUDGE_ALL = _as_bool(os.getenv("TRIAGE_JUDGE_ALL", "true"))
-# Shadow: compute and log every 3.9.13 rule, but pay and grade exactly as 3.9.12.
-TRIAGE_JUDGE_SHADOW = _as_bool(os.getenv("TRIAGE_JUDGE_SHADOW", "false"))
+# Shadow: compute and log every 3.9.13 rule, but pay and grade exactly as 3.9.12. On until
+# the served value turns it off, so a validator that cannot fetch config never enforces alone.
+TRIAGE_JUDGE_SHADOW = _as_bool(os.getenv("TRIAGE_JUDGE_SHADOW", "true"))
 TRIAGE_JUDGE_MODEL = os.getenv("TRIAGE_JUDGE_MODEL", "deepseek/deepseek-v4-flash")
 TRIAGE_JUDGE_CONFIRM = _as_bool(os.getenv("TRIAGE_JUDGE_CONFIRM", "true"))
 # Repeat offenders: above this decayed share of judged claims found not relevant, a batch
