@@ -1,13 +1,13 @@
 """Relevance-judge report from the draw log and validator log. Read-only; run from the alpharidge-ai folder.
 
-    python scripts/soak_report.py [--since-hours 24] [--draws .triage_draws] [--log ~/.pm2/logs/alpharidge.validator-out.log]
+    python scripts/soak_report.py [--since-hours 24] [--draws .triage_draws] [--log "~/.pm2/logs/alpharidge.validator-out*.log"]
 """
 import argparse, collections, glob, json, os, re, statistics, time
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--since-hours", type=float, default=24)
 ap.add_argument("--draws", default=".triage_draws")
-ap.add_argument("--log", default=os.path.expanduser("~/.pm2/logs/alpharidge.validator-out.log"))
+ap.add_argument("--log", default="~/.pm2/logs/alpharidge.validator-out*.log", help="glob; rotated files included")
 ap.add_argument("--threshold", type=float, default=0.05)
 a = ap.parse_args()
 cutoff = time.time() - a.since_hours * 3600
@@ -44,15 +44,14 @@ for hk, v in sorted(rows, key=lambda x: x[1][1] / x[1][0])[:10]:
 # hourly shadow lines, judge timing, and LLM spend
 shadow, spend = [], []
 pat = re.compile(r"\[TRIAGE_SHADOW\] last hour (.*)")
-try:
-    for line in open(a.log, encoding="utf-8", errors="replace"):
+logs = sorted(glob.glob(os.path.expanduser(a.log)), key=os.path.getmtime)
+for f in (f for f in logs if os.path.getmtime(f) >= cutoff):
+    for line in open(f, encoding="utf-8", errors="replace"):
         m = pat.search(line)
         if m:
             shadow.append(dict(kv.split("=", 1) for kv in m.group(1).split() if "=" in kv))
         if "[LLM_SPEND]" in line:
             spend.append(line.strip()[-200:])
-except FileNotFoundError:
-    pass
 if shadow:
     js = [float(s.get("judge_s_per_batch", 0)) for s in shadow]
     un = sum(int(s.get("unjudged", 0)) for s in shadow); cl = sum(int(s.get("claims", 0)) for s in shadow)
