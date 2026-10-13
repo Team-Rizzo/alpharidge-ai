@@ -96,6 +96,8 @@ def _judging_validator(verdicts):
     v = types.SimpleNamespace(_article_cooldown=MinerCooldownTracker())
     v._get_relevance_judge = lambda: _Judge(verdicts)
     v._judge_claims = Validator._judge_claims.__get__(v)
+    v._shadow = Validator._shadow
+    v._shadow_note = Validator._shadow_note.__get__(v)
     return v
 
 
@@ -109,7 +111,7 @@ def _items(*aids):
 
 @pytest.fixture
 def judge_on(monkeypatch):
-    for k, v in (("TRIAGE_JUDGE_ALL", True), ("TRIAGE_JUDGE_CONFIRM", True), ("TRIAGE_FP_HARD", True),
+    for k, v in (("TRIAGE_JUDGE_ALL", True), ("TRIAGE_JUDGE_SHADOW", False), ("TRIAGE_JUDGE_CONFIRM", True), ("TRIAGE_FP_HARD", True),
                  ("TRIAGE_REPEAT_THRESHOLD", 0.05), ("TRIAGE_REPEAT_PRIOR_N", 50.0),
                  ("TRIAGE_REPEAT_PRIOR_MULT", 2.0)):
         monkeypatch.setattr(config, k, v, raising=False)
@@ -195,6 +197,7 @@ def _paying_validator():
     v._article_cooldown = MinerCooldownTracker()
     for name in ("_premium_ok", "_batch_zeroed"):
         setattr(v, name, getattr(Validator, name).__get__(v))
+    v._shadow = Validator._shadow
     return v, paid
 
 
@@ -264,3 +267,48 @@ def test_the_miner_keeps_only_what_two_answers_agree_on():
         it = iter(seq)
         rc.verdict = lambda t, b, it=it: next(it)
         assert rc.keep("t", "b") is expect
+
+
+def _shadow_validator(verdicts):
+    v = _judging_validator(verdicts)
+    for name in ("_shadow", "_shadow_note"):
+        setattr(v, name, getattr(Validator, name).__get__(v) if name != "_shadow" else Validator._shadow)
+    return v
+
+
+def test_shadow_judges_but_changes_nothing(judge_on, monkeypatch):
+    monkeypatch.setattr(config, "TRIAGE_JUDGE_SHADOW", True, raising=False)
+    v = _shadow_validator({"t1": True, "t2": True})
+    res = _graded(relevant=[1], valuable=[2])
+    v._judge_claims(res, _items(1, 2), "fresh")
+    assert res.non_market_ids == [] and not res.zeroed and res.borderline_valuable_ids == [2]
+    assert not res.events and res.judged == 0
+    assert res.picks["judged"]["zeroed"] and res.picks["judged"]["shadow"]   # what would have happened
+    assert "fresh" not in v._article_cooldown._rel_audit                     # premium factor untouched
+    assert v._shadow_stats["would_zero"] == 1 and v._shadow_stats["non_market"] == 2
+
+
+def test_shadow_keeps_the_premium_and_counts_the_would_be_hits(monkeypatch):
+    monkeypatch.setattr(config, "TRIAGE_JUDGE_SHADOW", True, raising=False)
+    monkeypatch.setattr(config, "PREMIUM_SELF_CONSISTENCY", True, raising=False)
+    monkeypatch.setattr(config, "PREMIUM_CONTENT_GATE", True, raising=False)
+    v, paid = _paying_validator()
+    v._shadow = Validator._shadow
+    v._shadow_note = Validator._shadow_note.__get__(v)
+    batch = [_article(1, {"impact_potential": "negligible"}), _article(2, title="Тег: Иван | СТВ")]
+    Validator._apply_triage_outcome(v, batch, "hk", _res([1, 2]), set(), {}, full_push=True)
+    assert paid[-1] == round(0.4 + 2 * 6 * 3)
+    assert v._shadow_stats["f1_hits"] == 1 and v._shadow_stats["index_hits"] == 1
+
+
+def test_shadow_grades_like_3_9_12(monkeypatch):
+    monkeypatch.setattr(config, "TRIAGE_JUDGE_SHADOW", True, raising=False)
+    for k in ("TRIAGE_JUDGE_ALL", "TRIAGE_AUDIT_BORDERLINE", "TRIAGE_AUDIT_SKIP_GAZETTEER",
+              "BORDERLINE_VALUE_GROUNDED"):
+        monkeypatch.setattr(config, k, True, raising=False)
+    v = types.SimpleNamespace(_shadow=Validator._shadow)
+    v._enforcing = Validator._enforcing.__get__(v)
+    v._judging_enforced = Validator._judging_enforced.__get__(v)
+    assert not v._judging_enforced() and not v._enforcing("TRIAGE_AUDIT_BORDERLINE")
+    monkeypatch.setattr(config, "TRIAGE_JUDGE_SHADOW", False, raising=False)
+    assert v._judging_enforced() and v._enforcing("BORDERLINE_VALUE_GROUNDED")

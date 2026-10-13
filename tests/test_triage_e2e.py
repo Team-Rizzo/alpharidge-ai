@@ -115,6 +115,10 @@ class HarnessValidator:
     _value_grounded_item = validator_module.Validator._value_grounded_item
     _judge_claims = validator_module.Validator._judge_claims
     _get_relevance_judge = validator_module.Validator._get_relevance_judge
+    _shadow = staticmethod(validator_module.Validator._shadow)
+    _shadow_note = validator_module.Validator._shadow_note
+    _enforcing = validator_module.Validator._enforcing
+    _judging_enforced = validator_module.Validator._judging_enforced
     _premium_ok = validator_module.Validator._premium_ok
     _batch_zeroed = validator_module.Validator._batch_zeroed
     _record_triage_observations = validator_module.Validator._record_triage_observations

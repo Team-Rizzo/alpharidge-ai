@@ -97,6 +97,7 @@ def _validator(factor):
     v._buffer_variants = lambda *a, **k: None
     v._premium_ok = lambda a, copy=None: True
     v._batch_zeroed = lambda res: False
+    v._shadow = lambda: False
     return v, paid
 
 

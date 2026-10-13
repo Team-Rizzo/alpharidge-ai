@@ -19,6 +19,7 @@ import copy
 import gc
 import random
 import secrets
+import collections
 import functools
 import time
 from typing import List, Optional, Set
@@ -1067,6 +1068,30 @@ class Validator(BaseValidatorNeuron):
         return analysis_value_grounded(item.get("analysis_data"), item.get("title") or "",
                                        item.get("body") or "")
 
+    @staticmethod
+    def _shadow() -> bool:
+        return bool(getattr(config, "TRIAGE_JUDGE_SHADOW", False))
+
+    def _enforcing(self, key: str) -> bool:
+        """A 3.9.13 rule that changes pay or grading, and is not held back by shadow mode."""
+        return bool(getattr(config, key, False)) and not self._shadow()
+
+    def _judging_enforced(self) -> bool:
+        return bool(getattr(config, "TRIAGE_JUDGE_ALL", False)) and not self._shadow()
+
+    def _shadow_note(self, **counts) -> None:
+        """Accumulate shadow counters and log them once an hour."""
+        stats = self.__dict__.setdefault("_shadow_stats", collections.Counter())
+        stats.update({k: v for k, v in counts.items() if v})
+        now = time.time()
+        since = self.__dict__.setdefault("_shadow_since", now)
+        if now - since >= 3600 and stats:
+            secs = stats.pop("judge_ms", 0) / max(1, stats.get("batches", 1)) / 1000.0
+            bt.logging.info("[TRIAGE_SHADOW] last hour " + " ".join(
+                f"{k}={v}" for k, v in sorted(stats.items())) + f" judge_s_per_batch={secs:.2f}")
+            stats.clear()
+            self._shadow_since = now
+
     def _get_relevance_judge(self):
         """The published-definition check, on the validator's model client."""
         model = str(getattr(config, "TRIAGE_JUDGE_MODEL", "") or "")
@@ -1086,6 +1111,7 @@ class Validator(BaseValidatorNeuron):
         relevant earns no premium; a repeat offender's batch with such a claim earns nothing."""
         if not getattr(config, "TRIAGE_JUDGE_ALL", False):
             return
+        shadow = self._shadow()
         judge = self._get_relevance_judge()
         if judge is None:
             return
@@ -1101,41 +1127,53 @@ class Validator(BaseValidatorNeuron):
         def one(it):
             return it["article_id"], judge.non_market(it.get("title") or "", it.get("body") or "",
                                                       confirm=confirm)
+        started = time.time()
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(claims))) as ex:
             verdicts = dict(ex.map(one, claims))
         judged = [a for a, v in verdicts.items() if v is not None]
         bad = sorted(a for a, v in verdicts.items() if v is True)
-        res.judged, res.non_market_ids = len(judged), bad
-        res.borderline_valuable_ids = [a for a in res.borderline_valuable_ids if a not in bad]
-        for aid in bad:
-            res.events.append(fp_soft_event(aid))
+        if not shadow:
+            res.judged, res.non_market_ids = len(judged), bad
+            res.borderline_valuable_ids = [a for a in res.borderline_valuable_ids if a not in bad]
+            for aid in bad:
+                res.events.append(fp_soft_event(aid))
+        if shadow:
+            self._shadow_note(batches=1, claims=len(claims), judged=len(judged), non_market=len(bad),
+                              unjudged=len(claims) - len(judged),
+                              judge_ms=int(1000 * (time.time() - started)))
         if not judged:
             return
         cd = self._article_cooldown
         cd.record_judgement(miner_hotkey, len(judged), len(bad))
-        cd.record_relevance_audit(miner_hotkey, len(judged), len(bad))
+        if not shadow:
+            cd.record_relevance_audit(miner_hotkey, len(judged), len(bad))
         threshold = float(getattr(config, "TRIAGE_REPEAT_THRESHOLD", 0.03))
         rate = cd.non_market_rate(miner_hotkey, threshold,
                                   float(getattr(config, "TRIAGE_REPEAT_PRIOR_N", 50)),
                                   float(getattr(config, "TRIAGE_REPEAT_PRIOR_MULT", 2.0)))
-        if bad and rate > threshold:
+        would_zero = bool(bad and rate > threshold)
+        if would_zero and not shadow:
             res.zeroed = True
             if getattr(config, "TRIAGE_FP_HARD", False):
                 for aid in bad:
                     res.events.append(TriageEvent("hard", "triage_non_market_repeat", aid))
+        if shadow:
+            self._shadow_note(would_zero=int(would_zero), offender=int(rate > threshold))
         res.picks["judged"] = {"n": len(judged), "non_market": bad, "rate": round(rate, 4),
-                               "zeroed": res.zeroed}
+                               "zeroed": would_zero, "shadow": shadow}
 
     def _premium_ok(self, article, copy=None) -> bool:
         """Whether a kept article can earn the relevance premium."""
         src = copy or article
         data = getattr(getattr(article, "analysis", None), "analysis_data", None)
-        if getattr(config, "PREMIUM_SELF_CONSISTENCY", False) and not premium_consistent(data):
-            return False
-        if getattr(config, "PREMIUM_CONTENT_GATE", False) and is_index_page(
-                getattr(src, "title", "") or "", getattr(src, "content", "") or ""):
-            return False
-        return True
+        inconsistent = (getattr(config, "PREMIUM_SELF_CONSISTENCY", False)
+                        and not premium_consistent(data))
+        index = (getattr(config, "PREMIUM_CONTENT_GATE", False)
+                 and is_index_page(getattr(src, "title", "") or "", getattr(src, "content", "") or ""))
+        if self._shadow():
+            self._shadow_note(f1_hits=int(bool(inconsistent)), index_hits=int(bool(index)))
+            return True
+        return not (inconsistent or index)
 
     def _batch_zeroed(self, triage_res) -> bool:
         return bool(getattr(triage_res, "zeroed", False))
@@ -1385,13 +1423,13 @@ class Validator(BaseValidatorNeuron):
             rng, self._triage_cfg(),
             enforced=bool(getattr(config, "TRIAGE_ENFORCED", False)),
             llm_irrelevant=self._llm_irrelevant_item,
-            audit_relevant_n=(0 if getattr(config, "TRIAGE_JUDGE_ALL", False)
+            audit_relevant_n=(0 if self._judging_enforced()
                               else int(getattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 0) or 0)),
             overrule_det=self._llm_irrelevant_item,
-            audit_borderline=bool(getattr(config, "TRIAGE_AUDIT_BORDERLINE", False)),
-            skip_gazetteer=bool(getattr(config, "TRIAGE_AUDIT_SKIP_GAZETTEER", False)),
+            audit_borderline=self._enforcing("TRIAGE_AUDIT_BORDERLINE"),
+            skip_gazetteer=self._enforcing("TRIAGE_AUDIT_SKIP_GAZETTEER"),
             value_check=(self._value_grounded_item
-                         if getattr(config, "BORDERLINE_VALUE_GROUNDED", False) else None))
+                         if self._enforcing("BORDERLINE_VALUE_GROUNDED") else None))
         self._judge_claims(res, items, miner_hotkey)
         if res.picks:
             auditor = self._get_triage_auditor()

@@ -356,6 +356,8 @@ TRIAGE_AUDIT_SKIP_GAZETTEER = _as_bool(os.getenv("TRIAGE_AUDIT_SKIP_GAZETTEER", 
 # relevant twice earns no premium. Unjudged claims (the model unavailable) are paid and
 # not counted.
 TRIAGE_JUDGE_ALL = _as_bool(os.getenv("TRIAGE_JUDGE_ALL", "true"))
+# Shadow: compute and log every 3.9.13 rule, but pay and grade exactly as 3.9.12.
+TRIAGE_JUDGE_SHADOW = _as_bool(os.getenv("TRIAGE_JUDGE_SHADOW", "false"))
 TRIAGE_JUDGE_MODEL = os.getenv("TRIAGE_JUDGE_MODEL", "deepseek/deepseek-v4-flash")
 TRIAGE_JUDGE_CONFIRM = _as_bool(os.getenv("TRIAGE_JUDGE_CONFIRM", "true"))
 # Repeat offenders: above this decayed share of judged claims found not relevant, a batch
@@ -505,6 +507,7 @@ _REMOTE_CONFIG_KEYS = {
     "TRIAGE_AUDIT_SKIP_GAZETTEER": (_as_bool, "TRIAGE_AUDIT_SKIP_GAZETTEER"),
     "TRIAGE_FP_HARD":             (_as_bool, "TRIAGE_FP_HARD"),
     "TRIAGE_JUDGE_ALL":           (_as_bool, "TRIAGE_JUDGE_ALL"),
+    "TRIAGE_JUDGE_SHADOW":        (_as_bool, "TRIAGE_JUDGE_SHADOW"),
     "TRIAGE_JUDGE_MODEL":         (str,   "TRIAGE_JUDGE_MODEL"),
     "TRIAGE_JUDGE_CONFIRM":       (_as_bool, "TRIAGE_JUDGE_CONFIRM"),
     "TRIAGE_REPEAT_THRESHOLD":    (float, "TRIAGE_REPEAT_THRESHOLD"),
@@ -594,6 +597,7 @@ _CONSENSUS_KEYS = {
     "TRIAGE_AUDIT_SKIP_GAZETTEER",
     "TRIAGE_FP_HARD",
     "TRIAGE_JUDGE_ALL",
+    "TRIAGE_JUDGE_SHADOW",
     "TRIAGE_JUDGE_MODEL",
     "TRIAGE_JUDGE_CONFIRM",
     "TRIAGE_REPEAT_THRESHOLD",
