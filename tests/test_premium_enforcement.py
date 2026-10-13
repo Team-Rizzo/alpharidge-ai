@@ -331,3 +331,14 @@ def test_shadow_is_the_default_until_served_off():
         if saved is not None:
             os.environ["TRIAGE_JUDGE_SHADOW"] = saved
         importlib.reload(config)
+
+
+def test_validator_judge_calls_are_in_llm_spend(monkeypatch):
+    from alpharidge_ai.analyzer.relevance_check import RelevanceCheck
+    from alpharidge_ai.utils import llm_spend
+    seen = []
+    monkeypatch.setattr(llm_spend, "record", lambda purpose, model, response=None, seconds=None:
+                        seen.append((purpose, model)))
+    RelevanceCheck(_client('{"relevant": false}'), "m", spend_purpose="relevance_judge").verdict("t", "b")
+    RelevanceCheck(_client('{"relevant": false}'), "m").verdict("t", "b")
+    assert seen == [("relevance_judge", "m")]

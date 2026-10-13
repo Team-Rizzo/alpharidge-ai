@@ -1102,7 +1102,7 @@ class Validator(BaseValidatorNeuron):
         judge = getattr(self, "_relevance_judge", None)
         if judge is None or judge.model != model:
             from alpharidge_ai.analyzer.relevance_check import RelevanceCheck, PROMPT_VERSION
-            judge = self._relevance_judge = RelevanceCheck(client, model)
+            judge = self._relevance_judge = RelevanceCheck(client, model, spend_purpose="relevance_judge")
             bt.logging.info(f"[TRIAGE] relevance judge {model} prompt {PROMPT_VERSION}")
         return judge
 
