@@ -1,4 +1,4 @@
-"""3.9.13: relevance claims are checked more widely and an upheld non-market claim costs the batch."""
+"""3.9.13: relevance claims are judged against the published definition."""
 import json
 import random
 import types
@@ -51,7 +51,7 @@ def test_flagged_valuable_borderline_is_audited_and_can_be_rejected():
     assert on.borderline_valuable_ids == []           # rejected claims are not kept
 
 
-def test_audits_skip_claims_the_gazetteer_confirms():
+def test_sampled_audit_pool():
     items = [_item(1, "relevant"), _item(2, "relevant")]
     res = _grade(items, det=lambda it: it["article_id"] == 1, skip_gazetteer=True)
     assert res.picks["relevant"]["audited"] == [2]
@@ -146,7 +146,7 @@ def test_a_clean_record_brings_the_rate_below_the_threshold(judge_on):
     assert res.non_market_ids == [1] and not res.zeroed            # loses the item, not the batch
 
 
-def test_no_verdict_is_paid_and_not_counted(judge_on):
+def test_no_verdict_is_not_counted(judge_on):
     v = _judging_validator({"t1": None, "t2": None})
     res = _graded(relevant=[1, 2])
     v._judge_claims(res, _items(1, 2), "hk")

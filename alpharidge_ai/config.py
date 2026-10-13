@@ -348,13 +348,11 @@ DISPATCH_QUALITY_GATE_Z = float(os.getenv("DISPATCH_QUALITY_GATE_Z", "3.0"))
 TRIAGE_RELEVANCE_BOUND = float(os.getenv("TRIAGE_RELEVANCE_BOUND", "2.0"))
 # Relevance claims audited per triage batch, and the rejected share paid in full.
 TRIAGE_RELEVANCE_AUDIT_N = int(os.getenv("TRIAGE_RELEVANCE_AUDIT_N", "2"))
-# Relevance-claim audits also cover flagged-valuable borderline claims, and are drawn among
-# claims the gazetteer does not already confirm.
+# Sampled relevance audits (used when TRIAGE_JUDGE_ALL is off).
 TRIAGE_AUDIT_BORDERLINE = _as_bool(os.getenv("TRIAGE_AUDIT_BORDERLINE", "true"))
 TRIAGE_AUDIT_SKIP_GAZETTEER = _as_bool(os.getenv("TRIAGE_AUDIT_SKIP_GAZETTEER", "true"))
 # Every relevance claim is judged against the published definition; a claim judged not
-# relevant twice earns no premium. Unjudged claims (the model unavailable) are paid and
-# not counted.
+# relevant earns no premium.
 TRIAGE_JUDGE_ALL = _as_bool(os.getenv("TRIAGE_JUDGE_ALL", "true"))
 # Shadow: compute and log every 3.9.13 rule, but pay and grade exactly as 3.9.12. On until
 # the served value turns it off, so a validator that cannot fetch config never enforces alone.
@@ -373,7 +371,7 @@ PREMIUM_SELF_CONSISTENCY = _as_bool(os.getenv("PREMIUM_SELF_CONSISTENCY", "true"
 PREMIUM_CONTENT_GATE = _as_bool(os.getenv("PREMIUM_CONTENT_GATE", "true"))
 # A flagged-valuable borderline claim needs value the article itself shows.
 BORDERLINE_VALUE_GROUNDED = _as_bool(os.getenv("BORDERLINE_VALUE_GROUNDED", "true"))
-# Miner: label relevance with one model call per article (falls back to the triage stage).
+# Miner: label relevance with the published-definition check.
 MINER_RELEVANCE_CHECK = _as_bool(os.getenv("MINER_RELEVANCE_CHECK", "true"))
 MINER_RELEVANCE_MODEL = os.getenv("MINER_RELEVANCE_MODEL", "")
 TRIAGE_RELEVANCE_AUDIT_TOL = float(os.getenv("TRIAGE_RELEVANCE_AUDIT_TOL", "0.06"))

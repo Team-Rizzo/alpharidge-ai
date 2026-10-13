@@ -267,7 +267,6 @@ class TestEndToEnd:
                  article(3, JUNK_ARTICLE)]
         returned = mine(stage, batch, strategy="spam")
         res = v._grade_triage(returned, batch, "hk4")
-        # Audits are drawn among claims the gazetteer does not already confirm.
         assert res.relevance_audited == 2 and sorted(res.false_positive_ids) == [2, 3]
         assert v._article_cooldown.relevance_audit("hk4") == pytest.approx((2.0, 2.0), abs=1e-3)
         v._apply_triage_outcome(returned, "hk4", res, fp_ids=set(res.false_positive_ids))
