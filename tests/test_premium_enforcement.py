@@ -284,6 +284,7 @@ def test_shadow_judges_but_changes_nothing(judge_on, monkeypatch):
     assert res.non_market_ids == [] and not res.zeroed and res.borderline_valuable_ids == [2]
     assert not res.events and res.judged == 0
     assert res.picks["judged"]["zeroed"] and res.picks["judged"]["shadow"]   # what would have happened
+    assert res.picks["judged"]["ids"] == [1, 2]
     assert "fresh" not in v._article_cooldown._rel_audit                     # premium factor untouched
     assert v._shadow_stats["would_zero"] == 1 and v._shadow_stats["non_market"] == 2
 

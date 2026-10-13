@@ -1159,8 +1159,8 @@ class Validator(BaseValidatorNeuron):
                     res.events.append(TriageEvent("hard", "triage_non_market_repeat", aid))
         if shadow:
             self._shadow_note(would_zero=int(would_zero), offender=int(rate > threshold))
-        res.picks["judged"] = {"n": len(judged), "non_market": bad, "rate": round(rate, 4),
-                               "zeroed": would_zero, "shadow": shadow}
+        res.picks["judged"] = {"n": len(judged), "ids": sorted(judged), "non_market": bad,
+                               "rate": round(rate, 4), "zeroed": would_zero, "shadow": shadow}
 
     def _premium_ok(self, article, copy=None) -> bool:
         """Whether a kept article can earn the relevance premium."""
