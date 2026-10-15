@@ -360,6 +360,7 @@ def test_judge_checks_named_articles_the_miner_did_not_claim(judge_on):
     named = {1, 2, 3}
     out = v._judge_det_hits(items, lambda it: it["article_id"] in named)
     assert out == {1: True, 2: False}                  # claims and unnamed articles skipped
+    assert v._judge_det_hits(items, lambda it: it["article_id"] in named, skip={1}) == {2: False}
 
 
 def _gazetteer_harness(monkeypatch, judging, verdicts):

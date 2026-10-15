@@ -1107,14 +1107,15 @@ class Validator(BaseValidatorNeuron):
             bt.logging.info(f"[TRIAGE] relevance judge {model} prompt {PROMPT_VERSION}")
         return judge
 
-    def _judge_det_hits(self, items, det_relevant) -> dict:
+    def _judge_det_hits(self, items, det_relevant, skip=()) -> dict:
         """The published check on articles the gazetteer names but the miner did not claim
         relevant: True where it finds them not relevant."""
         judge = self._get_relevance_judge()
         if judge is None:
             return {}
         hits = [it for it in items
-                if ((extract_triage(it.get("analysis_data"))[0] or {}).get("label")
+                if it["article_id"] not in skip
+                and ((extract_triage(it.get("analysis_data"))[0] or {}).get("label")
                     != LABEL_RELEVANT) and det_relevant(it)]
         if not hits:
             return {}
@@ -1446,7 +1447,8 @@ class Validator(BaseValidatorNeuron):
             return det_cache[aid]
 
         judging = self._judging_enforced()
-        judge_says_not = self._judge_det_hits(items, det_relevant) if judging else {}
+        judge_says_not = (self._judge_det_hits(items, det_relevant, skip=canary_labels)
+                          if judging else {})
         res = grade_batch(
             items, canary_labels, det_relevant, self._llm_relevant_item,
             self._stage_label_item,
