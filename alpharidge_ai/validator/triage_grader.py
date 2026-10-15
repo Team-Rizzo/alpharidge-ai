@@ -190,6 +190,7 @@ def grade_batch(
     audit_borderline: bool = False,
     skip_gazetteer: bool = False,
     value_check: Optional[Callable[[dict], bool]] = None,
+    det_fn_soft: bool = False,
 ) -> TriageGradeResult:
     """Grade the triage layer of one returned miner batch.
 
@@ -199,6 +200,7 @@ def grade_batch(
     llm_relevant(item): audit-LLM verdict; None = no verdict.
     stage_label(item): reference TriageStage label on the validator's copy.
     llm_irrelevant(item): True when the audit rejects relevance.
+    det_fn_soft: a gazetteer false negative is a soft event rather than a hard one.
     """
     res = TriageGradeResult(canary_ids=list(canary_labels), batch_size=len(items))
 
@@ -312,7 +314,8 @@ def grade_batch(
                 res.picks.setdefault("overruled", []).append(it["article_id"])
             else:
                 res.events.append(TriageEvent(
-                    "hard", "false_negative_deterministic", it["article_id"]))
+                    "soft" if det_fn_soft else "hard", "false_negative_deterministic",
+                    it["article_id"]))
         elif labels[it["article_id"]] == LABEL_IRRELEVANT:
             det_clean.append(it)
     drawn = rng.sample(det_clean, min(cfg.audit_irrelevant_n, len(det_clean)))

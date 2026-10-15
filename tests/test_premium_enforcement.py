@@ -342,3 +342,48 @@ def test_validator_judge_calls_are_in_llm_spend(monkeypatch):
     RelevanceCheck(_client('{"relevant": false}'), "m", spend_purpose="relevance_judge").verdict("t", "b")
     RelevanceCheck(_client('{"relevant": false}'), "m").verdict("t", "b")
     assert seen == [("relevance_judge", "m")]
+
+
+def test_gazetteer_false_negative_can_be_soft():
+    items = [_item(1, "irrelevant")]
+    hard = _grade(items, det=lambda it: True)
+    soft = _grade(items, det=lambda it: True, det_fn_soft=True)
+    assert ("hard", "false_negative_deterministic") in [(e.kind, e.code) for e in hard.events]
+    assert ("soft", "false_negative_deterministic") in [(e.kind, e.code) for e in soft.events]
+
+
+def test_judge_checks_named_articles_the_miner_did_not_claim(judge_on):
+    v = _judging_validator({"t1": True, "t2": False, "t3": True})
+    v._judge_det_hits = Validator._judge_det_hits.__get__(v)
+    items = [_item(1, "irrelevant", title="t1"), _item(2, "irrelevant", title="t2"),
+             _item(3, "relevant", title="t3"), _item(4, "irrelevant", title="t4")]
+    named = {1, 2, 3}
+    out = v._judge_det_hits(items, lambda it: it["article_id"] in named)
+    assert out == {1: True, 2: False}                  # claims and unnamed articles skipped
+
+
+def _gazetteer_harness(monkeypatch, judging, verdicts):
+    from tests.test_triage_e2e import HarnessValidator
+    monkeypatch.setattr(config, "TRIAGE_JUDGE_ALL", True, raising=False)
+    monkeypatch.setattr(config, "TRIAGE_JUDGE_SHADOW", not judging, raising=False)
+    v = HarnessValidator()
+    v._get_relevance_judge = lambda: _Judge(verdicts)
+    v._det_relevant_item = lambda it: True
+    v._llm_irrelevant_item = lambda it: False
+    v._sent = []
+    return v
+
+
+@pytest.mark.parametrize("judging,verdict,expect", [
+    (True, True, None),                     # the published check agrees: no event
+    (True, False, "soft"),                  # it disagrees: soft while judging is enforced
+    (False, True, "hard"),                  # shadow: unchanged from 3.9.13
+])
+def test_named_article_labelled_irrelevant(monkeypatch, judging, verdict, expect):
+    v = _gazetteer_harness(monkeypatch, judging, {"Named": verdict})
+    art = types.SimpleNamespace(id=7, title="Named", content="Body " * 40,
+                                analysis=types.SimpleNamespace(
+                                    analysis_data=_item(7, "irrelevant")["analysis_data"]))
+    res = v._grade_triage([art], [art], "hk")
+    kinds = [e.kind for e in res.events if e.code == "false_negative_deterministic"]
+    assert kinds == ([] if expect is None else [expect])

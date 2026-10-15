@@ -78,8 +78,9 @@ from alpharidge_ai.validator import emission_params
 from alpharidge_ai.validator.profile_client import ProfileClient
 from alpharidge_ai.market.ration_store import RationStore
 from alpharidge_ai.validator.capacity_controller import CapacityController
-from alpharidge_ai.triage import (TRIAGE_SCHEMA_VERSION, analysis_value_grounded, gazetteer_assets,
-                                  is_index_page, premium_consistent)
+from alpharidge_ai.triage import (LABEL_RELEVANT, TRIAGE_SCHEMA_VERSION, analysis_value_grounded,
+                                  extract_triage, gazetteer_assets, is_index_page,
+                                  premium_consistent)
 from alpharidge_ai.models.article_intelligence import SCHEMA_VERSION
 from alpharidge_ai.utils.api_models import NewsArticleAnalysisBase
 from alpharidge_ai.validator.triage_grader import (
@@ -1106,6 +1107,25 @@ class Validator(BaseValidatorNeuron):
             bt.logging.info(f"[TRIAGE] relevance judge {model} prompt {PROMPT_VERSION}")
         return judge
 
+    def _judge_det_hits(self, items, det_relevant) -> dict:
+        """The published check on articles the gazetteer names but the miner did not claim
+        relevant: True where it finds them not relevant."""
+        judge = self._get_relevance_judge()
+        if judge is None:
+            return {}
+        hits = [it for it in items
+                if ((extract_triage(it.get("analysis_data"))[0] or {}).get("label")
+                    != LABEL_RELEVANT) and det_relevant(it)]
+        if not hits:
+            return {}
+
+        def one(it):
+            # One answer is enough here: it can only lift a penalty.
+            return it["article_id"], judge.non_market(it.get("title") or "", it.get("body") or "",
+                                                      confirm=False)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(16, len(hits))) as ex:
+            return dict(ex.map(one, hits))
+
     def _judge_claims(self, res, items, miner_hotkey) -> None:
         """Judge every relevance claim on our own copy of the article. A claim judged not
         relevant earns no premium; a repeat offender's batch with such a claim earns nothing."""
@@ -1417,19 +1437,31 @@ class Validator(BaseValidatorNeuron):
             if label is not None:
                 canary_labels[it["article_id"]] = label
         rng = self._seeded("triage", miner_hotkey)
+        det_cache = {}
+
+        def det_relevant(it):
+            aid = it["article_id"]
+            if aid not in det_cache:
+                det_cache[aid] = self._det_relevant_item(it)
+            return det_cache[aid]
+
+        judging = self._judging_enforced()
+        judge_says_not = self._judge_det_hits(items, det_relevant) if judging else {}
         res = grade_batch(
-            items, canary_labels, self._det_relevant_item, self._llm_relevant_item,
+            items, canary_labels, det_relevant, self._llm_relevant_item,
             self._stage_label_item,
             rng, self._triage_cfg(),
             enforced=bool(getattr(config, "TRIAGE_ENFORCED", False)),
             llm_irrelevant=self._llm_irrelevant_item,
             audit_relevant_n=(0 if self._judging_enforced()
                               else int(getattr(config, "TRIAGE_RELEVANCE_AUDIT_N", 0) or 0)),
-            overrule_det=self._llm_irrelevant_item,
+            overrule_det=lambda it: (judge_says_not.get(it["article_id"]) is True
+                                     or self._llm_irrelevant_item(it)),
             audit_borderline=self._enforcing("TRIAGE_AUDIT_BORDERLINE"),
             skip_gazetteer=self._enforcing("TRIAGE_AUDIT_SKIP_GAZETTEER"),
             value_check=(self._value_grounded_item
-                         if self._enforcing("BORDERLINE_VALUE_GROUNDED") else None))
+                         if self._enforcing("BORDERLINE_VALUE_GROUNDED") else None),
+            det_fn_soft=judging)
         self._judge_claims(res, items, miner_hotkey)
         if res.picks:
             auditor = self._get_triage_auditor()
