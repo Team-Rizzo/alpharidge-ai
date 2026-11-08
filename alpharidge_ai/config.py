@@ -357,10 +357,10 @@ TRIAGE_JUDGE_ALL = _as_bool(os.getenv("TRIAGE_JUDGE_ALL", "true"))
 # An article discarded by this many different miners is retired instead of sent out again.
 # 0 sends it out again every time.
 TRIAGE_RECYCLE_CAP = int(os.getenv("TRIAGE_RECYCLE_CAP", "3"))
-# Reasoning for the validator's relevance judge, reference analysis and triage audit:
-# "off", "on", or anything else for the provider's default. Graders have their own setting.
+# Reasoning for the validator's model calls: "off", "on", or anything else for the
+# provider's default. The audit graders have their own setting.
 VALIDATOR_REASONING = os.getenv("VALIDATOR_REASONING", "off")
-GRADER_REASONING = os.getenv("GRADER_REASONING", "")
+GRADER_REASONING = os.getenv("GRADER_REASONING", "off")
 # Shadow: compute and log every 3.9.13 rule, but pay and grade exactly as 3.9.12. On until
 # the served value turns it off, so a validator that cannot fetch config never enforces alone.
 TRIAGE_JUDGE_SHADOW = _as_bool(os.getenv("TRIAGE_JUDGE_SHADOW", "true"))

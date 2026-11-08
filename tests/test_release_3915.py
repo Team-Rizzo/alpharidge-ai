@@ -81,7 +81,7 @@ def test_settings_are_served_and_consensus():
     for key in ("VALIDATOR_REASONING", "GRADER_REASONING"):
         assert key in config._REMOTE_CONFIG_KEYS and key in config._CONSENSUS_KEYS
     assert "MINER_REASONING" not in config._REMOTE_CONFIG_KEYS
-    assert config.VALIDATOR_REASONING == "off"
+    assert config.VALIDATOR_REASONING == "off" and config.GRADER_REASONING == "off"
 
 
 def test_spent_canaries_are_pruned_after_their_last_dispatch_returns():
