@@ -122,3 +122,23 @@ def test_memory_line_reads_smaps_rollup(tmp_path):
     p.write_text("Rss:            33554432 kB\nPss_File:       23068672 kB\nAnonymous:      10485760 kB\n")
     assert memory.read(str(p)) == {"Rss": 33554432, "Pss_File": 23068672, "Anonymous": 10485760}
     assert memory.read(str(tmp_path / "missing")) is None
+
+
+def test_the_miner_claims_what_the_validator_would_pay():
+    rc = RelevanceCheck(None, "m")
+    for seq, expect in (([True], True), ([False, True], True), ([False, False], False),
+                        ([None], None), ([False, None], None)):
+        it = iter(seq)
+        rc.verdict = lambda t, b, it=it: next(it)
+        assert rc.claim("t", "b") is expect
+
+
+def test_a_relabelled_irrelevant_record_is_well_formed():
+    from neurons.miner import label_from_check
+    from alpharidge_ai.triage import extract_triage
+    stage = {"label": "relevant", "reason_code": None, "confidence": 0.8}
+    rec, err = extract_triage({"triage": label_from_check(stage, False)})
+    assert err is None and rec["label"] == "irrelevant"
+    kept = label_from_check({"label": "irrelevant", "reason_code": "promo_spam", "confidence": 0.8}, False)
+    assert kept["reason_code"] == "promo_spam"
+    assert label_from_check(stage, True)["label"] == "relevant"

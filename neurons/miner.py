@@ -34,6 +34,15 @@ from alpharidge_ai.triage import (
 install_meta_init_guard()
 
 
+def label_from_check(triage_rec: dict, relevant: bool) -> dict:
+    """The stage's record relabelled by the relevance check. An irrelevant label needs a
+    reason code, which a stage-relevant record does not carry."""
+    rec = dict(triage_rec, label="relevant" if relevant else "irrelevant", confidence=0.9)
+    if not relevant and not rec.get("reason_code"):
+        rec["reason_code"] = "non_economic"
+    return rec
+
+
 class Miner(BaseMinerNeuron):
     """
     V3 Miner: Processes TweetBatch requests from validators.
@@ -235,7 +244,7 @@ class Miner(BaseMinerNeuron):
                 self.article_intel_analyzer.client,
                 getattr(config, "MINER_RELEVANCE_MODEL", "") or self.article_intel_analyzer.model,
                 reasoning=getattr(config, "MINER_REASONING", ""))
-        return self._relevance_check.keep(title, body)
+        return self._relevance_check.claim(title, body)
 
     async def forward_articles(self, synapse: alpharidge_ai.protocol.ArticleBatch) -> alpharidge_ai.protocol.ArticleBatch:
         validator_hotkey = synapse.dendrite.hotkey if synapse.dendrite else None
@@ -493,8 +502,7 @@ class Miner(BaseMinerNeuron):
                     article.title, article.content or "")
                 checked = self._relevance_verdict(article.title, article.content or "")
                 if checked is not None:
-                    triage_rec = dict(triage_rec, label="relevant" if checked else "irrelevant",
-                                      confidence=0.9)
+                    triage_rec = label_from_check(triage_rec, checked)
                 elif (self._relevance_check_on() and triage_rec["label"] != "irrelevant"
                       and fallback_borderline < 3):
                     # No verdict: claim nothing that earns a premium, within the borderline cap.

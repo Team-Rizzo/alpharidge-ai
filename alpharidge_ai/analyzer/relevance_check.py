@@ -76,6 +76,12 @@ class RelevanceCheck:
         second = self.verdict(title, body)
         return None if second is None else second
 
+    def claim(self, title: str, body: str) -> Optional[bool]:
+        """Miner side: relevant unless the check says not relevant twice, the rule the
+        validator judges by. None when no usable answer came back."""
+        nm = self.non_market(title, body, confirm=True)
+        return None if nm is None else not nm
+
     def non_market(self, title: str, body: str, confirm: bool = True) -> Optional[bool]:
         """True only when the check says not relevant (twice, with `confirm`); None when it
         could not decide."""
