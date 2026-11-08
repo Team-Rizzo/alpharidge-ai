@@ -98,6 +98,7 @@ def _validator(factor):
     v._premium_ok = lambda a, copy=None: True
     v._batch_zeroed = lambda res: False
     v._shadow = lambda: False
+    v._recycle_exhausted = lambda aid, hk: False
     return v, paid
 
 
@@ -307,4 +308,4 @@ def test_the_audit_prompt_carries_the_article():
     assert triage_audit.TriageAuditor(Client, "m").relevance_verdict("Apple beats", body) is True
     prompt = seen["messages"][0]["content"]
     assert "Apple beats" in prompt and "revenue of $94 billion" in prompt
-    assert seen["extra_body"] == {"usage": {"include": True}}
+    assert seen["extra_body"] == {"usage": {"include": True}, "reasoning": {"enabled": False}}

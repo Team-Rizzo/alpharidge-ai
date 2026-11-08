@@ -11,6 +11,7 @@ from typing import Optional
 
 import bittensor as bt
 
+from alpharidge_ai import config
 from alpharidge_ai.utils import llm_spend
 
 _TOOL = {
@@ -124,7 +125,8 @@ class TriageAuditor:
                                           body=(body or "")[:self._body_chars])
         for auto in ((True, False) if llm_spend.auto_tools() else (False,)):
             try:
-                extra = llm_spend.request_body(self._client)
+                extra = llm_spend.request_body(
+                    self._client, getattr(config, "VALIDATOR_REASONING", ""))
                 response = self._client.chat.completions.create(
                     model=self._model,
                     messages=[{"role": "user", "content": llm_spend.ask_for_tool(prompt, name, auto)}],

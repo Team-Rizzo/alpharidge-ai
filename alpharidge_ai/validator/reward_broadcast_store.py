@@ -297,6 +297,20 @@ class RewardBroadcastStore:
         return aggregate_since_registration(
             self.by_epoch_by_sender, start_epoch, end_epoch, metagraph)
 
+    def sender_presence(self, start_epoch: int, end_epoch: int) -> Dict[str, int]:
+        """Epochs in the inclusive range that each sender broadcast."""
+        counts: Dict[str, int] = {}
+        for epoch in range(int(start_epoch), int(end_epoch) + 1):
+            for sender in (self.by_epoch_by_sender.get(epoch) or {}):
+                counts[sender] = counts.get(sender, 0) + 1
+        return counts
+
+    def missing_recent(self, start_epoch: int, end_epoch: int, recent: int = 2) -> list:
+        """Senders seen in the window but absent from its last `recent` epochs."""
+        window = range(int(end_epoch) - recent + 1, int(end_epoch) + 1)
+        return sorted(s for s in self.sender_presence(start_epoch, end_epoch)
+                      if all(s not in (self.by_epoch_by_sender.get(e) or {}) for e in window))
+
     # ---------------------------------------------------------------------
     # Remote reset helpers
     # ---------------------------------------------------------------------

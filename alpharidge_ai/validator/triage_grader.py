@@ -36,6 +36,7 @@ class TriageConfig:
     hard_severity: float = 9.0
     canary_ttl_s: float = 6 * 3600.0
     canary_max_exposures: int = 3
+    canary_spent_grace_s: float = 1800.0   # a spent canary's label outlives its last dispatch
     canary_pos_rate: float = 0.0
     canary_neg_rate: float = 0.3
     canary_fresh_s: float = 1200.0
@@ -399,9 +400,14 @@ class CanaryPool:
                 and e["exposures"] < self._cfg.canary_max_exposures)
 
     def prune(self) -> None:
+        """Drop expired canaries, and spent ones once their last dispatch has had time to
+        come back."""
         now = self._now()
-        self._entries = {k: v for k, v in self._entries.items()
-                         if now - v["born"] < self._cfg.canary_ttl_s}
+        self._entries = {
+            k: v for k, v in self._entries.items()
+            if now - v["born"] < self._cfg.canary_ttl_s
+            and (v["exposures"] < self._cfg.canary_max_exposures
+                 or now - v.get("last", v["born"]) < self._cfg.canary_spent_grace_s)}
 
     def ids(self) -> set:
         return set(self._entries)
@@ -425,6 +431,7 @@ class CanaryPool:
             return None
         aid = rng.choice(alive)
         self._entries[aid]["exposures"] += max(1, int(charge))
+        self._entries[aid]["last"] = now
         return aid
 
     def label_of(self, article_id: int) -> Optional[Tuple[str, bool]]:

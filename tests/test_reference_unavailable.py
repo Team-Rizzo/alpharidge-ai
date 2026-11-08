@@ -73,7 +73,7 @@ def test_providers_can_be_excluded_for_validator_calls(monkeypatch):
     assert seen[0]["extra_body"]["provider"] == {"ignore": ["BadCo", "Other"]}
     seen.clear()
     _routed([_reply("{}")], seen)._llm_call("p", {}, "t")
-    assert "extra_body" not in seen[0]
+    assert seen[0]["extra_body"] == {"reasoning": {"enabled": False}}   # miner: no routing, reasoning off
 
 
 def test_routing_only_goes_to_openrouter(monkeypatch):

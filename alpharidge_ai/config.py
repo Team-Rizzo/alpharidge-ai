@@ -354,6 +354,13 @@ TRIAGE_AUDIT_SKIP_GAZETTEER = _as_bool(os.getenv("TRIAGE_AUDIT_SKIP_GAZETTEER", 
 # Every relevance claim is judged against the published definition; a claim judged not
 # relevant earns no premium.
 TRIAGE_JUDGE_ALL = _as_bool(os.getenv("TRIAGE_JUDGE_ALL", "true"))
+# An article discarded by this many different miners is retired instead of sent out again.
+# 0 sends it out again every time.
+TRIAGE_RECYCLE_CAP = int(os.getenv("TRIAGE_RECYCLE_CAP", "3"))
+# Reasoning for the validator's relevance judge, reference analysis and triage audit:
+# "off", "on", or anything else for the provider's default. Graders have their own setting.
+VALIDATOR_REASONING = os.getenv("VALIDATOR_REASONING", "off")
+GRADER_REASONING = os.getenv("GRADER_REASONING", "")
 # Shadow: compute and log every 3.9.13 rule, but pay and grade exactly as 3.9.12. On until
 # the served value turns it off, so a validator that cannot fetch config never enforces alone.
 TRIAGE_JUDGE_SHADOW = _as_bool(os.getenv("TRIAGE_JUDGE_SHADOW", "true"))
@@ -374,6 +381,8 @@ BORDERLINE_VALUE_GROUNDED = _as_bool(os.getenv("BORDERLINE_VALUE_GROUNDED", "tru
 # Miner: label relevance with the published-definition check.
 MINER_RELEVANCE_CHECK = _as_bool(os.getenv("MINER_RELEVANCE_CHECK", "true"))
 MINER_RELEVANCE_MODEL = os.getenv("MINER_RELEVANCE_MODEL", "")
+# Reasoning for the miner's own model calls on OpenRouter: "off" matches the validator.
+MINER_REASONING = os.getenv("MINER_REASONING", "off")
 TRIAGE_RELEVANCE_AUDIT_TOL = float(os.getenv("TRIAGE_RELEVANCE_AUDIT_TOL", "0.06"))
 # How long a dispatched article may sit in PROCESSING before it is reclaimed. Both readers
 # (article_store.get_timeouts, cooldown._late_threshold_s) used a hardcoded 900 fallback and it
@@ -506,6 +515,9 @@ _REMOTE_CONFIG_KEYS = {
     "TRIAGE_AUDIT_SKIP_GAZETTEER": (_as_bool, "TRIAGE_AUDIT_SKIP_GAZETTEER"),
     "TRIAGE_FP_HARD":             (_as_bool, "TRIAGE_FP_HARD"),
     "TRIAGE_JUDGE_ALL":           (_as_bool, "TRIAGE_JUDGE_ALL"),
+    "TRIAGE_RECYCLE_CAP":         (int, "TRIAGE_RECYCLE_CAP"),
+    "VALIDATOR_REASONING":        (str, "VALIDATOR_REASONING"),
+    "GRADER_REASONING":           (str, "GRADER_REASONING"),
     "TRIAGE_JUDGE_SHADOW":        (_as_bool, "TRIAGE_JUDGE_SHADOW"),
     "TRIAGE_JUDGE_MODEL":         (str,   "TRIAGE_JUDGE_MODEL"),
     "TRIAGE_JUDGE_CONFIRM":       (_as_bool, "TRIAGE_JUDGE_CONFIRM"),
@@ -575,6 +587,8 @@ _REMOTE_CONFIG_KEYS = {
 # these is a weight difference that no config push can correct, so it is
 # ignored and reported rather than applied.
 _CONSENSUS_KEYS = {
+    "VALIDATOR_REASONING",
+    "GRADER_REASONING",
     "WEIGHT_WINDOW_EPOCHS",
     "WEIGHT_WINDOW_EPOCHS_PREV",
     "WEIGHT_WINDOW_ACTIVE_BLOCK",

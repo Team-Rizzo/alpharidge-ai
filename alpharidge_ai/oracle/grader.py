@@ -138,7 +138,7 @@ class Grader:
             if llm_spend.paused():
                 return None
             try:
-                extra = llm_spend.request_body(self.client)
+                extra = llm_spend.request_body(self.client, getattr(config, "GRADER_REASONING", ""))
                 response = self.client.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],

@@ -740,10 +740,11 @@ class ArticleIntelligenceAnalyzer:
         usable. A validator's (`strict`) call is retried once and then raises
         ReferenceUnavailable, so a failed call is never graded against as a reference."""
         extra = {}
-        if strict:
-            body = llm_spend.request_body(self.client)
-            if body:
-                extra["extra_body"] = body
+        body = (llm_spend.request_body(self.client, getattr(config, "VALIDATOR_REASONING", ""))
+                if strict else
+                llm_spend.reasoning_body(self.client, getattr(config, "MINER_REASONING", "")))
+        if body:
+            extra["extra_body"] = body
         problem = ""
         if strict and llm_spend.paused():
             raise ReferenceUnavailable(f"{tool_name}: paused")

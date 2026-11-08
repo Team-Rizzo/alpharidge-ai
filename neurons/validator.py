@@ -1100,11 +1100,14 @@ class Validator(BaseValidatorNeuron):
         client = getattr(primary, "_client", None)
         if not model or client is None:
             return None
+        reasoning = str(getattr(config, "VALIDATOR_REASONING", "") or "")
         judge = getattr(self, "_relevance_judge", None)
-        if judge is None or judge.model != model:
+        if judge is None or judge.model != model or judge.reasoning != reasoning:
             from alpharidge_ai.analyzer.relevance_check import RelevanceCheck, PROMPT_VERSION
-            judge = self._relevance_judge = RelevanceCheck(client, model, spend_purpose="relevance_judge")
-            bt.logging.info(f"[TRIAGE] relevance judge {model} prompt {PROMPT_VERSION}")
+            judge = self._relevance_judge = RelevanceCheck(client, model, spend_purpose="relevance_judge",
+                                                           reasoning=reasoning)
+            bt.logging.info(f"[TRIAGE] relevance judge {model} prompt {PROMPT_VERSION} "
+                            f"reasoning {reasoning or 'provider default'}")
         return judge
 
     def _judge_det_hits(self, items, det_relevant, skip=()) -> dict:
@@ -1529,6 +1532,9 @@ class Validator(BaseValidatorNeuron):
         discard_ids = set(triage_res.borderline_discard_ids)
         retire_ids = set(triage_res.retire_candidate_ids) | discard_ids
         canary_ids = set(triage_res.canary_ids)
+        retire_ids |= {int(a.id) for a in article_batch
+                       if int(a.id) not in keep_ids | retire_ids | canary_ids
+                       and self._recycle_exhausted(int(a.id), miner_hotkey)}
         # The floor gate is shared with every other lane; see _credit_gate.
         gated_out = gated_out or (lambda _aid: False)
         # Each article's pot is split across the assignees recorded at
@@ -1604,6 +1610,22 @@ class Validator(BaseValidatorNeuron):
         if payout > 0:
             self._miner_reward.add_reward(miner_hotkey, payout)
         self._attribute_pay(per_article, payout)
+
+    def _recycle_exhausted(self, article_id: int, miner_hotkey: str) -> bool:
+        """Count a discard; True once enough different miners have discarded the article."""
+        cap = int(getattr(config, "TRIAGE_RECYCLE_CAP", 0) or 0)
+        if cap <= 0:
+            return False
+        seen = self.__dict__.setdefault("_recycled", collections.OrderedDict())
+        hotkeys = seen.setdefault(article_id, set())
+        hotkeys.add(miner_hotkey)
+        seen.move_to_end(article_id)
+        while len(seen) > 200_000:
+            seen.popitem(last=False)
+        if len(hotkeys) < cap:
+            return False
+        del seen[article_id]
+        return True
 
     def _apply_verification_outcome(self, article_batch, miner_hotkey, triage_res, fp_ids,
                                     miner_signatures=None, nonces=None, epoch=None,

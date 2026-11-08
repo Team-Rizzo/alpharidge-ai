@@ -388,3 +388,41 @@ def test_named_article_labelled_irrelevant(monkeypatch, judging, verdict, expect
     res = v._grade_triage([art], [art], "hk")
     kinds = [e.kind for e in res.events if e.code == "false_negative_deterministic"]
     assert kinds == ([] if expect is None else [expect])
+
+
+class _Stored(types.SimpleNamespace):
+    def model_copy(self, update=None):
+        return _Stored(**{**self.__dict__, **(update or {})})
+
+
+def _recycling_validator(monkeypatch, cap):
+    monkeypatch.setattr(config, "TRIAGE_RECYCLE_CAP", cap, raising=False)
+    v, paid = _paying_validator()
+    done, back = set(), set()
+    v._article_store = types.SimpleNamespace(
+        update_article=lambda *a, **k: None, add_article=lambda *a, **k: None,
+        set_processed=lambda aid: done.add(aid), reset_to_unprocessed=lambda aid: back.add(aid),
+        mark_rewarded=lambda *a, **k: None, is_rewarded=lambda *a, **k: False)
+    v._triage_only_analysis = lambda art: None
+    v._recycle_exhausted = Validator._recycle_exhausted.__get__(v)
+    return v, done, back
+
+
+def _discard(v, hk, aid=5):
+    art = _Stored(id=aid, title="t", content="b", analysis=None)
+    Validator._apply_triage_outcome(v, [art], hk, _res([]), set(), {aid: art}, full_push=True)
+
+
+def test_an_article_discarded_by_enough_miners_is_retired(monkeypatch):
+    v, done, back = _recycling_validator(monkeypatch, 3)
+    _discard(v, "a"); _discard(v, "a"); _discard(v, "b")
+    assert back == {5} and not done                       # two different miners so far
+    _discard(v, "c")
+    assert done == {5}
+
+
+def test_recycle_cap_off_always_sends_it_back(monkeypatch):
+    v, done, back = _recycling_validator(monkeypatch, 0)
+    for hk in "abcdef":
+        _discard(v, hk)
+    assert back == {5} and not done

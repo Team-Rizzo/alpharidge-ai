@@ -32,10 +32,12 @@ def _clean(text: str, n: int) -> str:
 
 
 class RelevanceCheck:
-    def __init__(self, client, model: str, spend_purpose: Optional[str] = None):
+    def __init__(self, client, model: str, spend_purpose: Optional[str] = None,
+                 reasoning: Optional[str] = None):
         self._client = client
         self._model = model
         self._purpose = spend_purpose
+        self.reasoning = reasoning
 
     @property
     def model(self) -> str:
@@ -44,10 +46,9 @@ class RelevanceCheck:
     def verdict(self, title: str, body: str) -> Optional[bool]:
         """True or False, or None when no usable answer came back."""
         try:
-            extra = {}
-            if self._purpose:
-                from alpharidge_ai.utils import llm_spend
-                extra = llm_spend.request_body(self._client)
+            from alpharidge_ai.utils import llm_spend
+            extra = (llm_spend.request_body(self._client, self.reasoning) if self._purpose
+                     else llm_spend.reasoning_body(self._client, self.reasoning))
             r = self._client.chat.completions.create(
                 model=self._model, temperature=0, max_tokens=2000,
                 messages=[{"role": "user", "content": PROMPT.format(

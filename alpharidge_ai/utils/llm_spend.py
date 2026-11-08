@@ -33,11 +33,23 @@ def usage_body(client) -> dict:
     return {"usage": {"include": True}} if "openrouter" in base else {}
 
 
-def request_body(client) -> dict:
-    """`extra_body` for the validator's own calls: cost accounting and provider routing."""
+def reasoning_body(client, setting) -> dict:
+    """`extra_body` that turns the model's reasoning on or off explicitly ("on"/"off"), so an
+    answer doesn't depend on which provider serves the call. Anything else leaves the
+    provider's default."""
+    value = str(setting or "").strip().lower()
+    if value not in ("on", "off") or not usage_body(client):
+        return {}
+    return {"reasoning": {"enabled": value == "on"}}
+
+
+def request_body(client, reasoning=None) -> dict:
+    """`extra_body` for the validator's own calls: cost accounting, provider routing and
+    the reasoning setting."""
     body = usage_body(client)
     if not body:
         return {}
+    body.update(reasoning_body(client, reasoning))
     from alpharidge_ai import config
     prefs = {}
     for key, name in (("ignore", "REFERENCE_PROVIDER_IGNORE"), ("order", "REFERENCE_PROVIDER_ORDER")):

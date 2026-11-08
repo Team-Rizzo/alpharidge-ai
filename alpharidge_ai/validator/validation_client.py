@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from alpharidge_ai import config
 from alpharidge_ai.utils.api_client import AlpharidgeAPIClient
 from alpharidge_ai.utils.api_models import TweetWithAuthor, TelegramMessageForScoring, NewsArticleForScoring
+from alpharidge_ai.utils import memory
 from alpharidge_ai.utils.burn import calculate_weights
 from alpharidge_ai.models.reward import Reward
 from alpharidge_ai.protocol import ValidatorRewards
@@ -1029,11 +1030,24 @@ class ValidationClient:
                         present_epochs, window_k, window_start, window_end
                     )
                     if window_blocks is not None:
+                        store = self._validator._reward_broadcasts
+                        peers = " ".join(
+                            f"{s[:8]}:{n}/{window_k}" for s, n in
+                            sorted(store.sender_presence(window_start, window_end).items()))
                         context = (
                             f"epochs=[{window_start}..{window_end}] "
                             f"present={present_epochs}/{window_k} "
+                            f"peers={peers or 'none'} "
                             f"uid_rekey_skipped={uid_rekey_skipped} "
                         )
+                        for s in store.missing_recent(window_start, window_end):
+                            bt.logging.warning(
+                                f"[BROADCAST] no rewards from {s[:8]}.. for epochs "
+                                f"{window_end - 1}..{window_end}; its points are missing "
+                                f"from this window")
+                        mem = memory.line()
+                        if mem:
+                            bt.logging.info(mem)
                         weights = self._weights_for(rewards, window_blocks, context)
                         bt.logging.debug(f"[ValidationClient.run] Updating scores with new weights")
                         self._validator.update_scores(weights, self._validator.metagraph.uids.tolist())

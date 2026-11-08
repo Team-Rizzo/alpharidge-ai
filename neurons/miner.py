@@ -233,7 +233,8 @@ class Miner(BaseMinerNeuron):
             from alpharidge_ai.analyzer.relevance_check import RelevanceCheck
             self._relevance_check = RelevanceCheck(
                 self.article_intel_analyzer.client,
-                getattr(config, "MINER_RELEVANCE_MODEL", "") or self.article_intel_analyzer.model)
+                getattr(config, "MINER_RELEVANCE_MODEL", "") or self.article_intel_analyzer.model,
+                reasoning=getattr(config, "MINER_REASONING", ""))
         return self._relevance_check.keep(title, body)
 
     async def forward_articles(self, synapse: alpharidge_ai.protocol.ArticleBatch) -> alpharidge_ai.protocol.ArticleBatch:
