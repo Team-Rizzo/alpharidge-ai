@@ -87,25 +87,6 @@ def test_capacity_must_be_positive():
         s.settle({"x": 1.0}, 0.0)
 
 
-# ---- the price peg ----------------------------------------------------------------
-
-def test_burn_does_not_move_with_the_alpha_price():
-    """The peg is capacity in points, so the same work burns the same at any price."""
-    work = {"x": 500.0}
-    assert s.settle(work, C).burn == pytest.approx(s.settle(work, C).burn)
-
-    doubled_price_capacity = s.capacity_for_continuity(1000.0, 2.0, 0.001)
-    halved_price_capacity = s.capacity_for_continuity(1000.0, 1.0, 0.001)
-    assert doubled_price_capacity != halved_price_capacity  # only the cutover solve moves
-
-
-def test_continuity_solve_reproduces_the_previous_per_point_pay():
-    alpha_emission, alpha_usd, usd_per_point = 900.0, 1.25, 0.00105
-    capacity = s.capacity_for_continuity(alpha_emission, alpha_usd, usd_per_point)
-    pay_per_point_usd = (alpha_emission / capacity) * alpha_usd
-    assert pay_per_point_usd == pytest.approx(usd_per_point)
-
-
 # ---- weight vector ----------------------------------------------------------------
 
 HOTKEYS = ["hk0", "hk1", "hk2", "burn"]
@@ -114,7 +95,7 @@ BURN_UID = 3
 
 def test_weight_vector_places_shares_and_the_remainder():
     result = s.settle({"hk0": 250.0, "hk1": 250.0}, C)
-    weights = s.weight_vector(result.shares, result.burn, HOTKEYS, BURN_UID)
+    weights = s.weight_vector(result.shares, HOTKEYS, BURN_UID)
     assert weights[0] == pytest.approx(0.25)
     assert weights[1] == pytest.approx(0.25)
     assert weights[BURN_UID] == pytest.approx(0.5)
@@ -123,14 +104,14 @@ def test_weight_vector_places_shares_and_the_remainder():
 
 def test_weight_vector_sums_to_one_when_full():
     result = s.settle({"hk0": 600.0, "hk1": 400.0}, C)
-    weights = s.weight_vector(result.shares, result.burn, HOTKEYS, BURN_UID)
+    weights = s.weight_vector(result.shares, HOTKEYS, BURN_UID)
     assert sum(weights) == pytest.approx(1.0)
     assert weights[BURN_UID] == pytest.approx(0.0)
 
 
 def test_a_departed_hotkey_is_burned_not_redistributed():
     result = s.settle({"hk0": 250.0, "gone": 250.0}, C)
-    weights = s.weight_vector(result.shares, result.burn, HOTKEYS, BURN_UID)
+    weights = s.weight_vector(result.shares, HOTKEYS, BURN_UID)
     assert weights[0] == pytest.approx(0.25)
     assert weights[BURN_UID] == pytest.approx(0.75)
     assert sum(weights) == pytest.approx(1.0)
@@ -138,6 +119,6 @@ def test_a_departed_hotkey_is_burned_not_redistributed():
 
 def test_weight_vector_handles_an_empty_epoch():
     result = s.settle({}, C)
-    weights = s.weight_vector(result.shares, result.burn, HOTKEYS, BURN_UID)
+    weights = s.weight_vector(result.shares, HOTKEYS, BURN_UID)
     assert weights[BURN_UID] == pytest.approx(1.0)
     assert sum(weights) == pytest.approx(1.0)

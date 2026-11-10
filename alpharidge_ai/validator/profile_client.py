@@ -18,14 +18,13 @@ import requests
 
 from alpharidge_ai import config
 from alpharidge_ai.mechanism import profile as mp
-from alpharidge_ai.utils import attestation_crypto as ac
+from alpharidge_ai.ledger import attestation as ac
 
-PROFILE_PATH_ENV = "MECHANISM_PROFILE_LOCATION"
 PROFILE_ENDPOINT = "/mechanism/profile"
 
 
 def _default_path() -> Path:
-    return Path(getattr(config, PROFILE_PATH_ENV,
+    return Path(getattr(config, "MECHANISM_PROFILE_LOCATION",
                         str(Path(__file__).resolve().parent.parent / ".mechanism_profile.json")))
 
 
@@ -42,26 +41,9 @@ class ProfileClient:
     def __init__(self, path: Optional[Path] = None, *, require_signature: bool = True):
         self.path = Path(path) if path else _default_path()
         self.require_signature = require_signature
-        self.resolver = mp.ProfileResolver(
-            refresh_seconds=int(getattr(config, "REMOTE_CONFIG_REFRESH_SECONDS", 3600)))
+        self.resolver = mp.ProfileResolver(refresh_seconds=config.REMOTE_CONFIG_REFRESH_SECONDS)
         self._last_fetch = 0.0
         self._lock = threading.Lock()
-        self._check_epoch_length()
-
-    @staticmethod
-    def _check_epoch_length() -> None:
-        """Day-quoted constants convert to epochs against a fixed epoch length.
-
-        That length is a mechanism constant, identical fleet-wide, so it is not read
-        from local config. If this box disagrees, every ration converts wrongly here
-        and nowhere else, which is worth saying out loud.
-        """
-        local = int(getattr(config, "BLOCK_LENGTH", mp.BLOCKS_PER_EPOCH))
-        if local != mp.BLOCKS_PER_EPOCH:
-            bt.logging.warning(
-                f"[PROFILE] BLOCK_LENGTH={local} differs from the mechanism's "
-                f"{mp.BLOCKS_PER_EPOCH} blocks per epoch; per-epoch conversions "
-                f"assume {mp.EPOCHS_PER_DAY} epochs/day")
 
     # ---- persistence ----
 
@@ -105,8 +87,9 @@ class ProfileClient:
     # ---- refresh ----
 
     def refresh(self, block: int = 0, *, force: bool = False) -> bool:
-        """Fetch and consider the served profile. Returns True when one was staged."""
-        interval = int(getattr(config, "REMOTE_CONFIG_REFRESH_SECONDS", 3600))
+        """Fetch and consider the served profile, and refresh the served config.
+        Returns True when a profile was staged. Blocking; the validator runs it in a thread."""
+        interval = config.REMOTE_CONFIG_REFRESH_SECONDS
         now = time.time()
         if not force and (now - self._last_fetch) < interval:
             return False
@@ -116,12 +99,14 @@ class ProfileClient:
                 return False
             self._last_fetch = time.time()
 
-            api_url = (getattr(config, "MINER_API_URL", "") or "").rstrip("/")
-            if not api_url:
+            api_url = (config.MINER_API_URL or "").rstrip("/")
+            if api_url in ("", "null"):
                 return False
+            config.refresh_remote_config(force=force)
             try:
-                resp = requests.get(f"{api_url}{PROFILE_ENDPOINT}",
-                                    headers=config._build_auth_headers(), timeout=15)
+                url = f"{api_url}{PROFILE_ENDPOINT}"
+                resp = requests.get(url, headers=config._build_auth_headers("GET", url),
+                                    timeout=15)
                 resp.raise_for_status()
                 body = resp.json() or {}
             except Exception as e:

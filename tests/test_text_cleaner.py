@@ -1,19 +1,11 @@
-"""Tests for text_cleaner — strips boilerplate before NER/asset extraction.
+"""text_cleaner strips page boilerplate before the shared check reads the text."""
 
-This is the source-level fix for the §3.1 "Follow us on Google" -> GOOGL and
-photo-credit "Getty Images" -> entity leakage: remove the boilerplate before any
-extractor ever sees it.
-"""
-
-import pytest
-
-from alpharidge_ai.analyzer.text_cleaner import clean_text
-from alpharidge_ai.analyzer.asset_extractor import AssetExtractor
+from alpharidge_ai.verify.text_cleaner import clean_text
 
 
 def test_strips_html_tags():
-    assert "<" not in clean_text("<p>Apple rose 3%</p>")
-    assert "Apple rose 3%" in clean_text("<p>Apple rose 3%</p>")
+    assert "<" not in clean_text("<p>Acme rose 3%</p>")
+    assert "Acme rose 3%" in clean_text("<p>Acme rose 3%</p>")
 
 
 def test_removes_follow_us_widget():
@@ -51,14 +43,12 @@ def test_keeps_clean_financial_text_intact():
 
 
 def test_total_boilerplate_does_not_annihilate():
-    # Even an all-boilerplate input must not return empty (guard).
-    out = clean_text("Advertisement")
-    assert out is not None
-    assert len(out) >= 0  # never raises; guard keeps baseline
+    # An all-boilerplate input is kept rather than emptied.
+    assert clean_text("Advertisement") == "Advertisement"
 
 
 def test_long_clean_article_not_over_stripped():
-    src = " ".join(["Nvidia reported record revenue of $42 billion this quarter."] * 12)
+    src = " ".join(["Acme reported record revenue of $42 billion this quarter."] * 12)
     out = clean_text(src)
     assert len(out) >= 0.6 * len(src)
 
@@ -66,12 +56,3 @@ def test_long_clean_article_not_over_stripped():
 def test_deterministic():
     src = "News. Follow us on Google. (Photo: Getty Images)"
     assert clean_text(src) == clean_text(src)
-
-
-def test_integration_google_widget_not_extracted_as_googl():
-    # The end-to-end §3.1 fix: clean THEN extract -> no GOOGL/META from a widget.
-    ax = AssetExtractor()
-    raw = "Local jazz festival opens tonight. Follow us on Google and Facebook for more."
-    tickers = {m.ticker for m in ax.extract_assets("Jazz festival", clean_text(raw))}
-    assert "GOOGL" not in tickers
-    assert "META" not in tickers

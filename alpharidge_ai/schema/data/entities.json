@@ -1,0 +1,8229 @@
+{
+ "entities": [
+  {
+   "scheme": "wikidata",
+   "id": "Q309195",
+   "name": "Bank for International Settlements",
+   "kind": "central_bank",
+   "aliases": [
+    "BIS"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q806703",
+   "name": "Bank of Canada",
+   "kind": "central_bank",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q183231",
+   "name": "Bank of England",
+   "kind": "central_bank",
+   "aliases": [
+    "BOE"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q333101",
+   "name": "Bank of Japan",
+   "kind": "central_bank",
+   "aliases": [
+    "BOJ",
+    "Nippon Ginkō"
+   ],
+   "xrefs": [
+    "lei:353800717BLAHZMEXR15"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q485531",
+   "name": "Bank of Korea",
+   "kind": "central_bank",
+   "aliases": [
+    "BOK"
+   ],
+   "xrefs": [
+    "lei:RVHOHKPBCJ2GSJ37YH94"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q806208",
+   "name": "Bank of Mexico",
+   "kind": "central_bank",
+   "aliases": [
+    "Banco de Mexico",
+    "Banxico",
+    "Central Bank of Mexico"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q806186",
+   "name": "Central Bank of Brazil",
+   "kind": "central_bank",
+   "aliases": [
+    "Banco Central do Brasil"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q580829",
+   "name": "Central Bank of the Republic of Turkey",
+   "kind": "central_bank",
+   "aliases": [
+    "CBRT",
+    "Central Bank of Turkey",
+    "Republican Central Bank of Turkey"
+   ],
+   "xrefs": [
+    "lei:789000B8K6KNUMHC1Y64"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q8901",
+   "name": "European Central Bank",
+   "kind": "central_bank",
+   "aliases": [
+    "ECB"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q53536",
+   "name": "Federal Reserve",
+   "kind": "central_bank",
+   "aliases": [
+    "FOMC",
+    "FRS",
+    "Fed",
+    "Federal Open Market Committee",
+    "Federal Reserve Board",
+    "Federal Reserve System"
+   ],
+   "xrefs": [
+    "wikidata:Q2289022"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q970769",
+   "name": "Norges Bank",
+   "kind": "central_bank",
+   "aliases": [],
+   "xrefs": [
+    "lei:549300O6E2WAK3IAXE34"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q249203",
+   "name": "People's Bank of China",
+   "kind": "central_bank",
+   "aliases": [
+    "PBOC"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1506724",
+   "name": "Reserve Bank of Australia",
+   "kind": "central_bank",
+   "aliases": [
+    "RBA"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q944085",
+   "name": "Reserve Bank of India",
+   "kind": "central_bank",
+   "aliases": [
+    "RBI"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1494550",
+   "name": "Reserve Bank of New Zealand",
+   "kind": "central_bank",
+   "aliases": [
+    "RBNZ",
+    "Te Putea Matua"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q912920",
+   "name": "South African Reserve Bank",
+   "kind": "central_bank",
+   "aliases": [
+    "Reserve Bank",
+    "SARB"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q564652",
+   "name": "Sveriges Riksbank",
+   "kind": "central_bank",
+   "aliases": [
+    "Riksbank"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q597394",
+   "name": "Swiss National Bank",
+   "kind": "central_bank",
+   "aliases": [
+    "SNB"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q159433",
+   "name": "3M",
+   "kind": "company",
+   "aliases": [
+    "Minnesota Mining & Mfg. Co.",
+    "Minnesota Mining and Manufacturing"
+   ],
+   "xrefs": [
+    "ticker:MMM",
+    "cik:0000066740",
+    "lei:LUZQVYP4VS22CLWDAR65"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4648219",
+   "name": "A. O. Smith",
+   "kind": "company",
+   "aliases": [
+    "A.O. Smith"
+   ],
+   "xrefs": [
+    "ticker:AOS",
+    "cik:0000091142",
+    "lei:549300XG4US7UJNECY36"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q306764",
+   "name": "Abbott Laboratories",
+   "kind": "company",
+   "aliases": [
+    "Abbot Laboratories",
+    "Abbott",
+    "Abbott Labs",
+    "Abbott Molecular",
+    "Abbott Nutrition",
+    "Abbott Pharmaceuticals",
+    "I-Stat",
+    "Isomil",
+    "Ross Laboratories"
+   ],
+   "xrefs": [
+    "ticker:ABT",
+    "cik:0000001800",
+    "lei:HQD377W2YR662HK5JX27"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q14662364",
+   "name": "AbbVie",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ABBV",
+    "cik:0001551152",
+    "lei:FR5LCKFTG8054YNNRU85"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q338825",
+   "name": "Accenture",
+   "kind": "company",
+   "aliases": [
+    "Accenture (Dublin)",
+    "Accenture Global Solutions Limited (Dublin)"
+   ],
+   "xrefs": [
+    "ticker:ACN",
+    "cik:0001467373",
+    "lei:5493000EWHDSR3MZWH98"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q11463",
+   "name": "Adobe Inc.",
+   "kind": "company",
+   "aliases": [
+    "ADBE",
+    "ADOBE INC. (San Jose, CA)",
+    "Adobe Systems",
+    "Adobe Systems Software(Beijing)Co.,Ltd.",
+    "adobe.com"
+   ],
+   "xrefs": [
+    "ticker:ADBE",
+    "cik:0000796343",
+    "lei:FU4LY2G4933NH2E1CP29"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q128896",
+   "name": "Advanced Micro Devices Inc.",
+   "kind": "company",
+   "aliases": [
+    "AMD"
+   ],
+   "xrefs": [
+    "ticker:AMD",
+    "cik:0000002488",
+    "lei:R2I72C950HOYXII45366"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q226037",
+   "name": "AES",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AES",
+    "cik:0000874761"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q26311",
+   "name": "Aflac",
+   "kind": "company",
+   "aliases": [
+    "American Family Life Assurance Company"
+   ],
+   "xrefs": [
+    "ticker:AFL",
+    "cik:0000004977",
+    "lei:549300N0B7DOGLXWPP39"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q393762",
+   "name": "Agilent Technologies",
+   "kind": "company",
+   "aliases": [
+    "agilent"
+   ],
+   "xrefs": [
+    "ticker:A",
+    "cik:0001090872",
+    "lei:QUIX8Y7A2WP0XRMW7G29"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q407744",
+   "name": "Air Products",
+   "kind": "company",
+   "aliases": [
+    "Air Products & Chemicals"
+   ],
+   "xrefs": [
+    "ticker:APD",
+    "cik:0000002969",
+    "lei:7QEON6Y1RL5XR3R1W237"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001559720",
+   "name": "Airbnb Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ABNB"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q415598",
+   "name": "Akamai Technologies",
+   "kind": "company",
+   "aliases": [
+    "akamai"
+   ],
+   "xrefs": [
+    "ticker:AKAM",
+    "cik:0001086222",
+    "lei:OC1LZNN2LF5WTJ5RIL89"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q400986",
+   "name": "Albemarle",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ALB",
+    "cik:0000915913"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q48739877",
+   "name": "Alexandria Real Estate Equities",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ARE",
+    "cik:0001035443",
+    "lei:MGCJBT4MKTQBVLNUIS88"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q30272258",
+   "name": "Align Technology",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ALGN",
+    "cik:0001097149",
+    "lei:549300N5YSE0U3LCP840"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16738121",
+   "name": "Allegion",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ALLE",
+    "cik:0001579241",
+    "lei:984500560CAC2E6FB757"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4732492",
+   "name": "Alliant Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:LNT",
+    "cik:0000352541",
+    "lei:JZGA4Z7N0BQVZ44QVC53"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2645636",
+   "name": "Allstate",
+   "kind": "company",
+   "aliases": [
+    "Allstate Insurance"
+   ],
+   "xrefs": [
+    "ticker:ALL",
+    "cik:0000899051",
+    "lei:OBT0W1ED8G0NWVOLOJ77"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q20800404",
+   "name": "Alphabet Inc.",
+   "kind": "company",
+   "aliases": [
+    "Alphabet Inc. (Class C)",
+    "Google holding"
+   ],
+   "xrefs": [
+    "ticker:GOOGL",
+    "cik:0001652044",
+    "lei:5493006MHB84DD0ZWV18",
+    "ticker:GOOG"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q445007",
+   "name": "Altria",
+   "kind": "company",
+   "aliases": [
+    "Philip Morris Companies"
+   ],
+   "xrefs": [
+    "ticker:MO",
+    "cik:0000764180",
+    "lei:XSGZFLO9YTNO9VCQV219"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3884",
+   "name": "Amazon.com Inc.",
+   "kind": "company",
+   "aliases": [
+    "amazon"
+   ],
+   "xrefs": [
+    "ticker:AMZN",
+    "cik:0001018724",
+    "lei:ZXTILKJKG63JELOEG630"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q460307",
+   "name": "Amcor",
+   "kind": "company",
+   "aliases": [
+    "Amcor Pty Ltd",
+    "Australian Paper Manufacturers"
+   ],
+   "xrefs": [
+    "ticker:AMCR",
+    "cik:0001748790"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q462984",
+   "name": "Ameren",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AEE",
+    "cik:0001002910",
+    "lei:XRZQ5S7HYJFPHJ78L959"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q464092",
+   "name": "American Electric Power",
+   "kind": "company",
+   "aliases": [
+    "AEP"
+   ],
+   "xrefs": [
+    "ticker:AEP",
+    "cik:0000004904",
+    "lei:1B4S6S7G0TW5EE83BO58"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q194360",
+   "name": "American Express",
+   "kind": "company",
+   "aliases": [
+    "AEXP",
+    "AmEx",
+    "American Express Bank",
+    "americanexpress.com"
+   ],
+   "xrefs": [
+    "ticker:AXP",
+    "cik:0000004962",
+    "lei:R4PP93JZOLY261QX3811"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4744171",
+   "name": "American International",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AIG",
+    "cik:0000005272"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4745263",
+   "name": "American Tower",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AMT",
+    "cik:0001053507",
+    "lei:5493006ORUSIL88JOE18"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q467238",
+   "name": "American Water Works",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AWK",
+    "cik:0001410636",
+    "lei:549300DXHIJQMD5WFW18"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2843129",
+   "name": "Ameriprise Financial",
+   "kind": "company",
+   "aliases": [
+    "Ameriprise Financial (United States)",
+    "ameriprise"
+   ],
+   "xrefs": [
+    "ticker:AMP",
+    "cik:0000820027",
+    "lei:6ZLKQF7QB6JAEKQS5388"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q470317",
+   "name": "Ametek",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AME",
+    "cik:0001037868",
+    "lei:549300WZDEF9KKE40E98"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q470517",
+   "name": "Amgen",
+   "kind": "company",
+   "aliases": [
+    "Applied Molecular Genetics"
+   ],
+   "xrefs": [
+    "ticker:AMGN",
+    "cik:0000318154",
+    "lei:62QBXGPJ34PQ72Z12S66"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q474621",
+   "name": "Amphenol",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:APH",
+    "cik:0000820313",
+    "lei:549300D3L3G0R4U4VT04"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q484930",
+   "name": "Analog Devices",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ADI",
+    "cik:0000006281",
+    "lei:GYVOE5EZ4GDAVTU4CQ61"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q296007",
+   "name": "Aon",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AON",
+    "cik:0000315293"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q230909",
+   "name": "APA",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:APA",
+    "cik:0001841666"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q619121",
+   "name": "Apollo Global Management",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:APO",
+    "cik:0001858681",
+    "lei:54930054P2G7ZJB0KM79"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q312",
+   "name": "Apple Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AAPL",
+    "cik:0000320193",
+    "lei:HWUPKR0MPOU8FGXBT394"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q621610",
+   "name": "Applied Materials",
+   "kind": "company",
+   "aliases": [
+    "APPLIED MATERIALS, INC. (Santa Clara, CA)"
+   ],
+   "xrefs": [
+    "ticker:AMAT",
+    "cik:0000006951",
+    "lei:41BNNE1AFPNAZELZ6K07"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q27150212",
+   "name": "AppLovin",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:APP",
+    "cik:0001751008"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q643626",
+   "name": "Aptiv",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:APTV",
+    "cik:0001521332",
+    "lei:549300SEU65CJHRH6V04"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000947484",
+   "name": "Arch Capital",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ACGL"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q632694",
+   "name": "Archer Daniels Midland",
+   "kind": "company",
+   "aliases": [
+    "ADM"
+   ],
+   "xrefs": [
+    "ticker:ADM",
+    "cik:0000007084",
+    "lei:549300LO13MQ9HYSTR83"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001176948",
+   "name": "Ares Management",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ARES"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2861324",
+   "name": "Arista Networks",
+   "kind": "company",
+   "aliases": [
+    "Arastra",
+    "arista"
+   ],
+   "xrefs": [
+    "ticker:ANET",
+    "cik:0001596532",
+    "lei:635400H1WKBLOQERUU95"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001973239",
+   "name": "Arm Holdings plc",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ARM"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000354190",
+   "name": "Arthur J. Gallagher &",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AJG"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4810399",
+   "name": "Assurant",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AIZ",
+    "cik:0001267238",
+    "lei:H3F39CAXWQRVWURFXL38"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q35476",
+   "name": "AT&T",
+   "kind": "company",
+   "aliases": [
+    "ATT"
+   ],
+   "xrefs": [
+    "ticker:T",
+    "cik:0000732717",
+    "lei:549300Z40J86GGSTL398"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4817084",
+   "name": "Atmos Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ATO",
+    "cik:0000731802"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q628051",
+   "name": "Autodesk",
+   "kind": "company",
+   "aliases": [
+    "autodesk.com"
+   ],
+   "xrefs": [
+    "ticker:ADSK",
+    "cik:0000769397"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q489080",
+   "name": "Automatic Data Processing",
+   "kind": "company",
+   "aliases": [
+    "ADP"
+   ],
+   "xrefs": [
+    "ticker:ADP",
+    "cik:0000008670",
+    "lei:HGBOLILQXWER4SAL2I23"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4826087",
+   "name": "AutoZone",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AZO",
+    "cik:0000866787",
+    "lei:GA3JGKJ41LJKXDN23E90"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q790650",
+   "name": "Avery Dennison",
+   "kind": "company",
+   "aliases": [
+    "Avery Adhesive Label Corp",
+    "Avery Adhesive Products, Inc.",
+    "Avery Adhesives",
+    "Avery Products Corporation",
+    "Kum-Kleen Adhesive Products"
+   ],
+   "xrefs": [
+    "ticker:AVY",
+    "cik:0000008818",
+    "lei:549300PW7VPFCYKLIV37"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q690604",
+   "name": "Axon Enterprise",
+   "kind": "company",
+   "aliases": [
+    "TASER",
+    "TASER International, Inc."
+   ],
+   "xrefs": [
+    "ticker:AXON",
+    "cik:0001069183"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q804353",
+   "name": "Baker Hughes",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:BKR",
+    "cik:0001701605"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q18545",
+   "name": "Ball",
+   "kind": "company",
+   "aliases": [
+    "sport ball"
+   ],
+   "xrefs": [
+    "ticker:BALL",
+    "cik:0000009389"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q487907",
+   "name": "Bank of America Corporation",
+   "kind": "company",
+   "aliases": [
+    "BoA",
+    "BofA"
+   ],
+   "xrefs": [
+    "ticker:BAC",
+    "cik:0000070858",
+    "lei:9DJT3UXIJIZJI4WXO774"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001591588",
+   "name": "Barrick Gold Corporation",
+   "kind": "company",
+   "aliases": [
+    "barrick"
+   ],
+   "xrefs": [
+    "ticker:GOLD"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q761965",
+   "name": "Baxter International",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:BAX",
+    "cik:0000010456"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q813780",
+   "name": "Becton Dickinson",
+   "kind": "company",
+   "aliases": [
+    "BD",
+    "BD Biosciences (United States)",
+    "Becton, Dickinson and Company"
+   ],
+   "xrefs": [
+    "ticker:BDX",
+    "cik:0000010795",
+    "lei:ICE2EP6D98PQUILVRZ91"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q217583",
+   "name": "Berkshire Hathaway Inc.",
+   "kind": "company",
+   "aliases": [
+    "Berkshire Hathaway Incorperation",
+    "Valley Falls Company",
+    "berkshire"
+   ],
+   "xrefs": [
+    "ticker:BRK.B",
+    "cik:0001067983",
+    "lei:5493000C01ZX7D35SD85"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q533415",
+   "name": "Best Buy",
+   "kind": "company",
+   "aliases": [
+    "Sound of Music"
+   ],
+   "xrefs": [
+    "ticker:BBY",
+    "cik:0000764478",
+    "lei:HL5XPTVRV0O8TUN5LL90"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q19873469",
+   "name": "Bio-Techne",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TECH",
+    "cik:0000842023"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q864338",
+   "name": "Biogen",
+   "kind": "company",
+   "aliases": [
+    "BIIB",
+    "Biogen Idec"
+   ],
+   "xrefs": [
+    "ticker:BIIB",
+    "cik:0000875045",
+    "lei:W8J5WZB5IY3K0NDQT671"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0002012383",
+   "name": "BlackRock",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:BLK"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q254796",
+   "name": "Blackstone",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:BX",
+    "cik:0001393818"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6536648",
+   "name": "Block",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:XYZ",
+    "cik:0001512673"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q589288",
+   "name": "BNY Mellon",
+   "kind": "company",
+   "aliases": [
+    "BNY",
+    "The Bank of New York Mellon"
+   ],
+   "xrefs": [
+    "ticker:BNY",
+    "cik:0001390777",
+    "lei:WFLLPEPC7FZXENRZV188"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4943232",
+   "name": "Booking",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:BKNG",
+    "cik:0001075531"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q894585",
+   "name": "Boston Scientific",
+   "kind": "company",
+   "aliases": [
+    "BSC"
+   ],
+   "xrefs": [
+    "ticker:BSX",
+    "cik:0000885725",
+    "lei:Y6ZDD9FP4P8JSSJMW954"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q266423",
+   "name": "Bristol Myers Squibb",
+   "kind": "company",
+   "aliases": [
+    "BMS"
+   ],
+   "xrefs": [
+    "ticker:BMY",
+    "cik:0000014272",
+    "lei:HLYYNH7UQUORYSJQCN42"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q790060",
+   "name": "Broadcom Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:AVGO",
+    "cik:0001730168",
+    "lei:549300WV6GIDOZJTV909"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4972280",
+   "name": "Broadridge Financial Solutions",
+   "kind": "company",
+   "aliases": [
+    "broadridge financial"
+   ],
+   "xrefs": [
+    "ticker:BR",
+    "cik:0001383312",
+    "lei:549300KZDJZQ2YIHRC28"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4976010",
+   "name": "Brown & Brown",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:BRO",
+    "cik:0000079282",
+    "lei:549300PC8KTJ71XKFY89"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q392221",
+   "name": "Brown–Forman",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:BF.B",
+    "cik:0000014693",
+    "lei:549300873K3LXF7ARU34"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q27686100",
+   "name": "Builders FirstSource",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:BLDR",
+    "cik:0001316835",
+    "lei:549300W0SKP6L3H7DP63"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001996862",
+   "name": "Bunge Global",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:BG"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3632306",
+   "name": "BXP",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:BXP",
+    "cik:0001037540"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q931200",
+   "name": "C.H. Robinson",
+   "kind": "company",
+   "aliases": [
+    "C. H. Robinson Worldwide",
+    "C.H. Robinson Worldwide, Inc."
+   ],
+   "xrefs": [
+    "ticker:CHRW",
+    "cik:0001043277",
+    "lei:529900WNWN5L0OVDHA79"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q608776",
+   "name": "Cadence Design Systems",
+   "kind": "company",
+   "aliases": [
+    "cadence design",
+    "cadence.com",
+    "cādence"
+   ],
+   "xrefs": [
+    "ticker:CDNS",
+    "cik:0000813672",
+    "lei:GCT7RXJOGLXPV0NXZY22"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5025803",
+   "name": "Camden Property Trust",
+   "kind": "company",
+   "aliases": [
+    "Camden"
+   ],
+   "xrefs": [
+    "ticker:CPT",
+    "cik:0000906345",
+    "lei:5493002MYX22OHYJBD89"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000016732",
+   "name": "Campbell's Company (The)",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CPB"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1034654",
+   "name": "Capital One",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:COF",
+    "cik:0000927628",
+    "lei:ZUE8T73ROZOF6FLBAR73"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q902397",
+   "name": "Cardinal Health",
+   "kind": "company",
+   "aliases": [
+    "Cardinal Health (United States)",
+    "CardinalHealth"
+   ],
+   "xrefs": [
+    "ticker:CAH",
+    "cik:0000721371",
+    "lei:CCU46N3GJMF4OK4N7U60"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4618",
+   "name": "Carnival",
+   "kind": "company",
+   "aliases": [
+    "Shrovetide",
+    "carnaval"
+   ],
+   "xrefs": [
+    "ticker:CCL",
+    "cik:0000815097"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q731912",
+   "name": "Carrier Global",
+   "kind": "company",
+   "aliases": [
+    "CARRIER CORPORATION (Palm Beach Gardens, FL)",
+    "Carrier Corporation"
+   ],
+   "xrefs": [
+    "ticker:CARR",
+    "cik:0001783180",
+    "lei:549300GUSOAN8YCR8P16"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16247191",
+   "name": "Carvana",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CVNA",
+    "cik:0001690820"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2940968",
+   "name": "Casey's",
+   "kind": "company",
+   "aliases": [
+    "Casey's General Stores"
+   ],
+   "xrefs": [
+    "ticker:CASY",
+    "cik:0000726958",
+    "lei:549300CAFWSI86V66Q65"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q459965",
+   "name": "Caterpillar Inc.",
+   "kind": "company",
+   "aliases": [
+    "Caterpillar Inc. (Peoria, IL)",
+    "Caterpillar Tractor Company"
+   ],
+   "xrefs": [
+    "ticker:CAT",
+    "cik:0000018230",
+    "lei:WRJR7GS4GTRECRRTVX92"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5009192",
+   "name": "CBRE",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CBRE",
+    "cik:0001138118"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1023155",
+   "name": "CDW",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CDW",
+    "cik:0001402057",
+    "lei:9845001B052ABF0B6755"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q470156",
+   "name": "Cencora",
+   "kind": "company",
+   "aliases": [
+    "AmerisourceBergen Corporation",
+    "AmerisourceBergen World Courier"
+   ],
+   "xrefs": [
+    "ticker:COR",
+    "cik:0001140859",
+    "lei:AI8GXW8LG5WK7E9UD086"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5059102",
+   "name": "Centene",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CNC",
+    "cik:0001071739",
+    "lei:549300Z7JJ4TQSQGT333"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1053560",
+   "name": "CenterPoint Energy",
+   "kind": "company",
+   "aliases": [
+    "CenterPoint"
+   ],
+   "xrefs": [
+    "ticker:CNP",
+    "cik:0001130310",
+    "lei:21TPXMRRHFKOBHDC8J74"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q905806",
+   "name": "CF Industries",
+   "kind": "company",
+   "aliases": [
+    "CF Fertilisers"
+   ],
+   "xrefs": [
+    "ticker:CF",
+    "cik:0001324404",
+    "lei:5FVKT86LAD2F40NPC183"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5082076",
+   "name": "Charles River Laboratories",
+   "kind": "company",
+   "aliases": [
+    "Charles River"
+   ],
+   "xrefs": [
+    "ticker:CRL",
+    "cik:0001100682",
+    "lei:5493008S8WYPIT0LWO97"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5082401",
+   "name": "Charles Schwab",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SCHW",
+    "cik:0000316709"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2961234",
+   "name": "Charter Communications",
+   "kind": "company",
+   "aliases": [
+    "Spectrum"
+   ],
+   "xrefs": [
+    "ticker:CHTR",
+    "cik:0001091667",
+    "lei:0J0XRGZE3PBRFEZ7MV65"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q319642",
+   "name": "Chevron Corporation",
+   "kind": "company",
+   "aliases": [
+    "Chevron México",
+    "Standard Oil of California"
+   ],
+   "xrefs": [
+    "ticker:CVX",
+    "cik:0000093410",
+    "lei:VA8TZDWPEZYU430RZ444"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q465751",
+   "name": "Chipotle Mexican Grill",
+   "kind": "company",
+   "aliases": [
+    "Chipotle"
+   ],
+   "xrefs": [
+    "ticker:CMG",
+    "cik:0001058090"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q406758",
+   "name": "Chubb",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CB",
+    "cik:0000896159"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5116536",
+   "name": "Church & Dwight",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CHD",
+    "cik:0000313927",
+    "lei:POOXSI30AWAQGYJZC921"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1091783",
+   "name": "Ciena",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CIEN",
+    "cik:0000936395",
+    "lei:W0CZ7N0GH8UIGXDM1H41"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q642271",
+   "name": "Cigna",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CI",
+    "cik:0001739940"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5120253",
+   "name": "Cincinnati Financial",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CINF",
+    "cik:0000020286"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1092571",
+   "name": "Cintas",
+   "kind": "company",
+   "aliases": [
+    "Acme Industrial Laundry Company"
+   ],
+   "xrefs": [
+    "ticker:CTAS",
+    "cik:0000723254"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q173395",
+   "name": "Cisco",
+   "kind": "company",
+   "aliases": [
+    "Cisco Systems",
+    "cisco.com"
+   ],
+   "xrefs": [
+    "ticker:CSCO",
+    "cik:0000858877",
+    "lei:549300LKFJ962MZ46593"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q219508",
+   "name": "Citigroup",
+   "kind": "company",
+   "aliases": [
+    "Citi Bank",
+    "City Bank of New York"
+   ],
+   "xrefs": [
+    "ticker:C",
+    "cik:0000831001",
+    "lei:6SHGI4ZSSLCXXQSBB395"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5122694",
+   "name": "Citizens Financial",
+   "kind": "company",
+   "aliases": [
+    "Citizens Bank",
+    "Citizens Financial Group, Inc. (Providence, RI)"
+   ],
+   "xrefs": [
+    "ticker:CFG",
+    "cik:0000759944",
+    "lei:2138004JDDA4ZQUPFW65"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q910368",
+   "name": "Clorox",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CLX",
+    "cik:0000021076",
+    "lei:54930044KVSC06Z79I06"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q360253",
+   "name": "CME",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CME",
+    "cik:0001156375"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5013012",
+   "name": "CMS Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CMS",
+    "cik:0000811156",
+    "lei:549300IA9XFBAGNIBW29"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1107035",
+   "name": "Cognizant",
+   "kind": "company",
+   "aliases": [
+    "Cognizant Technology",
+    "Cognizant Technology Solutions"
+   ],
+   "xrefs": [
+    "ticker:CTSH",
+    "cik:0001058290",
+    "lei:5493006IEVQEFQO40L83"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000820318",
+   "name": "Coherent",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:COHR"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001679788",
+   "name": "Coinbase Global Inc.",
+   "kind": "company",
+   "aliases": [
+    "coinbase"
+   ],
+   "xrefs": [
+    "ticker:COIN"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1113804",
+   "name": "Comcast",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CMCSA",
+    "cik:0001166691",
+    "lei:51M0QTTNCGUN7KFCFZ59"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5151691",
+   "name": "Comfort Systems USA",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:FIX",
+    "cik:0001035983",
+    "lei:5299009DT1ZA5HTU6R38"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1123399",
+   "name": "Conagra Brands",
+   "kind": "company",
+   "aliases": [
+    "ConAgra Foods",
+    "Conagra Brands (United States)",
+    "Nebraska Consolidated Mills",
+    "conagra"
+   ],
+   "xrefs": [
+    "ticker:CAG",
+    "cik:0000023217",
+    "lei:54930035UDEIH090K650"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q214763",
+   "name": "ConocoPhillips",
+   "kind": "company",
+   "aliases": [
+    "Conoco Phillips",
+    "Continental Oil Company"
+   ],
+   "xrefs": [
+    "ticker:COP",
+    "cik:0001163165",
+    "lei:WPTL2Z3FIYTHSP5V2253"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1127536",
+   "name": "Consolidated Edison",
+   "kind": "company",
+   "aliases": [
+    "Con Ed",
+    "Con Edison"
+   ],
+   "xrefs": [
+    "ticker:ED",
+    "cik:0001047862",
+    "lei:54930033SBW53OO8T749"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1128160",
+   "name": "Constellation Brands",
+   "kind": "company",
+   "aliases": [
+    "Constellation",
+    "Constellation Beers & Spirits",
+    "Constellation Wines",
+    "STZ"
+   ],
+   "xrefs": [
+    "ticker:STZ",
+    "cik:0000016918",
+    "lei:5493005GKEG8QCVY7037"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q259195",
+   "name": "Constellation Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CEG",
+    "cik:0001868275",
+    "lei:549300F8Y20RYGNGV346"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000711404",
+   "name": "Cooper Companies (The)",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:COO"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16951448",
+   "name": "Copart",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CPRT",
+    "cik:0000900075",
+    "lei:549300KVYX3JWMYEHU61"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q231931",
+   "name": "Corning",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:GLW",
+    "cik:0000024741"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16838618",
+   "name": "Corpay",
+   "kind": "company",
+   "aliases": [
+    "Fleetcor",
+    "Fleetcor Technologies"
+   ],
+   "xrefs": [
+    "ticker:CPAY",
+    "cik:0001175454",
+    "lei:549300DG6RR0NQSFLN74"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q63197674",
+   "name": "Corteva",
+   "kind": "company",
+   "aliases": [
+    "Corteva Agriscience"
+   ],
+   "xrefs": [
+    "ticker:CTVA",
+    "cik:0001755672",
+    "lei:549300WZN9I2QKLS0O94"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16988748",
+   "name": "CoStar",
+   "kind": "company",
+   "aliases": [
+    "CoStar Realty Information, Inc."
+   ],
+   "xrefs": [
+    "ticker:CSGP",
+    "cik:0001057352",
+    "lei:984500Q1D53D08E2E698"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q715583",
+   "name": "Costco Wholesale Corporation",
+   "kind": "company",
+   "aliases": [
+    "costco"
+   ],
+   "xrefs": [
+    "ticker:COST",
+    "cik:0000909832",
+    "lei:29DX7H14B9S6O3FD6V18"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q360294",
+   "name": "CRH",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CRH",
+    "cik:0000849395"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q24890758",
+   "name": "CrowdStrike",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CRWD",
+    "cik:0001535527",
+    "lei:549300R070HUWKN8SG56"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5189320",
+   "name": "Crown Castle",
+   "kind": "company",
+   "aliases": [
+    "Crown Castle International Corp."
+   ],
+   "xrefs": [
+    "ticker:CCI",
+    "cik:0001051470",
+    "lei:54930012H97VSM0I2R19"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000277948",
+   "name": "CSX",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CSX"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q173476",
+   "name": "Cummins",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:CMI",
+    "cik:0000026172",
+    "lei:ZUNI8PYC725B6H8JU438"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q624375",
+   "name": "CVS Health",
+   "kind": "company",
+   "aliases": [
+    "CVS Health (United States)"
+   ],
+   "xrefs": [
+    "ticker:CVS",
+    "cik:0000064803",
+    "lei:549300EJG376EN5NQE29"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5203782",
+   "name": "D. R. Horton",
+   "kind": "company",
+   "aliases": [
+    "D.R. Horton"
+   ],
+   "xrefs": [
+    "ticker:DHI",
+    "cik:0000882184",
+    "lei:529900ZIUEYVSB8QDD25"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q21431228",
+   "name": "Danaher",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:DHR",
+    "cik:0000313616"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q742196",
+   "name": "Darden Restaurants",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:DRI",
+    "cik:0000940944",
+    "lei:CY1NFSCCB5GUXC7WZC70"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16248637",
+   "name": "Datadog",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:DDOG",
+    "cik:0001561550",
+    "lei:549300F6JNO0KRPO1K63"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5207184",
+   "name": "DaVita",
+   "kind": "company",
+   "aliases": [
+    "DaVita Dialysis",
+    "DaVita Kidney Care"
+   ],
+   "xrefs": [
+    "ticker:DVA",
+    "cik:0000927066",
+    "lei:M2XHYMU3TZNEZURC6H66"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1181953",
+   "name": "Deckers Brands",
+   "kind": "company",
+   "aliases": [
+    "Deckers Outdoor Corporation",
+    "deckers"
+   ],
+   "xrefs": [
+    "ticker:DECK",
+    "cik:0000910521",
+    "lei:5493008LG4W3I6K8J118"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000315189",
+   "name": "Deere &",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:DE"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q27500963",
+   "name": "Dell Technologies",
+   "kind": "company",
+   "aliases": [
+    "Dell Products L.P. (Round Rock, TX)"
+   ],
+   "xrefs": [
+    "ticker:DELL",
+    "cik:0001571996",
+    "lei:549300TJB5YBRUPOG437"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q188920",
+   "name": "Delta Air Lines",
+   "kind": "company",
+   "aliases": [
+    "DAL",
+    "DL",
+    "Delta",
+    "Delta Airlines"
+   ],
+   "xrefs": [
+    "ticker:DAL",
+    "cik:0000027904",
+    "lei:Q2CCMS6R0AS67HJMBN42"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1206980",
+   "name": "Devon Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:DVN",
+    "cik:0001090012",
+    "lei:54930042348RKR3ZPN35"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q15109865",
+   "name": "Dexcom",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:DXCM",
+    "cik:0001093557",
+    "lei:549300YSK3QDSFR5EU59"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q65091423",
+   "name": "Diamondback Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:FANG",
+    "cik:0001539838",
+    "lei:549300R22LSX6OHWEN64"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5275969",
+   "name": "Digital Realty",
+   "kind": "company",
+   "aliases": [
+    "Digital Realty Trust",
+    "digitalrealty.com"
+   ],
+   "xrefs": [
+    "ticker:DLR",
+    "cik:0001297996",
+    "lei:549300HKCZ31D08NEI41"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q145168",
+   "name": "Dollar General",
+   "kind": "company",
+   "aliases": [
+    "DolGenCorp",
+    "Dollar General Store"
+   ],
+   "xrefs": [
+    "ticker:DG",
+    "cik:0000029534",
+    "lei:OPX52SQVOZI8IVSWYU66"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5289230",
+   "name": "Dollar Tree",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:DLTR",
+    "cik:0000935703",
+    "lei:549300PMSTQITB1WHR43"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q677464",
+   "name": "Dominion Energy",
+   "kind": "company",
+   "aliases": [
+    "Dominion",
+    "Dominion Resources"
+   ],
+   "xrefs": [
+    "ticker:D",
+    "cik:0000715957",
+    "lei:ILUL7B6Z54MRYCF6H308"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q839466",
+   "name": "Domino's",
+   "kind": "company",
+   "aliases": [
+    "Domino's Pizza"
+   ],
+   "xrefs": [
+    "ticker:DPZ",
+    "cik:0001286681",
+    "lei:25490005ZWM1IF9UXU57"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q20714323",
+   "name": "DoorDash",
+   "kind": "company",
+   "aliases": [
+    "DASH"
+   ],
+   "xrefs": [
+    "ticker:DASH",
+    "cik:0001792789",
+    "lei:549300NUQ43FGGSK5051"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q179224",
+   "name": "Dover",
+   "kind": "company",
+   "aliases": [
+    "Dover, England",
+    "Dover, Kent"
+   ],
+   "xrefs": [
+    "ticker:DOV",
+    "cik:0000029905"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q422655",
+   "name": "Dow",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:DOW",
+    "cik:0001751788"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5206232",
+   "name": "DTE Energy",
+   "kind": "company",
+   "aliases": [
+    "DTE",
+    "Detroit Edison"
+   ],
+   "xrefs": [
+    "ticker:DTE",
+    "cik:0000936340",
+    "lei:549300IX8SD6XXD71I78"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1264404",
+   "name": "Duke Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:DUK",
+    "cik:0001326160",
+    "lei:I1BZKREC126H0VB1BL91"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q221062",
+   "name": "DuPont",
+   "kind": "company",
+   "aliases": [
+    "DowDuPont",
+    "DuPont de Nemours, Inc.",
+    "E.I. DuPont de Nemours Company"
+   ],
+   "xrefs": [
+    "ticker:DD",
+    "cik:0001666700",
+    "lei:5493004JF0SDFLM8GD76"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q196308",
+   "name": "Eaton",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ETN",
+    "cik:0001551182"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q58024",
+   "name": "eBay",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:EBAY",
+    "cik:0001065088",
+    "lei:OML71K8X303XQONU6T67"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1282031",
+   "name": "Ecolab",
+   "kind": "company",
+   "aliases": [
+    "ECL",
+    "Economics Laboratory"
+   ],
+   "xrefs": [
+    "ticker:ECL",
+    "cik:0000031462",
+    "lei:82DYEISM090VG8LTLS26"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q662095",
+   "name": "Edison International",
+   "kind": "company",
+   "aliases": [
+    "edison"
+   ],
+   "xrefs": [
+    "ticker:EIX",
+    "cik:0000827052",
+    "lei:549300I7ROF15MAEVP56"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16966841",
+   "name": "Edwards Lifesciences",
+   "kind": "company",
+   "aliases": [
+    "Edwards Lifesciences (Switzerland)"
+   ],
+   "xrefs": [
+    "ticker:EW",
+    "cik:0001099800",
+    "lei:YA13X31F3V31L8TMPR58"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q677488",
+   "name": "Elevance Health",
+   "kind": "company",
+   "aliases": [
+    "Anthem",
+    "Anthem Blue Cross and Blue Shield",
+    "Anthem Insurance Companies",
+    "WellPoint, Inc"
+   ],
+   "xrefs": [
+    "ticker:ELV",
+    "cik:0001156039",
+    "lei:8MYN82XMYQH89CTMTH67"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5370289",
+   "name": "Emcor",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:EME",
+    "cik:0000105634",
+    "lei:529900X0SQJB2J7YDU43"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1335585",
+   "name": "Emerson Electric",
+   "kind": "company",
+   "aliases": [
+    "EMR",
+    "EMRSN",
+    "Emerson"
+   ],
+   "xrefs": [
+    "ticker:EMR",
+    "cik:0000032604",
+    "lei:FGLT0EWZSUIRRITFOA30"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1344587",
+   "name": "Entergy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ETR",
+    "cik:0000065984",
+    "lei:4XM3TW50JULSLG8BNC79"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1275577",
+   "name": "EOG Resources",
+   "kind": "company",
+   "aliases": [
+    "Enron Oil and Gas"
+   ],
+   "xrefs": [
+    "ticker:EOG",
+    "cik:0000821189",
+    "lei:XWTZDRYZPBUHIQBKDB46"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q560375",
+   "name": "EQT",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:EQT",
+    "cik:0000033213"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5384453",
+   "name": "Equifax",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:EFX",
+    "cik:0000033185",
+    "lei:5493004MCF8JDC86VS77"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q851641",
+   "name": "Equinix",
+   "kind": "company",
+   "aliases": [
+    "equinix.com"
+   ],
+   "xrefs": [
+    "ticker:EQIX",
+    "cik:0001101239",
+    "lei:549300EVUN2BTLJ3GT74"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000922621",
+   "name": "Erie Indemnity",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ERIE"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q27964091",
+   "name": "Essex Property Trust",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ESS",
+    "cik:0000920522",
+    "lei:549300TR2H2VEFX0NC60"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001001250",
+   "name": "Estée Lauder Companies (The)",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:EL"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001095073",
+   "name": "Everest",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:EG"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7987107",
+   "name": "Evergy",
+   "kind": "company",
+   "aliases": [
+    "Westar Energy"
+   ],
+   "xrefs": [
+    "ticker:EVRG",
+    "cik:0001711269",
+    "lei:549300PGTHDQY6PSUI61"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3344199",
+   "name": "Eversource Energy",
+   "kind": "company",
+   "aliases": [
+    "Eversource",
+    "Northeast Utilities"
+   ],
+   "xrefs": [
+    "ticker:ES",
+    "cik:0000072741",
+    "lei:SJ7XXD41SQU3ZNWUJ746"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1383669",
+   "name": "Exelon",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:EXC",
+    "cik:0001109357",
+    "lei:3SOUA6IRML7435B56G12"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2962826",
+   "name": "Expand Energy",
+   "kind": "company",
+   "aliases": [
+    "Chesapeake Energy"
+   ],
+   "xrefs": [
+    "ticker:EXE",
+    "cik:0000895126",
+    "lei:X2MT1W32SPAZ9WSKLE78"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001324424",
+   "name": "Expedia",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:EXPE"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1384324",
+   "name": "Expeditors International",
+   "kind": "company",
+   "aliases": [
+    "Expeditors International of Washington",
+    "expeditors"
+   ],
+   "xrefs": [
+    "ticker:EXPD",
+    "cik:0000746515",
+    "lei:984500B055A804AB6E40"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5422162",
+   "name": "Extra Space Storage",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:EXR",
+    "cik:0001289490",
+    "lei:529900SDJHKRQWED6A16"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0002115436",
+   "name": "Exxon Mobil Corporation",
+   "kind": "company",
+   "aliases": [
+    "exxon"
+   ],
+   "xrefs": [
+    "ticker:XOM"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q420422",
+   "name": "F5",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:FFIV",
+    "cik:0001048695"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1885491",
+   "name": "FactSet",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:FDS",
+    "cik:0001013237",
+    "lei:549300ZSJE7NBK6K9P30"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000814547",
+   "name": "Fair Isaac",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:FICO"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3067119",
+   "name": "Fastenal",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:FAST",
+    "cik:0000815556",
+    "lei:529900PP0C7H2HHPSJ32"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q27988152",
+   "name": "Federal Realty Investment Trust",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:FRT",
+    "cik:0000034903",
+    "lei:549300LI6XZ51GOCJ427"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q459477",
+   "name": "FedEx",
+   "kind": "company",
+   "aliases": [
+    "FEDEX CORPORATE SERVICES, INC. (Collierville, TN)"
+   ],
+   "xrefs": [
+    "ticker:FDX",
+    "cik:0001048911",
+    "lei:549300E707U7WNPZN687"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0002082247",
+   "name": "FedEx Freight",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:FDXF"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1411295",
+   "name": "Fidelity National Information Services",
+   "kind": "company",
+   "aliases": [
+    "FIS",
+    "Fidelity Information Services",
+    "PayNet Payments Network - FIS Global",
+    "PayNet Payments Network, LLC (Jacksonville, FL)"
+   ],
+   "xrefs": [
+    "ticker:FIS",
+    "cik:0001136893",
+    "lei:6WQI0GK1PRFVBA061U48"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1411810",
+   "name": "Fifth Third Bancorp",
+   "kind": "company",
+   "aliases": [
+    "5/3 Bank",
+    "Fifth Third Bank",
+    "Fifth Third Union Trust Company"
+   ],
+   "xrefs": [
+    "ticker:FITB",
+    "cik:0000035527",
+    "lei:THRNG6BD57P9QWTQLG42"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1138888",
+   "name": "First Solar",
+   "kind": "company",
+   "aliases": [
+    "FSLR"
+   ],
+   "xrefs": [
+    "ticker:FSLR",
+    "cik:0001274494",
+    "lei:549300NPYMLM4NHTOF27"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1419248",
+   "name": "FirstEnergy",
+   "kind": "company",
+   "aliases": [
+    "First Energy"
+   ],
+   "xrefs": [
+    "ticker:FE",
+    "cik:0001031296",
+    "lei:549300SVYJS666PQJH88"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1420513",
+   "name": "Fiserv",
+   "kind": "company",
+   "aliases": [
+    "First Data Processing",
+    "First service"
+   ],
+   "xrefs": [
+    "ticker:FISV",
+    "cik:0000798354",
+    "lei:GI7UBEJLXYLGR2C7GV83"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q44294",
+   "name": "Ford Motor",
+   "kind": "company",
+   "aliases": [
+    "FoMoCo",
+    "Ford",
+    "Ford Motors"
+   ],
+   "xrefs": [
+    "ticker:F",
+    "cik:0000037996",
+    "lei:20S05OYHG0MQM4VUIC57"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2749364",
+   "name": "Fortinet",
+   "kind": "company",
+   "aliases": [
+    "FTNT",
+    "ftn"
+   ],
+   "xrefs": [
+    "ticker:FTNT",
+    "cik:0001262039",
+    "lei:549300O0QJWDBAS0QX03"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q27919383",
+   "name": "Fortive",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:FTV",
+    "cik:0001659166",
+    "lei:549300MU9YQJYHDQEF63"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001754301",
+   "name": "Fox Corporation (Class B)",
+   "kind": "company",
+   "aliases": [
+    "Fox Corporation (Class A)"
+   ],
+   "xrefs": [
+    "ticker:FOX",
+    "ticker:FOXA"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q744683",
+   "name": "Franklin Resources",
+   "kind": "company",
+   "aliases": [
+    "Franklin Templeton Investments"
+   ],
+   "xrefs": [
+    "ticker:BEN",
+    "cik:0000038777",
+    "lei:RIFQSET379FOGTEFKS80"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1453620",
+   "name": "Freeport-McMoRan",
+   "kind": "company",
+   "aliases": [
+    "Freeport",
+    "Freeport Mc Moran Inc",
+    "Freeport-McMoRan Copper & Gold Inc."
+   ],
+   "xrefs": [
+    "ticker:FCX",
+    "cik:0000831259",
+    "lei:549300IRDTHJQ1PVET45"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q658789",
+   "name": "Garmin",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:GRMN",
+    "cik:0001121788"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q174198",
+   "name": "Gartner",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:IT",
+    "cik:0000749251",
+    "lei:PP55B5R38BFB8O8HH686"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1485061",
+   "name": "GE Aerospace",
+   "kind": "company",
+   "aliases": [
+    "GE Aircraft Engines",
+    "GE Aviation",
+    "GEAE",
+    "General Electric Aircraft Engines",
+    "General Electric Company"
+   ],
+   "xrefs": [
+    "ticker:GE",
+    "cik:0000040545",
+    "lei:3C7474T6CDKPR9K6YT90"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1152374",
+   "name": "GE HealthCare",
+   "kind": "company",
+   "aliases": [
+    "GE Medical Systems"
+   ],
+   "xrefs": [
+    "ticker:GEHC",
+    "cik:0001932393",
+    "lei:VRA3J77FZVM3XWZYY091"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q118957699",
+   "name": "GE Vernova",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:GEV",
+    "cik:0001996810"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q677085",
+   "name": "Gen Digital",
+   "kind": "company",
+   "aliases": [
+    "NortonLifeLock",
+    "Symantec"
+   ],
+   "xrefs": [
+    "ticker:GEN",
+    "cik:0000849399",
+    "lei:YF6ZV0M6AU4FY94MK914"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5531627",
+   "name": "Generac",
+   "kind": "company",
+   "aliases": [
+    "Generac Power Systems"
+   ],
+   "xrefs": [
+    "ticker:GNRC",
+    "cik:0001474735",
+    "lei:529900S2H2AHJHSFFI84"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q502940",
+   "name": "General Dynamics",
+   "kind": "company",
+   "aliases": [
+    "GD"
+   ],
+   "xrefs": [
+    "ticker:GD",
+    "cik:0000040533",
+    "lei:9C1X8XOOTYY2FNYTVH06"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q629998",
+   "name": "General Mills",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:GIS",
+    "cik:0000040704",
+    "lei:2TGYMUGI08PO8X8L6150"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q81965",
+   "name": "General Motors",
+   "kind": "company",
+   "aliases": [
+    "GM"
+   ],
+   "xrefs": [
+    "ticker:GM",
+    "cik:0001467858",
+    "lei:54930070NSV60J38I987"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5533818",
+   "name": "Genuine Parts",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:GPC",
+    "cik:0000040987",
+    "lei:549300D46DQVEU651W04"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q663596",
+   "name": "Gilead Sciences",
+   "kind": "company",
+   "aliases": [
+    "Gilead"
+   ],
+   "xrefs": [
+    "ticker:GILD",
+    "cik:0000882095",
+    "lei:549300WTZWR07K8MNV44"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5570544",
+   "name": "Global Payments",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:GPN",
+    "cik:0001123360",
+    "lei:549300NOMHGVQBX6S778"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7825574",
+   "name": "Globe Life",
+   "kind": "company",
+   "aliases": [
+    "GL",
+    "Torchmark"
+   ],
+   "xrefs": [
+    "ticker:GL",
+    "cik:0000320335",
+    "lei:5493001JFHKQOPP6XA71"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1416215",
+   "name": "GoDaddy",
+   "kind": "company",
+   "aliases": [
+    "GDDY",
+    "Go Daddy"
+   ],
+   "xrefs": [
+    "ticker:GDDY",
+    "cik:0001609711",
+    "lei:549300J8H1TB0I2CB447"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q193326",
+   "name": "Goldman Sachs Group Inc.",
+   "kind": "company",
+   "aliases": [
+    "GSCO",
+    "Goldman Sachs & Co. (US)",
+    "Goldman Sachs and Co.",
+    "goldman"
+   ],
+   "xrefs": [
+    "ticker:GS",
+    "cik:0000886982",
+    "lei:784F5XWPLTWKTBV3E584"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q656165",
+   "name": "Halliburton",
+   "kind": "company",
+   "aliases": [
+    "Halliburton Energy Services, Inc. (Houston, TX)",
+    "The Halliburton Oil Well Cementing Co."
+   ],
+   "xrefs": [
+    "ticker:HAL",
+    "cik:0000045012",
+    "lei:ENYF8GB5SMQZ25S06U51"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000874766",
+   "name": "Hartford (The)",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:HIG"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q501476",
+   "name": "Hasbro",
+   "kind": "company",
+   "aliases": [
+    "Hasbro Bradley",
+    "Hassenfeld Brothers",
+    "Hassenfeld Brothers and Hasbro Bradley"
+   ],
+   "xrefs": [
+    "ticker:HAS",
+    "cik:0000046080",
+    "lei:549300NUB6D2R1ITYR45"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1630431",
+   "name": "HCA Healthcare",
+   "kind": "company",
+   "aliases": [
+    "HCA",
+    "Hospital Corporation of America"
+   ],
+   "xrefs": [
+    "ticker:HCA",
+    "cik:0000860730",
+    "lei:529900PH4ZGUH2MNEU89"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16975567",
+   "name": "Healthpeak Properties",
+   "kind": "company",
+   "aliases": [
+    "Health Care Property Investors"
+   ],
+   "xrefs": [
+    "ticker:DOC",
+    "cik:0000765880",
+    "lei:254900M6MTMZM0I22L81"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q905086",
+   "name": "Henry Schein",
+   "kind": "company",
+   "aliases": [
+    "Henry Schein (United States)"
+   ],
+   "xrefs": [
+    "ticker:HSIC",
+    "cik:0001000228",
+    "lei:VGO3WGL8H45T73F4RR92"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000047111",
+   "name": "Hershey Company (The)",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:HSY"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q19923099",
+   "name": "Hewlett Packard Enterprise",
+   "kind": "company",
+   "aliases": [
+    "HP Enterprise",
+    "HPE"
+   ],
+   "xrefs": [
+    "ticker:HPE",
+    "cik:0001645590",
+    "lei:549300BX44RGX6ANDV88"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1057464",
+   "name": "Hilton Worldwide",
+   "kind": "company",
+   "aliases": [
+    "Hilton Hotels Corporation"
+   ],
+   "xrefs": [
+    "ticker:HLT",
+    "cik:0001585689",
+    "lei:549300HVGPK36ICB0B89"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q898208",
+   "name": "Honeywell",
+   "kind": "company",
+   "aliases": [
+    "HONEYWELL INTERNATIONAL INC. (Charlotte, NC)",
+    "Honeywell International",
+    "Minneapolis Heat Regulator Company",
+    "Minneapolis-Honeywell Regulator Company"
+   ],
+   "xrefs": [
+    "ticker:HON",
+    "cik:0000773840",
+    "lei:ISRPG12PN4EIEOEMW547"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1454852",
+   "name": "Hormel Foods",
+   "kind": "company",
+   "aliases": [
+    "George A. Hormel & Company",
+    "Hormel",
+    "Hormel Foods International"
+   ],
+   "xrefs": [
+    "ticker:HRL",
+    "cik:0000048465",
+    "lei:MSD54751OJP1FS2ND863"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1630559",
+   "name": "Host Hotels & Resorts",
+   "kind": "company",
+   "aliases": [
+    "Host Marriott Corporation"
+   ],
+   "xrefs": [
+    "ticker:HST",
+    "cik:0001070750",
+    "lei:N6EL63S0K3PB1YFTDI24"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q25104597",
+   "name": "Howmet Aerospace",
+   "kind": "company",
+   "aliases": [
+    "Arconic Inc.",
+    "HWM"
+   ],
+   "xrefs": [
+    "ticker:HWM",
+    "cik:0000004281",
+    "lei:549300HO5WFZUT5N2T22"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q224434",
+   "name": "HP",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:HPQ",
+    "cik:0000047217"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q125216",
+   "name": "Hubbell",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:HUBB",
+    "cik:0000048898"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q910866",
+   "name": "Humana",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:HUM",
+    "cik:0000049071",
+    "lei:529900YLDW34GJAO4J06"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q798819",
+   "name": "Huntington Bancshares",
+   "kind": "company",
+   "aliases": [
+    "Huntington Bank",
+    "Huntington National Bank"
+   ],
+   "xrefs": [
+    "ticker:HBAN",
+    "cik:0000049196",
+    "lei:549300XTVCVV9I7B5T19"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7257522",
+   "name": "Huntington Ingalls Industries",
+   "kind": "company",
+   "aliases": [
+    "HII",
+    "Northrop Grumman Shipbuilding",
+    "huntington ingalls"
+   ],
+   "xrefs": [
+    "ticker:HII",
+    "cik:0001501585",
+    "lei:5TZLZ6WJTBVJ0QWBG121"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q37156",
+   "name": "IBM",
+   "kind": "company",
+   "aliases": [
+    "18M",
+    "International Business Machines Corporation (Armonk, NY)",
+    "ibm.com"
+   ],
+   "xrefs": [
+    "ticker:IBM",
+    "cik:0000051143",
+    "lei:VGRQXHF3J8VDLUA7XE92"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q13581039",
+   "name": "IDEX",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:IEX",
+    "cik:0000832101"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1758392",
+   "name": "Idexx Laboratories",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:IDXX",
+    "cik:0000874716",
+    "lei:OGMTXK0LUU1HKV2P0J84"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1510378",
+   "name": "Illinois Tool Works",
+   "kind": "company",
+   "aliases": [
+    "ITW"
+   ],
+   "xrefs": [
+    "ticker:ITW",
+    "cik:0000049826",
+    "lei:76NA4I14SZCFAYMNSV04"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6015591",
+   "name": "Incyte",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:INCY",
+    "cik:0000879169",
+    "lei:549300Z4WN6JVZ3T4680"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q55453962",
+   "name": "Ingersoll Rand",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:IR",
+    "cik:0001699150"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001145197",
+   "name": "Insulet",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PODD"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q248",
+   "name": "Intel Corporation",
+   "kind": "company",
+   "aliases": [
+    "INTC",
+    "N M Electronics",
+    "intel.com"
+   ],
+   "xrefs": [
+    "ticker:INTC",
+    "cik:0000050863",
+    "lei:KNX4USFCNGPY45LOCE31"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q20011294",
+   "name": "Interactive Brokers",
+   "kind": "company",
+   "aliases": [
+    "IB, Interactive"
+   ],
+   "xrefs": [
+    "ticker:IBKR",
+    "cik:0001381197"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q841458",
+   "name": "Intercontinental Exchange",
+   "kind": "company",
+   "aliases": [
+    "ICE",
+    "IEPA",
+    "IntercontinentalExchange, Inc."
+   ],
+   "xrefs": [
+    "ticker:ICE",
+    "cik:0001571949",
+    "lei:5493000F4ZO33MV32P92"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1666568",
+   "name": "International Flavors & Fragrances",
+   "kind": "company",
+   "aliases": [
+    "IFF"
+   ],
+   "xrefs": [
+    "ticker:IFF",
+    "cik:0000051253",
+    "lei:BZLRL03D3GPGMOGFO832"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q202972",
+   "name": "International Paper",
+   "kind": "company",
+   "aliases": [
+    "IP"
+   ],
+   "xrefs": [
+    "ticker:IP",
+    "cik:0000051434",
+    "lei:824LMFJDH41EY779Q875"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1318848",
+   "name": "Intuit",
+   "kind": "company",
+   "aliases": [
+    "INTUIT INC. (Mountain View, CA)"
+   ],
+   "xrefs": [
+    "ticker:INTU",
+    "cik:0000896878",
+    "lei:VI90HBPH7XSFMB9E4M29"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2743863",
+   "name": "Intuitive Surgical",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ISRG",
+    "cik:0001035267",
+    "lei:54930052SRG011710797"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q522617",
+   "name": "Invesco",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:IVZ",
+    "cik:0000914208",
+    "lei:ECPGFXU8A2SHKVVGJI15"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001687229",
+   "name": "Invitation Homes",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:INVH"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q305473",
+   "name": "IQVIA",
+   "kind": "company",
+   "aliases": [
+    "IQVIA Inc.     (Parsippany, NJ)",
+    "OneKey",
+    "Quintiles",
+    "Quintiles IMS Holdings, Inc.",
+    "Quintiles and IMS Health, Inc",
+    "QuintilesIMS"
+   ],
+   "xrefs": [
+    "ticker:IQV",
+    "cik:0001478242",
+    "lei:549300W3R20NM4KQPH86"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1185112",
+   "name": "Iron Mountain",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:IRM",
+    "cik:0001020569"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4041705",
+   "name": "J.B. Hunt",
+   "kind": "company",
+   "aliases": [
+    "J. B. Hunt",
+    "J.B. Hunt Transport Services, Inc.",
+    "j.b.hunt"
+   ],
+   "xrefs": [
+    "ticker:JBHT",
+    "cik:0000728535",
+    "lei:549300XCD1MPI1C5GK90"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000091419",
+   "name": "J.M. Smucker Company (The)",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SJM"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2171646",
+   "name": "Jabil",
+   "kind": "company",
+   "aliases": [
+    "Jabil Circuit"
+   ],
+   "xrefs": [
+    "ticker:JBL",
+    "cik:0000898293",
+    "lei:5493000CGCQY2OQU7669"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6113060",
+   "name": "Jack Henry & Associates",
+   "kind": "company",
+   "aliases": [
+    "JHA"
+   ],
+   "xrefs": [
+    "ticker:JKHY",
+    "cik:0000779152",
+    "lei:529900X1QS8C54W0JB21"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3157622",
+   "name": "Jacobs Solutions",
+   "kind": "company",
+   "aliases": [
+    "Jacobs",
+    "Jacobs Engineering Group"
+   ],
+   "xrefs": [
+    "ticker:J",
+    "cik:0000052988",
+    "lei:549300CZ8QS1GE53O776"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q333718",
+   "name": "Johnson & Johnson",
+   "kind": "company",
+   "aliases": [
+    "J&J"
+   ],
+   "xrefs": [
+    "ticker:JNJ",
+    "cik:0000200406",
+    "lei:549300G0CFPGEF6X2043"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q667865",
+   "name": "Johnson Controls",
+   "kind": "company",
+   "aliases": [
+    "JCI",
+    "Johnson Controls International",
+    "Tyco"
+   ],
+   "xrefs": [
+    "ticker:JCI",
+    "cik:0000833444",
+    "lei:3LB2NG8VUULSCV2NO430"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q192314",
+   "name": "JPMorgan Chase & Co.",
+   "kind": "company",
+   "aliases": [
+    "Bank of the Manhattan Company",
+    "JPMC",
+    "jpmorgan",
+    "jpmorgan chase"
+   ],
+   "xrefs": [
+    "ticker:JPM",
+    "cik:0000019617",
+    "lei:8I5DZWZKVSZI1NUHU748"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q118905792",
+   "name": "Kenvue",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:KVUE",
+    "cik:0001944048"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3116111",
+   "name": "Keurig Dr Pepper",
+   "kind": "company",
+   "aliases": [
+    "Green Mountain Coffee",
+    "Green Mountain Coffee Roasters",
+    "Keurig Green Mountain"
+   ],
+   "xrefs": [
+    "ticker:KDP",
+    "cik:0001418135"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1740314",
+   "name": "KeyCorp",
+   "kind": "company",
+   "aliases": [
+    "KeyBank"
+   ],
+   "xrefs": [
+    "ticker:KEY",
+    "cik:0000091576",
+    "lei:RKPI3RZGV1V1FJTH5T61"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q17551096",
+   "name": "Keysight Technologies",
+   "kind": "company",
+   "aliases": [
+    "keysight"
+   ],
+   "xrefs": [
+    "ticker:KEYS",
+    "cik:0001601046",
+    "lei:549300GLKVIO8YRCYN02"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1741634",
+   "name": "Kimberly-Clark",
+   "kind": "company",
+   "aliases": [
+    "K-C",
+    "Kimberly, Clark and Co.",
+    "Kimberly-Clark Worldwive"
+   ],
+   "xrefs": [
+    "ticker:KMB",
+    "cik:0000055785",
+    "lei:MP3J6QPYPGN75NVW2S34"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6410043",
+   "name": "Kimco Realty",
+   "kind": "company",
+   "aliases": [
+    "KIMCO"
+   ],
+   "xrefs": [
+    "ticker:KIM",
+    "cik:0000879101",
+    "lei:254900ARY41P4V1JL861"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q931032",
+   "name": "Kinder Morgan",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:KMI",
+    "cik:0001506307",
+    "lei:549300WR7IX8XE0TBO16"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001404912",
+   "name": "KKR &",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:KKR"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q408409",
+   "name": "KLA",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:KLAC",
+    "cik:0000319201"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q19681433",
+   "name": "Kraft Heinz",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:KHC",
+    "cik:0001637459",
+    "lei:9845007488EC87F5AF14"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q153417",
+   "name": "Kroger",
+   "kind": "company",
+   "aliases": [
+    "Kroger Grocery and Baking"
+   ],
+   "xrefs": [
+    "ticker:KR",
+    "cik:0000056873",
+    "lei:6CPEOKI6OYJ13Q6O7870"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q30291091",
+   "name": "L3Harris",
+   "kind": "company",
+   "aliases": [
+    "Harris (United States)",
+    "L3 Harris",
+    "L3Harris Technologies"
+   ],
+   "xrefs": [
+    "ticker:LHX",
+    "cik:0000202058",
+    "lei:549300UTE50ZMDBG8A20"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6466630",
+   "name": "Labcorp",
+   "kind": "company",
+   "aliases": [
+    "Laboratory Corporation of America Holdings"
+   ],
+   "xrefs": [
+    "ticker:LH",
+    "cik:0000920148",
+    "lei:549300CDU4WF6Q2YMS76"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1342041",
+   "name": "Lam Research",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:LRCX",
+    "cik:0000707549",
+    "lei:549300I4GMO6D34U1T02"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1506045",
+   "name": "Las Vegas Sands",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:LVS",
+    "cik:0001300514",
+    "lei:549300DUOO1KXOHPM605"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q502132",
+   "name": "Leidos",
+   "kind": "company",
+   "aliases": [
+    "SAIC",
+    "Science Applications International Corporation"
+   ],
+   "xrefs": [
+    "ticker:LDOS",
+    "cik:0001336920",
+    "lei:5493006I78VIN6J1BQ95"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16981175",
+   "name": "Lennar",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:LEN",
+    "cik:0000920760",
+    "lei:529900G61XVRLX5TJX09"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q224751",
+   "name": "Lennox International",
+   "kind": "company",
+   "aliases": [
+    "lennox"
+   ],
+   "xrefs": [
+    "ticker:LII",
+    "cik:0001069202",
+    "lei:S7DWAC87RDMPBF77GJ92"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000059478",
+   "name": "Lilly (Eli)",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:LLY"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q294891",
+   "name": "Linde",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:LIN",
+    "cik:0001707925"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1061903",
+   "name": "Live Nation Entertainment",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:LYV",
+    "cik:0001335258",
+    "lei:5493007B9BM9ZXJINO78"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7240",
+   "name": "Lockheed Martin",
+   "kind": "company",
+   "aliases": [
+    "LockMart",
+    "Lockheed"
+   ],
+   "xrefs": [
+    "ticker:LMT",
+    "cik:0000936468",
+    "lei:DPRBOZP0K5RM2YE8UU08"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16872412",
+   "name": "Loews",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:L",
+    "cik:0000060086"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1373493",
+   "name": "Lowe's",
+   "kind": "company",
+   "aliases": [
+    "Lowe's Home Improvement"
+   ],
+   "xrefs": [
+    "ticker:LOW",
+    "cik:0000060667",
+    "lei:WAFCR4OKGSC504WU3E95"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001811210",
+   "name": "Lucid Group Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:LCID"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6702957",
+   "name": "Lululemon Athletica",
+   "kind": "company",
+   "aliases": [
+    "lululemon",
+    "lululemon Athletica Incorporation"
+   ],
+   "xrefs": [
+    "ticker:LULU",
+    "cik:0001397187",
+    "lei:549300D9GZ4BMLDW5T40"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q138786899",
+   "name": "Lumentum",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:LITE",
+    "cik:0001633978"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q899255",
+   "name": "LyondellBasell",
+   "kind": "company",
+   "aliases": [
+    "Lyondell Basell",
+    "Lyondell Basell Industries",
+    "LyondellBasell Industries"
+   ],
+   "xrefs": [
+    "ticker:LYB",
+    "cik:0001489393",
+    "lei:BN6WCCZ8OVP3ITUUVN49"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3272257",
+   "name": "M&T Bank",
+   "kind": "company",
+   "aliases": [
+    "M&T",
+    "Manufacturers and Traders Trust Company"
+   ],
+   "xrefs": [
+    "ticker:MTB",
+    "cik:0000036270"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q458363",
+   "name": "Marathon Petroleum",
+   "kind": "company",
+   "aliases": [
+    "Marathon oil company"
+   ],
+   "xrefs": [
+    "ticker:MPC",
+    "cik:0001510295",
+    "lei:3BNYRYQHD39K4LCKQF12"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1141173",
+   "name": "Marriott International",
+   "kind": "company",
+   "aliases": [
+    "marriott"
+   ],
+   "xrefs": [
+    "ticker:MAR",
+    "cik:0001048286",
+    "lei:225YDZ14ZO8E1TXUSU86"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1786345",
+   "name": "Marsh McLennan",
+   "kind": "company",
+   "aliases": [
+    "Burroughs, Marsh & McLennan",
+    "Marsh & McLennan Companies",
+    "Marsh & McLennan Cos. Inc."
+   ],
+   "xrefs": [
+    "ticker:MRSH",
+    "cik:0000062709",
+    "lei:549300XMP3KDCKJXIU47"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6776123",
+   "name": "Martin Marietta Materials",
+   "kind": "company",
+   "aliases": [
+    "Martin Marietta"
+   ],
+   "xrefs": [
+    "ticker:MLM",
+    "cik:0000916076",
+    "lei:5299005MZ4WZECVATV08"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6782872",
+   "name": "Masco",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:MAS",
+    "cik:0000062996",
+    "lei:5GCSNMQXHEYA1JO8QN11"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q489921",
+   "name": "Mastercard Inc.",
+   "kind": "company",
+   "aliases": [
+    "MASTERCARD INTERNATIONAL INCORPORATED (Purchase, NY)"
+   ],
+   "xrefs": [
+    "ticker:MA",
+    "cik:0001141391",
+    "lei:AR5L2ODV9HN37376R084"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000063754",
+   "name": "McCormick &",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:MKC"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q38076",
+   "name": "McDonald's Corporation",
+   "kind": "company",
+   "aliases": [
+    "Macca's",
+    "McDo",
+    "McDonald's Restaurant",
+    "Mickey D's"
+   ],
+   "xrefs": [
+    "ticker:MCD",
+    "cik:0000063908",
+    "lei:UE2136O97NLB5BYP9H04"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q570473",
+   "name": "McKesson",
+   "kind": "company",
+   "aliases": [
+    "McKesson Health Solutions"
+   ],
+   "xrefs": [
+    "ticker:MCK",
+    "cik:0000927653",
+    "lei:549300WZWOM80UCFSF54"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q642189",
+   "name": "Medtronic",
+   "kind": "company",
+   "aliases": [
+    "MDT",
+    "Medtronic - MITG"
+   ],
+   "xrefs": [
+    "ticker:MDT",
+    "cik:0001613103"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000310158",
+   "name": "Merck &",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:MRK"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q380",
+   "name": "Meta Platforms Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:META",
+    "cik:0001326801",
+    "lei:BQ4BKCS1HXDV9HN80Z93"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q607131",
+   "name": "MetLife",
+   "kind": "company",
+   "aliases": [
+    "Metropolitan",
+    "Metropolitan Life Insurance Company"
+   ],
+   "xrefs": [
+    "ticker:MET",
+    "cik:0001099219",
+    "lei:C4BXATY60WC6XEOZDX54"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q680186",
+   "name": "Mettler Toledo",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:MTD",
+    "cik:0001037646",
+    "lei:5493000BD5GJNUDIUG10"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q568532",
+   "name": "MGM Resorts",
+   "kind": "company",
+   "aliases": [
+    "MGM International",
+    "MGM Resorts International"
+   ],
+   "xrefs": [
+    "ticker:MGM",
+    "cik:0000789570",
+    "lei:54930066VBP7DZEGGJ87"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1545076",
+   "name": "Microchip Technology",
+   "kind": "company",
+   "aliases": [
+    "microchip"
+   ],
+   "xrefs": [
+    "ticker:MCHP",
+    "cik:0000827054",
+    "lei:5493007PTFULNYZJ1R12"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000723125",
+   "name": "Micron Technology Inc.",
+   "kind": "company",
+   "aliases": [
+    "micron"
+   ],
+   "xrefs": [
+    "ticker:MU"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2283",
+   "name": "Microsoft Corporation",
+   "kind": "company",
+   "aliases": [
+    "microsoft.com"
+   ],
+   "xrefs": [
+    "ticker:MSFT",
+    "cik:0000789019",
+    "lei:INR2EJN1ERAN0W5ZP974"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001050446",
+   "name": "MicroStrategy Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:MSTR"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q27988239",
+   "name": "Mid-America Apartment Communities",
+   "kind": "company",
+   "aliases": [
+    "MAA",
+    "MAA Communities",
+    "Mid America Apartment Communitites",
+    "Mid-America Apartments"
+   ],
+   "xrefs": [
+    "ticker:MAA",
+    "cik:0000912595"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q17081612",
+   "name": "Moderna",
+   "kind": "company",
+   "aliases": [
+    "Moderna Therapeutics"
+   ],
+   "xrefs": [
+    "ticker:MRNA",
+    "cik:0001682852",
+    "lei:549300EI6OKH5K5Q2G38"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000024545",
+   "name": "Molson Coors Beverage",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TAP"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q12857502",
+   "name": "Mondelez International",
+   "kind": "company",
+   "aliases": [
+    "National Dairy Products",
+    "mondelez"
+   ],
+   "xrefs": [
+    "ticker:MDLZ",
+    "cik:0001103982",
+    "lei:549300DV9GIB88LZ5P30"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q22058448",
+   "name": "Monolithic Power Systems",
+   "kind": "company",
+   "aliases": [
+    "monolithic power"
+   ],
+   "xrefs": [
+    "ticker:MPWR",
+    "cik:0001280452",
+    "lei:529900TB7O85LSZ1XU31"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1945295",
+   "name": "Monster Beverage",
+   "kind": "company",
+   "aliases": [
+    "clothing gear apparel"
+   ],
+   "xrefs": [
+    "ticker:MNST",
+    "cik:0000865752",
+    "lei:52990090AP0E7HCB6F33"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001059556",
+   "name": "Moody's",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:MCO"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q334204",
+   "name": "Morgan Stanley",
+   "kind": "company",
+   "aliases": [
+    "Morgan Stanley & Co.",
+    "MorganStanley"
+   ],
+   "xrefs": [
+    "ticker:MS",
+    "cik:0000895421",
+    "lei:IGJSJL3JD5P30I6NJZ34"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001285785",
+   "name": "Mosaic Company (The)",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:MOS"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q634815",
+   "name": "Motorola Solutions",
+   "kind": "company",
+   "aliases": [
+    "motorola"
+   ],
+   "xrefs": [
+    "ticker:MSI",
+    "cik:0000068505",
+    "lei:6S552MUG6KGJVEBSEC55"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q727883",
+   "name": "NetApp",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NTAP",
+    "cik:0001002047",
+    "lei:QTX3D84DZDD5JYOCYH15"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q116452644",
+   "name": "Netflix Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NFLX",
+    "cik:0001065280",
+    "lei:549300Y7VHGU0I7CE873"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1785405",
+   "name": "Newmont",
+   "kind": "company",
+   "aliases": [
+    "Newmont Mining Corporation"
+   ],
+   "xrefs": [
+    "ticker:NEM",
+    "cik:0001164727",
+    "lei:549300VSP3RIX7FGDZ51"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001564708",
+   "name": "News Corp (Class B)",
+   "kind": "company",
+   "aliases": [
+    "News Corp (Class A)"
+   ],
+   "xrefs": [
+    "ticker:NWS",
+    "ticker:NWSA"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q967868",
+   "name": "NextEra Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NEE",
+    "cik:0000753308"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q218202",
+   "name": "Nike",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NKE",
+    "cik:0000320187"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001736541",
+   "name": "NIO Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NIO"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1984481",
+   "name": "NiSource",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NI",
+    "cik:0001111711",
+    "lei:549300D8GOWWH0SJB189"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1998662",
+   "name": "Nordson",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NDSN",
+    "cik:0000072331",
+    "lei:14OS6Q5N55N95WM84M53"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000702165",
+   "name": "Norfolk Southern",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NSC"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q970695",
+   "name": "Northern Trust",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NTRS",
+    "cik:0000073124",
+    "lei:549300U68JXSOE16IN60"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q329953",
+   "name": "Northrop Grumman",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NOC",
+    "cik:0001133421",
+    "lei:RIMU48P07456QXSO0R61"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q130309",
+   "name": "Norwegian Cruise Line",
+   "kind": "company",
+   "aliases": [
+    "NCL"
+   ],
+   "xrefs": [
+    "ticker:NCLH",
+    "cik:0001513761"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6955139",
+   "name": "NRG Energy",
+   "kind": "company",
+   "aliases": [
+    "NRG"
+   ],
+   "xrefs": [
+    "ticker:NRG",
+    "cik:0001013871",
+    "lei:5E2UPK5SW04M13XY7I38"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1645081",
+   "name": "Nucor",
+   "kind": "company",
+   "aliases": [
+    "Nuclear Corporation of America"
+   ],
+   "xrefs": [
+    "ticker:NUE",
+    "cik:0000073309",
+    "lei:549300GGJCRSI2TIEJ46"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q182477",
+   "name": "NVIDIA Corporation",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NVDA",
+    "cik:0001045810",
+    "lei:549300S4KLFTLO7GSQ80"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q242507",
+   "name": "NVR",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:NVR",
+    "cik:0000906163"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1155668",
+   "name": "NXP Semiconductors",
+   "kind": "company",
+   "aliases": [
+    "NXP"
+   ],
+   "xrefs": [
+    "ticker:NXPI",
+    "cik:0001413447",
+    "lei:724500M9BY5293JDF951"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2013357",
+   "name": "Occidental Petroleum",
+   "kind": "company",
+   "aliases": [
+    "Oxy"
+   ],
+   "xrefs": [
+    "ticker:OXY",
+    "cik:0000797468",
+    "lei:IM7X0T3ECJW4C1T7ON55"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7083856",
+   "name": "Old Dominion",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ODFL",
+    "cik:0000878927"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1519267",
+   "name": "Omnicom",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:OMC",
+    "cik:0000029989",
+    "lei:HKUPACFHSSASQK8HLS17"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1671509",
+   "name": "ON Semiconductor",
+   "kind": "company",
+   "aliases": [
+    "AMI Semiconductor",
+    "Alcatel Microelectronics",
+    "Fairchild Semiconductor",
+    "Mietec",
+    "onsemi"
+   ],
+   "xrefs": [
+    "ticker:ON",
+    "cik:0001097864",
+    "lei:ZV20P4CNJVT8V1ZGJ064"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q11074156",
+   "name": "Oneok",
+   "kind": "company",
+   "aliases": [
+    "Oklahoma Natural Gas Company"
+   ],
+   "xrefs": [
+    "ticker:OKE",
+    "cik:0001039684",
+    "lei:2T3D6M0JSY48PSZI1Q41"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q19900",
+   "name": "Oracle Corporation",
+   "kind": "company",
+   "aliases": [
+    "Big Red",
+    "ORCL",
+    "Oracle International Corporation (Redwood Shores, CA)",
+    "oracle.com"
+   ],
+   "xrefs": [
+    "ticker:ORCL",
+    "cik:0001341439",
+    "lei:1Z4GXXU7ZHVWFCD8TV52"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1134069",
+   "name": "Otis Worldwide",
+   "kind": "company",
+   "aliases": [
+    "Otis"
+   ],
+   "xrefs": [
+    "ticker:OTIS",
+    "cik:0001781335",
+    "lei:549300857C2X2VKMWG77"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000898173",
+   "name": "O’Reilly Automotive",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ORLY"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1477661",
+   "name": "Paccar",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PCAR",
+    "cik:0000075362",
+    "lei:KDTEY8BWE486IKZ3CC07"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16983334",
+   "name": "Packaging Corporation of America",
+   "kind": "company",
+   "aliases": [
+    "PCA"
+   ],
+   "xrefs": [
+    "ticker:PKG",
+    "cik:0000075677",
+    "lei:549300XZP8MFZFY8TJ84"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2047336",
+   "name": "Palantir Technologies Inc.",
+   "kind": "company",
+   "aliases": [
+    "PLTR",
+    "palantir"
+   ],
+   "xrefs": [
+    "ticker:PLTR",
+    "cik:0001321655",
+    "lei:549300UVN46B3BBDHO85"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7128508",
+   "name": "Palo Alto Networks",
+   "kind": "company",
+   "aliases": [
+    "PAN",
+    "PANW",
+    "Palo Alto Software",
+    "palo alto",
+    "paloaltonetworks.com"
+   ],
+   "xrefs": [
+    "ticker:PANW",
+    "cik:0001327567",
+    "lei:549300QXR2YVZV231H43"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0002041610",
+   "name": "Paramount Skydance",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PSKY"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1470619",
+   "name": "Parker Hannifin",
+   "kind": "company",
+   "aliases": [
+    "Parker",
+    "Parker Appliance Company",
+    "Runwise"
+   ],
+   "xrefs": [
+    "ticker:PH",
+    "cik:0000076334",
+    "lei:5493002CONDB4N2HKI23"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q946080",
+   "name": "Paychex",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PAYX",
+    "cik:0000723531",
+    "lei:529900K900DW6SUBM174"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001633917",
+   "name": "PayPal Holdings Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PYPL"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7165001",
+   "name": "Pentair",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PNR",
+    "cik:0000077360",
+    "lei:5493006P2JR3BN5MZF46"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q334800",
+   "name": "PepsiCo Inc.",
+   "kind": "company",
+   "aliases": [
+    "PepsiCo, Inc. (Purchase, NY)",
+    "bebsi",
+    "pepsi"
+   ],
+   "xrefs": [
+    "ticker:PEP",
+    "cik:0000077476",
+    "lei:FJSUNZKFNQ5YPJ5OT455"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q206921",
+   "name": "Pfizer",
+   "kind": "company",
+   "aliases": [
+    "PFE"
+   ],
+   "xrefs": [
+    "ticker:PFE",
+    "cik:0000078003",
+    "lei:765LHXWGK1KXCLTFYQ30"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001004980",
+   "name": "PG&E",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PCG"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1852556",
+   "name": "Philip Morris International",
+   "kind": "company",
+   "aliases": [
+    "PMI",
+    "philip morris"
+   ],
+   "xrefs": [
+    "ticker:PM",
+    "cik:0001413329",
+    "lei:HL3H1H2BGXWVG3BSWR90"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1656230",
+   "name": "Phillips 66",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PSX",
+    "cik:0001534701",
+    "lei:549300TL5L4IG0H4FX64"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q26110522",
+   "name": "Pinnacle West Capital",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PNW",
+    "cik:0000764622",
+    "lei:TWSEY0NEDUDCKS27AH81"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q38928",
+   "name": "PNC Financial Services",
+   "kind": "company",
+   "aliases": [
+    "PNC"
+   ],
+   "xrefs": [
+    "ticker:PNC",
+    "cik:0000713676",
+    "lei:CFGNEKW0P8842LEUIA51"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q388317",
+   "name": "Pool",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:POOL",
+    "cik:0000945841"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q48754",
+   "name": "PPG Industries",
+   "kind": "company",
+   "aliases": [
+    "PPG",
+    "PPG Industries (United States)"
+   ],
+   "xrefs": [
+    "ticker:PPG",
+    "cik:0000079879",
+    "lei:549300BKPEP01R3V6C59"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q297380",
+   "name": "PPL",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PPL",
+    "cik:0000922224"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3403513",
+   "name": "Principal Financial",
+   "kind": "company",
+   "aliases": [
+    "Principal"
+   ],
+   "xrefs": [
+    "ticker:PFG",
+    "cik:0001126328",
+    "lei:CUMYEZJOAF02RYZ1JJ85"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q212405",
+   "name": "Procter & Gamble Co.",
+   "kind": "company",
+   "aliases": [
+    "P&G",
+    "Proctor and Gamble",
+    "Rejoice"
+   ],
+   "xrefs": [
+    "ticker:PG",
+    "cik:0000080424",
+    "lei:2572IBTT8CCZW6AU4141"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q350611",
+   "name": "Progressive",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PGR",
+    "cik:0000080661"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16983765",
+   "name": "Prologis",
+   "kind": "company",
+   "aliases": [
+    "Prologis Logistics",
+    "Prologis Real Estate",
+    "prologis.com"
+   ],
+   "xrefs": [
+    "ticker:PLD",
+    "cik:0001045609"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2114414",
+   "name": "Prudential Financial",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PRU",
+    "cik:0001137774",
+    "lei:5PRBRS5FEH7NREC8OR45"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q256504",
+   "name": "PTC",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PTC",
+    "cik:0000857005"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000788784",
+   "name": "Public Service Enterprise",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PEG"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1156045",
+   "name": "Public Storage",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PSA",
+    "cik:0001393311",
+    "lei:549300LMZF40TKJ6DM64"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7259716",
+   "name": "PulteGroup",
+   "kind": "company",
+   "aliases": [
+    "Pulte Homes"
+   ],
+   "xrefs": [
+    "ticker:PHM",
+    "cik:0000822416"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0002058873",
+   "name": "Qnity Electronics",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:Q"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q544847",
+   "name": "Qualcomm Inc.",
+   "kind": "company",
+   "aliases": [
+    "QCOM (NASDAQ)",
+    "QUALCOMM Incorporated (San Diego, CA)",
+    "QUALity COMMunications"
+   ],
+   "xrefs": [
+    "ticker:QCOM",
+    "cik:0000804328",
+    "lei:H1J8DDZKZP6H7RWC0H53"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7268886",
+   "name": "Quanta Services",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:PWR",
+    "cik:0001050915",
+    "lei:SHVRXXEACT60MMH07S24"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7271456",
+   "name": "Quest Diagnostics",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:DGX",
+    "cik:0001022079",
+    "lei:8MCWUBXQ0WE04KMXBX50"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q296647",
+   "name": "Ralph Lauren",
+   "kind": "company",
+   "aliases": [
+    "Ralph Lipshit"
+   ],
+   "xrefs": [
+    "ticker:RL",
+    "cik:0001037038"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7298901",
+   "name": "Raymond James Financial",
+   "kind": "company",
+   "aliases": [
+    "Raymond James Financials",
+    "raymond james"
+   ],
+   "xrefs": [
+    "ticker:RJF",
+    "cik:0000720005",
+    "lei:RGUZHJ05YTITL6D76949"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7301386",
+   "name": "Realty Income",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:O",
+    "cik:0000726728",
+    "lei:549300CUWDAUZSH43859"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7308000",
+   "name": "Regency Centers",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:REG",
+    "cik:0000910606",
+    "lei:529900053A7X7FJ97S58"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7308054",
+   "name": "Regeneron Pharmaceuticals",
+   "kind": "company",
+   "aliases": [
+    "regeneron"
+   ],
+   "xrefs": [
+    "ticker:REGN",
+    "cik:0000872589",
+    "lei:549300RCBFWIRX3HYQ56"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q917131",
+   "name": "Regions Financial",
+   "kind": "company",
+   "aliases": [
+    "Regions Bank"
+   ],
+   "xrefs": [
+    "ticker:RF",
+    "cik:0001281761",
+    "lei:CW05CS5KW59QTC0DG824"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7314415",
+   "name": "Republic Services",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:RSG",
+    "cik:0001060391",
+    "lei:NKNQHM6BLECKVOQP7O46"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7314903",
+   "name": "ResMed",
+   "kind": "company",
+   "aliases": [
+    "RMD"
+   ],
+   "xrefs": [
+    "ticker:RMD",
+    "cik:0000943819"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q120467527",
+   "name": "Revvity",
+   "kind": "company",
+   "aliases": [
+    "RVTY"
+   ],
+   "xrefs": [
+    "ticker:RVTY",
+    "cik:0000031791",
+    "lei:549300IKL1SDPFI7N655"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001874178",
+   "name": "Rivian Automotive Inc.",
+   "kind": "company",
+   "aliases": [
+    "rivian"
+   ],
+   "xrefs": [
+    "ticker:RIVN"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q18155123",
+   "name": "Robinhood Markets",
+   "kind": "company",
+   "aliases": [
+    "Robinhood"
+   ],
+   "xrefs": [
+    "ticker:HOOD",
+    "cik:0001783879",
+    "lei:213800FS5AO3YWIE6F63"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1529234",
+   "name": "Rockwell Automation",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ROK",
+    "cik:0001024478",
+    "lei:VH3R4HHBHH12O0EXZJ88"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q21492094",
+   "name": "Rollins",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ROL",
+    "cik:0000084839"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q16932392",
+   "name": "Roper Technologies",
+   "kind": "company",
+   "aliases": [
+    "Roper Industries"
+   ],
+   "xrefs": [
+    "ticker:ROP",
+    "cik:0000882835",
+    "lei:549300LJXD867XMVE759"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3442791",
+   "name": "Ross Stores",
+   "kind": "company",
+   "aliases": [
+    "Ross Dress for Less"
+   ],
+   "xrefs": [
+    "ticker:ROST",
+    "cik:0000745732",
+    "lei:549300ENZFLPGRDFZQ60"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7373922",
+   "name": "Royal Caribbean",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:RCL",
+    "cik:0000884887"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7277907",
+   "name": "RTX",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:RTX",
+    "cik:0000101829"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q868587",
+   "name": "S&P Global",
+   "kind": "company",
+   "aliases": [
+    "McGraw Hill Financial, Inc.",
+    "McGraw–Hill, Inc.",
+    "SPGI"
+   ],
+   "xrefs": [
+    "ticker:SPGI",
+    "cik:0000064040",
+    "lei:Y6X4K52KMJMZE7I7MY94"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q941127",
+   "name": "Salesforce Inc.",
+   "kind": "company",
+   "aliases": [
+    "SFDC",
+    "Salesforce.com, Inc."
+   ],
+   "xrefs": [
+    "ticker:CRM",
+    "cik:0001108524",
+    "lei:RCGZFPDMRW58VJ54VR07"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0002023554",
+   "name": "Sandisk",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SNDK"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7388926",
+   "name": "SBA Communications",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SBAC",
+    "cik:0001034054"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1425316",
+   "name": "Schlumberger",
+   "kind": "company",
+   "aliases": [
+    "SLB"
+   ],
+   "xrefs": [
+    "ticker:SLB",
+    "cik:0000087347",
+    "lei:213800ZUA17OK3QLGM62"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7449804",
+   "name": "Sempra",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SRE",
+    "cik:0001032208",
+    "lei:PBBKGKLRK5S5C0Y4T545"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7455653",
+   "name": "ServiceNow",
+   "kind": "company",
+   "aliases": [
+    "servicenow.com"
+   ],
+   "xrefs": [
+    "ticker:NOW",
+    "cik:0001373715",
+    "lei:549300HJTQM36M0E1G39"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q48881",
+   "name": "Sherwin-Williams",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SHW",
+    "cik:0000089800",
+    "lei:Z15BMIOX8DDH0X2OBP21"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7501150",
+   "name": "Shopify Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SHOP",
+    "cik:0001594805",
+    "lei:549300HGQ43STJLLP808"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2287759",
+   "name": "Simon Property",
+   "kind": "company",
+   "aliases": [
+    "Simon"
+   ],
+   "xrefs": [
+    "ticker:SPG",
+    "cik:0001063761",
+    "lei:529900GQL5X8H7AO3T64"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7538146",
+   "name": "Skyworks Solutions",
+   "kind": "company",
+   "aliases": [
+    "skyworks"
+   ],
+   "xrefs": [
+    "ticker:SWKS",
+    "cik:0000004127",
+    "lei:549300WZ3ORQ2BVKBD96"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1536176",
+   "name": "Smurfit Westrock",
+   "kind": "company",
+   "aliases": [
+    "Smurfit Kappa Group"
+   ],
+   "xrefs": [
+    "ticker:SW",
+    "cik:0002005951"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1631922",
+   "name": "Snap-on",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SNA",
+    "cik:0000091440",
+    "lei:HHWAT5TDOYZMM26KKQ73"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q22078063",
+   "name": "Snowflake Inc.",
+   "kind": "company",
+   "aliases": [
+    "Snowflake Computing"
+   ],
+   "xrefs": [
+    "ticker:SNOW",
+    "cik:0001640147",
+    "lei:254900CJNSY1K7T53Z16"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q124795355",
+   "name": "Solventum",
+   "kind": "company",
+   "aliases": [
+    "3M Health Care Company"
+   ],
+   "xrefs": [
+    "ticker:SOLV",
+    "cik:0001964738",
+    "lei:254900I70403OSGY4M28"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q407522",
+   "name": "Southern",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SO",
+    "cik:0000092122"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q503308",
+   "name": "Southwest Airlines",
+   "kind": "company",
+   "aliases": [
+    "Southwest"
+   ],
+   "xrefs": [
+    "ticker:LUV",
+    "cik:0000092380",
+    "lei:UDTZ87G0STFETI6HGH41"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q706094",
+   "name": "Stanley Black & Decker",
+   "kind": "company",
+   "aliases": [
+    "The Stanley Works"
+   ],
+   "xrefs": [
+    "ticker:SWK",
+    "cik:0000093556",
+    "lei:549300DJ09SMTO561131"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q37158",
+   "name": "Starbucks",
+   "kind": "company",
+   "aliases": [
+    "Starbucks Coffee"
+   ],
+   "xrefs": [
+    "ticker:SBUX",
+    "cik:0000829224",
+    "lei:OQSJ1DU9TAOC51A47K68"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q945249",
+   "name": "State Street",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:STT",
+    "cik:0000093751"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7605667",
+   "name": "Steel Dynamics",
+   "kind": "company",
+   "aliases": [
+    "SDI"
+   ],
+   "xrefs": [
+    "ticker:STLD",
+    "cik:0001022671",
+    "lei:549300HGGKEL4FYTTQ83"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q80947821",
+   "name": "Steris",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:STE",
+    "cik:0001757898",
+    "lei:549300AFNA4MU5267137"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q612829",
+   "name": "Stryker",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SYK",
+    "cik:0000310764"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001375365",
+   "name": "Super Micro Computer Inc.",
+   "kind": "company",
+   "aliases": [
+    "super micro"
+   ],
+   "xrefs": [
+    "ticker:SMCI"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q18387139",
+   "name": "Synchrony Financial",
+   "kind": "company",
+   "aliases": [
+    "synchrony"
+   ],
+   "xrefs": [
+    "ticker:SYF",
+    "cik:0001601712",
+    "lei:549300RS7EWPM9MA6C78"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2303478",
+   "name": "Synopsys",
+   "kind": "company",
+   "aliases": [
+    "SNPS",
+    "SYNOPSYS, INC. (Mountain View, CA)"
+   ],
+   "xrefs": [
+    "ticker:SNPS",
+    "cik:0000883241",
+    "lei:QG7T915N9S0NY5UKNE63"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2376711",
+   "name": "Sysco",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:SYY",
+    "cik:0000096021",
+    "lei:5RGWIFLMGH3YS7KWI652"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3511885",
+   "name": "T-Mobile US",
+   "kind": "company",
+   "aliases": [
+    "T-Mobile",
+    "T-Mobile USA, Inc.",
+    "VoiceStream Wireless"
+   ],
+   "xrefs": [
+    "ticker:TMUS",
+    "cik:0001283699",
+    "lei:549300QHIJYOHPACPG31"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3511946",
+   "name": "T. Rowe Price",
+   "kind": "company",
+   "aliases": [
+    "T. Rowe Price Associates, Inc."
+   ],
+   "xrefs": [
+    "ticker:TROW",
+    "cik:0001113169"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q94933",
+   "name": "Take-Two Interactive",
+   "kind": "company",
+   "aliases": [
+    "T2",
+    "Take-Two",
+    "Take-Two Interactive Software",
+    "Take2"
+   ],
+   "xrefs": [
+    "ticker:TTWO",
+    "cik:0000946581",
+    "lei:BOMSTHHJK882EWYX3334"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q184296",
+   "name": "Tapestry",
+   "kind": "company",
+   "aliases": [
+    "gobelin",
+    "hanging",
+    "woven tapestry"
+   ],
+   "xrefs": [
+    "ticker:TPR",
+    "cik:0001116132"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001389170",
+   "name": "Targa Resources",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TRGP"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1046951",
+   "name": "Target Corporation",
+   "kind": "company",
+   "aliases": [
+    "Taj-jay",
+    "Tar-zhay",
+    "Target Store"
+   ],
+   "xrefs": [
+    "ticker:TGT",
+    "cik:0000027419",
+    "lei:8WDDFXB5T1Z6J0XC1L66"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q663452",
+   "name": "TE Connectivity",
+   "kind": "company",
+   "aliases": [
+    "AMP Incorporated",
+    "Tyco Electronics"
+   ],
+   "xrefs": [
+    "ticker:TEL",
+    "cik:0001385157",
+    "lei:894500ZRIX9K13RHXR17"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7696127",
+   "name": "Teledyne Technologies",
+   "kind": "company",
+   "aliases": [
+    "RD Instruments",
+    "Teledyne Benthos",
+    "teledyne"
+   ],
+   "xrefs": [
+    "ticker:TDY",
+    "cik:0001094285",
+    "lei:549300VSMO9KYQWDND94"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2404292",
+   "name": "Teradyne",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TER",
+    "cik:0000097210",
+    "lei:C3X4YJ278QNZHRJULN75"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q478214",
+   "name": "Tesla Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TSLA",
+    "cik:0001318605",
+    "lei:54930043XZGB27CTOV49"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q193412",
+   "name": "Texas Instruments",
+   "kind": "company",
+   "aliases": [
+    "TEXAS INSTRUMENTS INCORPORATED (Dallas, TX)",
+    "TI Inc."
+   ],
+   "xrefs": [
+    "ticker:TXN",
+    "cik:0000097476",
+    "lei:WDJNR2L6D8RWOEB8T652"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001811074",
+   "name": "Texas Pacific Land",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TPL"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2140315",
+   "name": "Textron",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TXT",
+    "cik:0000217346",
+    "lei:3PPKBHUG1HD6BO7RNR87"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q66",
+   "name": "The Boeing Company",
+   "kind": "company",
+   "aliases": [
+    "The Boeing Company (Chicago, IL)",
+    "United Aircraft and Transport Corp"
+   ],
+   "xrefs": [
+    "ticker:BA",
+    "cik:0000012927",
+    "lei:RVHJWBXLJ1RFUBSY1F30"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3295867",
+   "name": "The Coca-Cola Company",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:KO",
+    "cik:0000021344",
+    "lei:UWJKFUJFZ02DKWI3RY53"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q864407",
+   "name": "The Home Depot Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:HD",
+    "cik:0000354950",
+    "lei:QEKMOTMBBKA8I816DO57"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7414",
+   "name": "The Walt Disney Company",
+   "kind": "company",
+   "aliases": [
+    "The Walt Disney Studio"
+   ],
+   "xrefs": [
+    "ticker:DIS",
+    "cik:0001744489",
+    "lei:549300GZKULIZ0WOW665"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q643674",
+   "name": "Thermo Fisher Scientific",
+   "kind": "company",
+   "aliases": [
+    "TMO",
+    "Thermo Fisher",
+    "ThermoFisher"
+   ],
+   "xrefs": [
+    "ticker:TMO",
+    "cik:0000097745",
+    "lei:HCHV7422L5HDJZCRFL38"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1285819",
+   "name": "TJX",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TJX",
+    "cik:0000109198",
+    "lei:V167QI9I69W364E2DY52"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001973266",
+   "name": "TKO",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TKO"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q15109925",
+   "name": "Tractor Supply",
+   "kind": "company",
+   "aliases": [
+    "TSCO"
+   ],
+   "xrefs": [
+    "ticker:TSCO",
+    "cik:0000916365",
+    "lei:549300OJ9VZHZRO6I137"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001671933",
+   "name": "Trade Desk (The)",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TTD"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q131744111",
+   "name": "Trane Technologies",
+   "kind": "company",
+   "aliases": [
+    "trane"
+   ],
+   "xrefs": [
+    "ticker:TT",
+    "cik:0001466258"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7833612",
+   "name": "TransDigm",
+   "kind": "company",
+   "aliases": [
+    "TDG"
+   ],
+   "xrefs": [
+    "ticker:TDG",
+    "cik:0001260221",
+    "lei:88Q84GB3X55CF5OC7582"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000086312",
+   "name": "Travelers Companies (The)",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TRV"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q360463",
+   "name": "Trimble",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TRMB",
+    "cik:0000864749"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q795486",
+   "name": "Truist Financial",
+   "kind": "company",
+   "aliases": [
+    "BB&T Corporation",
+    "BBT",
+    "Branch Banking and Trust Company",
+    "truist"
+   ],
+   "xrefs": [
+    "ticker:TFC",
+    "cik:0000092230",
+    "lei:JJKC32MCHWDI71265Z06"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q48802335",
+   "name": "Tyler Technologies",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TYL",
+    "cik:0000860731",
+    "lei:25490040SMU4Z8LBCW70"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1325987",
+   "name": "Tyson Foods",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:TSN",
+    "cik:0000100493",
+    "lei:WD6L6041MNRW1JE49D58"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q739084",
+   "name": "U.S. Bancorp",
+   "kind": "company",
+   "aliases": [
+    "U.S. Bank"
+   ],
+   "xrefs": [
+    "ticker:USB",
+    "cik:0000036104",
+    "lei:N1GZ7BBF3NP8GI976H15"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q780442",
+   "name": "Uber Technologies Inc.",
+   "kind": "company",
+   "aliases": [
+    "Uber",
+    "Uber Technologies, Inc. (San Francisco, CA)",
+    "Uber Technology",
+    "UberCab"
+   ],
+   "xrefs": [
+    "ticker:UBER",
+    "cik:0001543151",
+    "lei:549300B2FTG34FILDR98"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q447702",
+   "name": "UDR",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:UDR",
+    "cik:0000074208"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7880076",
+   "name": "Ulta Beauty",
+   "kind": "company",
+   "aliases": [
+    "Ulta"
+   ],
+   "xrefs": [
+    "ticker:ULTA",
+    "cik:0001403568",
+    "lei:529900CIV6HN8M28YM82"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000100885",
+   "name": "Union Pacific",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:UNP"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000100517",
+   "name": "United Airlines",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:UAL"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q155026",
+   "name": "United Parcel Service",
+   "kind": "company",
+   "aliases": [
+    "American Messenger Company",
+    "Merchants Parcel Delivery",
+    "United Parcel Service, Inc, UPS"
+   ],
+   "xrefs": [
+    "ticker:UPS",
+    "cik:0001090727",
+    "lei:D01LMJZU09ULLNCY6Z23"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7889101",
+   "name": "United Rentals",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:URI",
+    "cik:0001067701",
+    "lei:5323X5O7RN0NKFCDRY08"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2103926",
+   "name": "UnitedHealth Group Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:UNH",
+    "cik:0000731766",
+    "lei:549300GHBMY8T5GXDE41"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7893967",
+   "name": "Universal Health Services",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:UHS",
+    "cik:0000352915",
+    "lei:549300YGMGQDO0NMJD09"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1283291",
+   "name": "Valero Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:VLO",
+    "cik:0001035002",
+    "lei:549300XTO5VR8SKV1V74"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q24204493",
+   "name": "Veeva Systems",
+   "kind": "company",
+   "aliases": [
+    "veeva"
+   ],
+   "xrefs": [
+    "ticker:VEEV",
+    "cik:0001393052",
+    "lei:549300YZEXPDB92M2F02"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q4009698",
+   "name": "Ventas",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:VTR",
+    "cik:0000740260"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q124721239",
+   "name": "Veralto",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:VLTO",
+    "cik:0001967680"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q734338",
+   "name": "Verisign",
+   "kind": "company",
+   "aliases": [
+    "VRSN"
+   ],
+   "xrefs": [
+    "ticker:VRSN",
+    "cik:0001014473",
+    "lei:LMPL4N8ZOJRMF0KOF759"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7921370",
+   "name": "Verisk Analytics",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:VRSK",
+    "cik:0001442145",
+    "lei:549300I1YSWNIRKBWP67"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q467752",
+   "name": "Verizon",
+   "kind": "company",
+   "aliases": [
+    "Verizon Communications Inc."
+   ],
+   "xrefs": [
+    "ticker:VZ",
+    "cik:0000732712",
+    "lei:2S72QS2UO2OESLG6Y829"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2744099",
+   "name": "Vertex Pharmaceuticals",
+   "kind": "company",
+   "aliases": [
+    "Vertex"
+   ],
+   "xrefs": [
+    "ticker:VRTX",
+    "cik:0000875320"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5370909",
+   "name": "Vertiv",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:VRT",
+    "cik:0001674101",
+    "lei:549300KTTIRAOGXCRV69"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q101983981",
+   "name": "Viatris",
+   "kind": "company",
+   "aliases": [
+    "Viatris (firma)",
+    "Viatris Pharmaceuticals"
+   ],
+   "xrefs": [
+    "ticker:VTRS",
+    "cik:0001792044",
+    "lei:254900ZZTSW7NL773X71"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q54263910",
+   "name": "Vici Properties",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:VICI",
+    "cik:0001705696"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q328840",
+   "name": "Visa Inc.",
+   "kind": "company",
+   "aliases": [
+    "visa.com"
+   ],
+   "xrefs": [
+    "ticker:V",
+    "cik:0001403161",
+    "lei:549300JZ4OKEHW3DPJ59"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q117187991",
+   "name": "Vistra",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:VST",
+    "cik:0001692819"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1685287",
+   "name": "Vulcan Materials",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:VMC",
+    "cik:0001396009",
+    "lei:549300Q8LSNHAVWBNI21"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000011544",
+   "name": "W. R. Berkley",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:WRB"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1627894",
+   "name": "W. W. Grainger",
+   "kind": "company",
+   "aliases": [
+    "Grainger"
+   ],
+   "xrefs": [
+    "ticker:GWW",
+    "cik:0000277135",
+    "lei:549300TWZSP6O1IH2V34"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q741707",
+   "name": "Wabtec",
+   "kind": "company",
+   "aliases": [
+    "Westinghouse Air Brake Technologies Corporation"
+   ],
+   "xrefs": [
+    "ticker:WAB",
+    "cik:0000943452",
+    "lei:06BTX5UWZD0GQ5N5Y745"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q483551",
+   "name": "Walmart Inc.",
+   "kind": "company",
+   "aliases": [
+    "Wal-Mart Stores, Inc.",
+    "Wall Mart",
+    "Wallmart"
+   ],
+   "xrefs": [
+    "ticker:WMT",
+    "cik:0000104169",
+    "lei:Y87794H0US1R65VBXU25"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q107074885",
+   "name": "Warner Bros. Discovery",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:WBD",
+    "cik:0001437107"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q180388",
+   "name": "Waste Management",
+   "kind": "company",
+   "aliases": [
+    "waste disposal"
+   ],
+   "xrefs": [
+    "ticker:WM",
+    "cik:0000823768"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2552657",
+   "name": "Waters",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:WAT",
+    "cik:0001000697"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000783325",
+   "name": "WEC Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:WEC"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q744149",
+   "name": "Wells Fargo",
+   "kind": "company",
+   "aliases": [
+    "International company",
+    "Wells Fargo Bank"
+   ],
+   "xrefs": [
+    "ticker:WFC",
+    "cik:0000072971",
+    "lei:PBLD0EJDB5FWOLXP3B76"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q20486917",
+   "name": "Welltower",
+   "kind": "company",
+   "aliases": [
+    "Health Care REIT"
+   ],
+   "xrefs": [
+    "ticker:WELL",
+    "cik:0000766704"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0000105770",
+   "name": "West Pharmaceutical Services",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:WST"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q738770",
+   "name": "Western Digital",
+   "kind": "company",
+   "aliases": [
+    "WD",
+    "WDC"
+   ],
+   "xrefs": [
+    "ticker:WDC",
+    "cik:0000106040",
+    "lei:549300QQXOOYEF89IC56"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1780382",
+   "name": "Weyerhaeuser",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:WY",
+    "cik:0000106535",
+    "lei:08IRJODWFYBI7QWRGS31"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q224708",
+   "name": "Williams",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:WMB",
+    "cik:0000107263"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q96415240",
+   "name": "Williams-Sonoma",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:WSM",
+    "cik:0000719955"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q21189883",
+   "name": "Willis Towers Watson",
+   "kind": "company",
+   "aliases": [
+    "WTW",
+    "Willis (United Kingdom)"
+   ],
+   "xrefs": [
+    "ticker:WTW",
+    "cik:0001140536",
+    "lei:549300FLMVQFAZRFS627"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q629143",
+   "name": "Workday",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:WDAY",
+    "cik:0001327811"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2274089",
+   "name": "Wynn Resorts",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:WYNN",
+    "cik:0001174922",
+    "lei:254900CEKKWIHTEAB172"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1486956",
+   "name": "Xcel Energy",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:XEL",
+    "cik:0000072903",
+    "lei:LGJNMI9GH8XIDG5RCM61"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q122811",
+   "name": "Xylem",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:XYL",
+    "cik:0001524472"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q668737",
+   "name": "Yum! Brands",
+   "kind": "company",
+   "aliases": [
+    "KenHut",
+    "KenTaco",
+    "KenTacoHut",
+    "Taco Bell/KFC Yum!",
+    "TacoHut",
+    "Tricon Global Restaurants",
+    "YUM! Restaurants (China) Investment Company Limited",
+    "Yum!"
+   ],
+   "xrefs": [
+    "ticker:YUM",
+    "cik:0001041061",
+    "lei:549300JE8XHZZ7OHN517"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2443609",
+   "name": "Zebra Technologies",
+   "kind": "company",
+   "aliases": [
+    "ZBR"
+   ],
+   "xrefs": [
+    "ticker:ZBRA",
+    "cik:0000877212",
+    "lei:PO0I32GKZ3HZMMDPZZ08"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q203552",
+   "name": "Zimmer Biomet",
+   "kind": "company",
+   "aliases": [
+    "Biomet",
+    "Zimmer"
+   ],
+   "xrefs": [
+    "ticker:ZBH",
+    "cik:0001136869",
+    "lei:2P2YLDVPES3BXQ1FRB91"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q8073337",
+   "name": "Zoetis",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": [
+    "ticker:ZTS",
+    "cik:0001555280",
+    "lei:549300HD9Q1LOC9KLJ48"
+   ]
+  },
+  {
+   "scheme": "cik",
+   "id": "0001585521",
+   "name": "Zoom Video Communications Inc.",
+   "kind": "company",
+   "aliases": [
+    "zoom",
+    "zoom video"
+   ],
+   "xrefs": [
+    "ticker:ZM"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5354978",
+   "name": "Electoral Commission",
+   "kind": "election_authority",
+   "aliases": [
+    "UK Electoral Commission"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2705072",
+   "name": "Federal Election Commission",
+   "kind": "election_authority",
+   "aliases": [
+    "FEC"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q30635731",
+   "name": "Cboe Global Markets",
+   "kind": "exchange",
+   "aliases": [
+    "CBOE Holdings"
+   ],
+   "xrefs": [
+    "ticker:CBOE",
+    "cik:0001374310"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q157852",
+   "name": "Deutsche Borse",
+   "kind": "exchange",
+   "aliases": [
+    "DBG",
+    "Deutsche Boerse"
+   ],
+   "xrefs": [
+    "lei:529900G3SW56SHYNPR95"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q842108",
+   "name": "Euronext",
+   "kind": "exchange",
+   "aliases": [
+    "Euronext N V"
+   ],
+   "xrefs": [
+    "lei:724500QJ4QSZ3H9QU415"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q65074329",
+   "name": "FTSE Russell",
+   "kind": "exchange",
+   "aliases": [
+    "Russell"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q496672",
+   "name": "Hong Kong Stock Exchange",
+   "kind": "exchange",
+   "aliases": [
+    "HKEX",
+    "HKSE",
+    "SEHK",
+    "Stock Exchange of Hong Kong",
+    "XHKG"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q171240",
+   "name": "London Stock Exchange",
+   "kind": "exchange",
+   "aliases": [
+    "LSE",
+    "LSE APA",
+    "London Stock Exchange, LSE",
+    "XLON"
+   ],
+   "xrefs": [
+    "lei:213800D1EI4B9WTWWD28"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q768773",
+   "name": "MSCI",
+   "kind": "exchange",
+   "aliases": [
+    "MSCI Barra",
+    "Morgan Stanley Capital International"
+   ],
+   "xrefs": [
+    "ticker:MSCI",
+    "cik:0001408198",
+    "lei:549300HTIN2PD78UB763"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q82059",
+   "name": "Nasdaq",
+   "kind": "exchange",
+   "aliases": [
+    "NASDAQ - All Markets",
+    "Nasdaq Stock Market"
+   ],
+   "xrefs": [
+    "ticker:NDAQ",
+    "cik:0001120193"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q13677",
+   "name": "New York Stock Exchange",
+   "kind": "exchange",
+   "aliases": [
+    "Big Board",
+    "N. Y. Stock Exchange",
+    "NY Stock Exchange",
+    "NYSE",
+    "XNYS"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1253020",
+   "name": "S&P Dow Jones Indices",
+   "kind": "exchange",
+   "aliases": [
+    "S&P DJI"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q217475",
+   "name": "Tokyo Stock Exchange",
+   "kind": "exchange",
+   "aliases": [
+    "TSE",
+    "TYO",
+    "Tōshō",
+    "XTKS"
+   ],
+   "xrefs": [
+    "lei:353800279ADEFGKNTV65"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q818723",
+   "name": "Toronto Stock Exchange",
+   "kind": "exchange",
+   "aliases": [
+    "Bourse de Toronto",
+    "TSE",
+    "TSX",
+    "XTSE"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q8896",
+   "name": "Council of the European Union",
+   "kind": "government",
+   "aliases": [
+    "EU Council"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q48525",
+   "name": "Federal Government of the United States",
+   "kind": "government",
+   "aliases": [
+    "U.S. government"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6063",
+   "name": "Government of the United Kingdom",
+   "kind": "government",
+   "aliases": [
+    "British government",
+    "UK government"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1620015",
+   "name": "Office of Foreign Assets Control",
+   "kind": "government",
+   "aliases": [
+    "OFAC"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1574977",
+   "name": "Office of the United States Trade Representative",
+   "kind": "government",
+   "aliases": [
+    "U.S. Trade Representative",
+    "USTR"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q155718",
+   "name": "DAX",
+   "kind": "index",
+   "aliases": [
+    "Deutscher Aktienindex"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q180816",
+   "name": "Dow Jones Industrial Average",
+   "kind": "index",
+   "aliases": [
+    "DJI",
+    "DJIA Component",
+    "Dow Jones",
+    "the Dow"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q466496",
+   "name": "FTSE 100",
+   "kind": "index",
+   "aliases": [
+    "FTSE",
+    "FTSE 100 Index",
+    "FTSE100",
+    "footsie"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q575782",
+   "name": "Nasdaq Composite",
+   "kind": "index",
+   "aliases": [
+    "NASDAQ Composite Index",
+    "^IXIC"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q507306",
+   "name": "Nasdaq-100",
+   "kind": "index",
+   "aliases": [
+    "NASDAQ 1000 Index",
+    "NASDAQ-1000、NDX"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q507338",
+   "name": "Nikkei 225",
+   "kind": "index",
+   "aliases": [
+    "Nikkei Stock Average",
+    "Nikkei index"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1329524",
+   "name": "Russell 2000",
+   "kind": "index",
+   "aliases": [
+    "Russell 2000 index"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q242345",
+   "name": "S&P 500",
+   "kind": "index",
+   "aliases": [
+    "S&P",
+    "S&P 500 Component",
+    "S&P 500 Index",
+    "SPX",
+    "^GSPC"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q10366645",
+   "name": "STOXX Europe 600",
+   "kind": "index",
+   "aliases": [
+    "STOXX600",
+    "STXE 600 PR.EUR",
+    "SXXP",
+    "Stoxx 600",
+    "Stoxx Europe 600 Index"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q744089",
+   "name": "ATP Tour",
+   "kind": "league",
+   "aliases": [
+    "ATP",
+    "Association of Tennis Professionals"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q82595",
+   "name": "Bundesliga",
+   "kind": "league",
+   "aliases": [
+    "Bundesliga 1",
+    "Bundesliga Men",
+    "Bundesliga One",
+    "Bundesliga of Men",
+    "Men Bundesliga",
+    "Men's Bundesliga",
+    "One Bundesliga"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q253414",
+   "name": "FIFA",
+   "kind": "league",
+   "aliases": [
+    "Federacion Internacional de Futbol Asociados",
+    "Federación Internacional de Fútbol Asociación",
+    "Federación Internacional de Fútbol Asociado",
+    "Fédération internationale de football association",
+    "International Federation of Association Football"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1968",
+   "name": "Formula One",
+   "kind": "league",
+   "aliases": [
+    "F1",
+    "FIA Formula One World Championship",
+    "Formula 1",
+    "The Formula One race team"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q396412",
+   "name": "Indian Premier League",
+   "kind": "league",
+   "aliases": [
+    "IPL"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q722694",
+   "name": "International Cricket Council",
+   "kind": "league",
+   "aliases": [
+    "ICC",
+    "Imperial Cricket Conference",
+    "International Cricket Conference"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q40970",
+   "name": "International Olympic Committee",
+   "kind": "league",
+   "aliases": [
+    "IOC",
+    "International Olympics Committee"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q324867",
+   "name": "La Liga",
+   "kind": "league",
+   "aliases": [
+    "LL",
+    "La Liga Spain",
+    "LaLiga",
+    "LaLiga of Spain",
+    "Spanish Football League",
+    "Spanish LaLiga"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q13394",
+   "name": "Ligue 1",
+   "kind": "league",
+   "aliases": [
+    "French League",
+    "French Ligue 1",
+    "Ligue 1 Conforama",
+    "Ligue 1 France",
+    "Ligue 1 Orange",
+    "Ligue 1 Uber Eats"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1163715",
+   "name": "Major League Baseball",
+   "kind": "league",
+   "aliases": [
+    "MLB",
+    "Major League"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q18543",
+   "name": "Major League Soccer",
+   "kind": "league",
+   "aliases": [
+    "MLS",
+    "Major League Professional Soccer"
+   ],
+   "xrefs": [
+    "lei:5493005Z1VSYZZ2JED42"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q155223",
+   "name": "National Basketball Association",
+   "kind": "league",
+   "aliases": [
+    "BAA",
+    "Basketball Association of America",
+    "NBA",
+    "Nat'l Basketball Assn.",
+    "National Basketball Assn."
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q271805",
+   "name": "National Collegiate Athletic Association",
+   "kind": "league",
+   "aliases": [
+    "NCAA"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1215884",
+   "name": "National Football League",
+   "kind": "league",
+   "aliases": [
+    "APFA",
+    "APFC",
+    "NFL"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1215892",
+   "name": "National Hockey League",
+   "kind": "league",
+   "aliases": [
+    "NHL"
+   ],
+   "xrefs": [
+    "lei:549300JHBAF14RZHCI64"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q910409",
+   "name": "PGA Tour",
+   "kind": "league",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q9448",
+   "name": "Premier League",
+   "kind": "league",
+   "aliases": [
+    "EPL",
+    "England Premier League",
+    "English Premier League",
+    "English Premiership",
+    "Premier League of England",
+    "Premiership"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q15804",
+   "name": "Serie A",
+   "kind": "league",
+   "aliases": [
+    "Italian Football League",
+    "Italian League",
+    "Italian Serie A",
+    "Italy Football League",
+    "Serie A League",
+    "Serie A TIM",
+    "SerieA"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q35572",
+   "name": "UEFA",
+   "kind": "league",
+   "aliases": [
+    "Union Europea de Asociaciones de Futbol",
+    "Union des Associations Européennes de Football",
+    "Union of European Football Associations",
+    "Vereinigung Europäischer Fußballverbände"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q18756",
+   "name": "UEFA Champions League",
+   "kind": "league",
+   "aliases": [
+    "Champions League",
+    "European Champion Clubs' Cup",
+    "UCL"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q186471",
+   "name": "Ultimate Fighting Championship",
+   "kind": "league",
+   "aliases": [
+    "UFC"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2593221",
+   "name": "Women's National Basketball Association",
+   "kind": "league",
+   "aliases": [
+    "WNBA"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q948442",
+   "name": "WTA Tour",
+   "kind": "league",
+   "aliases": [
+    "WTA",
+    "Women's Tennis Association"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q8889",
+   "name": "European Parliament",
+   "kind": "legislature",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q154797",
+   "name": "German Bundestag",
+   "kind": "legislature",
+   "aliases": [
+    "Bundestag"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q11005",
+   "name": "House of Commons",
+   "kind": "legislature",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q11010",
+   "name": "Parliament of the United Kingdom",
+   "kind": "legislature",
+   "aliases": [
+    "British Parliament",
+    "UK Parliament"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q11268",
+   "name": "United States Congress",
+   "kind": "legislature",
+   "aliases": [
+    "U.S. Congress"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q11701",
+   "name": "United States House of Representatives",
+   "kind": "legislature",
+   "aliases": [
+    "U.S. House"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q66096",
+   "name": "United States Senate",
+   "kind": "legislature",
+   "aliases": [
+    "U.S. Senate"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q22686",
+   "name": "Donald Trump",
+   "kind": "official",
+   "aliases": [
+    "President Trump"
+   ],
+   "xrefs": [
+    "office:Q11696"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q6383803",
+   "name": "Keir Starmer",
+   "kind": "official",
+   "aliases": [],
+   "xrefs": [
+    "office:Q14211"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q60772",
+   "name": "Ursula von der Leyen",
+   "kind": "official",
+   "aliases": [],
+   "xrefs": [
+    "office:Q8882"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q611748",
+   "name": "Commodity Futures Trading Commission",
+   "kind": "regulator",
+   "aliases": [
+    "CFTC",
+    "U.S. Commodity Futures Trading Commission",
+    "United States Commodity Futures Trading Commission"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q18363996",
+   "name": "Competition and Markets Authority",
+   "kind": "regulator",
+   "aliases": [
+    "CMA"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q8880",
+   "name": "European Commission",
+   "kind": "regulator",
+   "aliases": [
+    "EC",
+    "EU commission",
+    "ec.europa.eu"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q769112",
+   "name": "European Securities and Markets Authority",
+   "kind": "regulator",
+   "aliases": [
+    "ESMA"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1345065",
+   "name": "Federal Deposit Insurance Corporation",
+   "kind": "regulator",
+   "aliases": [
+    "FDIC"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q786713",
+   "name": "Federal Trade Commission",
+   "kind": "regulator",
+   "aliases": [
+    "FTC",
+    "United States Federal Trade Commission"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q5449586",
+   "name": "Financial Conduct Authority",
+   "kind": "regulator",
+   "aliases": [
+    "FCA"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q387071",
+   "name": "Financial Industry Regulatory Authority",
+   "kind": "regulator",
+   "aliases": [
+    "FINRA",
+    "NASD"
+   ],
+   "xrefs": [
+    "lei:254900F5GTSJJHGE9287"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q204711",
+   "name": "Food and Drug Administration",
+   "kind": "regulator",
+   "aliases": [
+    "FDA",
+    "US Food and Drug Administration",
+    "United States Food and Drug Administration"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7804",
+   "name": "International Monetary Fund",
+   "kind": "regulator",
+   "aliases": [
+    "IMF",
+    "International Monetary Fund, IMF"
+   ],
+   "xrefs": [
+    "lei:E7EXN6FJGRUTJYNZ3Z71"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3881026",
+   "name": "Office of the Comptroller of the Currency",
+   "kind": "regulator",
+   "aliases": [
+    "OCC"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7795",
+   "name": "OPEC",
+   "kind": "regulator",
+   "aliases": [
+    "Organization of the Petroleum Exporting Countries"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q953944",
+   "name": "U.S. Securities and Exchange Commission",
+   "kind": "regulator",
+   "aliases": [
+    "SEC",
+    "Securities and Exchange Commission",
+    "USSEC",
+    "United States Securities and Exchange Commission"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1553390",
+   "name": "United States Department of Justice",
+   "kind": "regulator",
+   "aliases": [
+    "DOJ",
+    "Justice Department",
+    "U.S. DOJ",
+    "U.S. Department of Justice",
+    "U.S. Justice Department",
+    "USDOJ",
+    "United States Justice Department",
+    "justice.gov",
+    "usdoj.gov"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q628807",
+   "name": "United States Department of Labor",
+   "kind": "regulator",
+   "aliases": [
+    "DOL",
+    "Department of Labor",
+    "Labor Department",
+    "US Department of Labor"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q648666",
+   "name": "United States Department of the Treasury",
+   "kind": "regulator",
+   "aliases": [
+    "Department of the Treasury",
+    "Treasury Department",
+    "U.S. Department of the Treasury",
+    "U.S. Treasury",
+    "US Treasury Department",
+    "USDT",
+    "United States Treasury Department"
+   ],
+   "xrefs": [
+    "lei:254900HROIFWPRGM1V77"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q320863",
+   "name": "World Bank",
+   "kind": "regulator",
+   "aliases": [
+    "WBG"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q123347",
+   "name": "Australian Bureau of Statistics",
+   "kind": "statistics_agency",
+   "aliases": [
+    "ABS",
+    "Australian Bureau of Statistics, Central Office"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1443033",
+   "name": "Bureau of Economic Analysis",
+   "kind": "statistics_agency",
+   "aliases": [
+    "BEA",
+    "U.S. BEA",
+    "U.S. Bureau of Economic Analysis",
+    "USBEA",
+    "United States Bureau of Economic Analysis"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q2928428",
+   "name": "Bureau of Labor Statistics",
+   "kind": "statistics_agency",
+   "aliases": [
+    "BLS",
+    "U.S. Bureau of Labor Statistics"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q217659",
+   "name": "Eurostat",
+   "kind": "statistics_agency",
+   "aliases": [
+    "European Statistical Office"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q764739",
+   "name": "Federal Statistical Office of Germany",
+   "kind": "statistics_agency",
+   "aliases": [
+    "Destatis",
+    "StBA"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q156616",
+   "name": "INSEE",
+   "kind": "statistics_agency",
+   "aliases": [
+    "Institut national de la statistique et des etudes economiques",
+    "National Institute of Statistics and Economic Studies"
+   ],
+   "xrefs": [
+    "lei:969500Q2MA9VBQ8BG884"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q3152801",
+   "name": "Institute for Supply Management",
+   "kind": "statistics_agency",
+   "aliases": [
+    "ISM"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1509446",
+   "name": "National Bureau of Statistics of China",
+   "kind": "statistics_agency",
+   "aliases": [
+    "NBS China",
+    "National Bureau of Statistics"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1334971",
+   "name": "Office for National Statistics",
+   "kind": "statistics_agency",
+   "aliases": [
+    "Census Office",
+    "ONS",
+    "Swyddfa Ystadegau Gwladol y DU",
+    "UK Office for National Statistics"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q11606829",
+   "name": "Statistics Bureau of Japan",
+   "kind": "statistics_agency",
+   "aliases": [
+    "Statistics Japan",
+    "Tōkeikyoku"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1155740",
+   "name": "Statistics Canada",
+   "kind": "statistics_agency",
+   "aliases": [
+    "StatCan",
+    "Statistique Canada"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7727322",
+   "name": "The Conference Board",
+   "kind": "statistics_agency",
+   "aliases": [
+    "National Industrial Conference Board",
+    "conference-board.org"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q637413",
+   "name": "United States Census Bureau",
+   "kind": "statistics_agency",
+   "aliases": [
+    "Bureau of the Census",
+    "Census Bureau",
+    "U.S. Census Bureau",
+    "United States Bureau of the Census"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1543",
+   "name": "AC Milan",
+   "kind": "team",
+   "aliases": [
+    "A.C.M.",
+    "ACMilan",
+    "Association Football Milan",
+    "Associazione Calcio Milan",
+    "Milan"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q9617",
+   "name": "Arsenal F.C.",
+   "kind": "team",
+   "aliases": [
+    "AFC",
+    "Arsenal",
+    "Arsenal Football Club",
+    "Arsenal London",
+    "The Ars"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q8701",
+   "name": "Atletico Madrid",
+   "kind": "team",
+   "aliases": [
+    "ATM",
+    "ATM Football Club",
+    "Atl. de Madrid",
+    "Atleti de Madrid",
+    "Atletico",
+    "Atletico de Madrid",
+    "Atletico of Madrid",
+    "AtléticoDeMadrid",
+    "Club Atlético de Madrid",
+    "Club Atlético de Madrid, SAD",
+    "El Atleti"
+   ],
+   "xrefs": [
+    "lei:959800PEZFMBKHG8NZ30"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q15789",
+   "name": "Bayern Munich",
+   "kind": "team",
+   "aliases": [
+    "Bavaria Munich",
+    "Bayern",
+    "Bayern Muenchen",
+    "Bayern Munchen",
+    "Bayern of Munich",
+    "Die Bayernf",
+    "FC Bavaria Munich",
+    "FC Bayern",
+    "FC Bayern Muenchen",
+    "FC Bayern Munchen",
+    "FC Bayern Munich",
+    "FC Hollywood",
+    "FCB Munich",
+    "FCBM",
+    "FCBM 1900",
+    "Munich"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q41420",
+   "name": "Borussia Dortmund",
+   "kind": "team",
+   "aliases": [
+    "BVB",
+    "Ballspielverein Borussia 09 e.V. Dortmund",
+    "Die Borussen",
+    "Die Schwarzgelben",
+    "Dortmund",
+    "The Black and Yellows"
+   ],
+   "xrefs": [
+    "lei:529900XO0YTOOKCLQB44"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q131371",
+   "name": "Boston Celtics",
+   "kind": "team",
+   "aliases": [
+    "C's",
+    "Celtics",
+    "Celts",
+    "Green and White"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q213959",
+   "name": "Boston Red Sox",
+   "kind": "team",
+   "aliases": [
+    "BoSox",
+    "Boston Americans",
+    "Red Sox",
+    "Sox",
+    "redsox",
+    "redsoxs"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q9616",
+   "name": "Chelsea F.C.",
+   "kind": "team",
+   "aliases": [
+    "CFC",
+    "Chelsea",
+    "Chelsea Football Club",
+    "The Blues",
+    "The Pensioners"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q204862",
+   "name": "Dallas Cowboys",
+   "kind": "team",
+   "aliases": [
+    "Cowboys"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q7156",
+   "name": "FC Barcelona",
+   "kind": "team",
+   "aliases": [
+    "Barca",
+    "Barcelona",
+    "Barcelona FC",
+    "Barcelona Football Club",
+    "F.C.B.",
+    "FC Barcelona Football",
+    "FCBarcelona",
+    "Football Club Barcelona",
+    "Football Club of Barcelona",
+    "Fútbol Club Barcelona"
+   ],
+   "xrefs": [
+    "lei:95980020140005871781"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q157376",
+   "name": "Golden State Warriors",
+   "kind": "team",
+   "aliases": [
+    "Dub Nation",
+    "GSW",
+    "Philadelphia Warriors",
+    "San Francisco Warriors",
+    "Warriors"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q631",
+   "name": "Inter Milan",
+   "kind": "team",
+   "aliases": [
+    "F.C. Inter",
+    "F.C. Inter Milan",
+    "FC Internazionale Milano",
+    "FCIM",
+    "FCInter",
+    "Football Club Inter",
+    "Football Club Inter Milan",
+    "Football Club Internazionale Milano",
+    "I M",
+    "IM",
+    "Inter Club",
+    "Inter FC",
+    "Inter Football Club",
+    "Inter Milano",
+    "Inter of Milan",
+    "Inter soccer club",
+    "Internazionale",
+    "Internazionale Milano",
+    "The Inter"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1422",
+   "name": "Juventus",
+   "kind": "team",
+   "aliases": [
+    "J.F.C.",
+    "Juventus FC",
+    "Juventus Turin",
+    "Juventus of Turin",
+    "JuventusFC",
+    "JuventusFootballClub"
+   ],
+   "xrefs": [
+    "lei:815600A253A0AF58C166"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q223522",
+   "name": "Kansas City Chiefs",
+   "kind": "team",
+   "aliases": [
+    "Chiefs",
+    "Dallas Texans",
+    "KC Chiefs"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q1130849",
+   "name": "Liverpool F.C.",
+   "kind": "team",
+   "aliases": [
+    "L.F.C.",
+    "Liverpool",
+    "LiverpoolFC"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q334634",
+   "name": "Los Angeles Dodgers",
+   "kind": "team",
+   "aliases": [
+    "Atlantics",
+    "Bridegrooms",
+    "Brooklyn Atlantics",
+    "Brooklyn Bridegrooms",
+    "Brooklyn Dodgers",
+    "Brooklyn Grays",
+    "Brooklyn Grooms",
+    "Brooklyn Robins",
+    "Brooklyn Superbas",
+    "Bums",
+    "Dodgers",
+    "Grays",
+    "Grooms",
+    "LA Dodgers",
+    "LAD",
+    "Robins",
+    "Superbas",
+    "Trolley Dodgers"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q121783",
+   "name": "Los Angeles Lakers",
+   "kind": "team",
+   "aliases": [
+    "LA Lakers",
+    "Lakers",
+    "Minneapolis Lakers",
+    "Purple and Gold",
+    "The Lake Show"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q50602",
+   "name": "Manchester City",
+   "kind": "team",
+   "aliases": [
+    "Citizens",
+    "City",
+    "MCFC",
+    "Man City",
+    "Manchester City F.C.",
+    "Manchester City F.C. Soccer",
+    "Manchester City Football Club",
+    "Sky Blues",
+    "The Blues"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q18656",
+   "name": "Manchester United",
+   "kind": "team",
+   "aliases": [
+    "MUFC",
+    "Man U",
+    "Man United",
+    "Man Utd",
+    "Manchester United F.C.",
+    "Manchester United Football Club",
+    "Red Devils"
+   ],
+   "xrefs": [
+    "lei:213800CNW6K7XWOTB808"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q131364",
+   "name": "New York Knicks",
+   "kind": "team",
+   "aliases": [
+    "Knicks",
+    "Minutemen",
+    "NYK",
+    "New York Knickerbockers"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q213417",
+   "name": "New York Yankees",
+   "kind": "team",
+   "aliases": [
+    "Bombers",
+    "Bronx Bombers",
+    "Highlanders",
+    "NY Yankees",
+    "NYY",
+    "New York Highlanders",
+    "Yankees"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q483020",
+   "name": "Paris Saint-Germain",
+   "kind": "team",
+   "aliases": [
+    "PSG",
+    "PSGFC",
+    "Paris",
+    "Paris Saint-Germain FC"
+   ],
+   "xrefs": [
+    "lei:96950021OGUOTYRUC719"
+   ]
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q8682",
+   "name": "Real Madrid",
+   "kind": "team",
+   "aliases": [
+    "Madrid FC",
+    "Madrid Football Club",
+    "RMCF",
+    "Real FC",
+    "Real Football Club",
+    "Real Madrid C.F.",
+    "Real Madrid Club de Fútbol",
+    "Real Madrid Club of Football",
+    "Real Madrid Football Club",
+    "Royal Madrid",
+    "Royal Madrid Football Club"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q18741",
+   "name": "Tottenham Hotspur",
+   "kind": "team",
+   "aliases": [
+    "Hotspur",
+    "Spurs",
+    "THFC",
+    "The Lilywhites",
+    "Tottenham",
+    "Tottenham Hotspur F.C.",
+    "Tottenham Hotspur Football Club"
+   ],
+   "xrefs": []
+  }
+ ]
+}

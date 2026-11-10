@@ -2,15 +2,13 @@
 
 A half-finished recv leaves the connection raising ConcurrencyError on every chain
 call. Because `self.block` is the first statement in the main loop's try block, that
-stops the loop before concurrent_forward() and dispatch goes silent until the socket
+stops the loop before forward() and the validator goes silent until the socket
 is replaced -- retrying it cannot help.
 """
 
 import types
 
-import pytest
-
-from alpharidge_ai.base.validator import BaseValidatorNeuron
+from alpharidge_ai.chain.validator import BaseValidatorNeuron
 
 
 class FakeSubtensor:
@@ -24,8 +22,8 @@ class FakeSubtensor:
 class ConcreteValidator(BaseValidatorNeuron):
     """BaseValidatorNeuron is abstract; run() is what's under test here."""
 
-    async def forward(self, synapse=None):
-        return synapse
+    async def forward(self):
+        return None
 
 
 def make_validator(monkeypatch, fail_times, reconnect_raises=False):
@@ -39,11 +37,9 @@ def make_validator(monkeypatch, fail_times, reconnect_raises=False):
     v.should_exit = False
     v.config = types.SimpleNamespace(
         mock=False,
-        neuron=types.SimpleNamespace(axon_off=True),
         netuid=45,
         subtensor=types.SimpleNamespace(chain_endpoint="ws://test"),
     )
-    v.axon = None
     v.subtensor = FakeSubtensor()
     v.metagraph = types.SimpleNamespace(sync=lambda subtensor=None: None)
 
@@ -65,8 +61,8 @@ def make_validator(monkeypatch, fail_times, reconnect_raises=False):
         v.should_exit = True  # stop the loop after one clean pass
 
     v.loop = types.SimpleNamespace(run_until_complete=lambda coro: None)
-    v.concurrent_forward = fake_forward
-    # concurrent_forward() is called through run_until_complete; invoke it directly.
+    v.forward = fake_forward
+    # forward() is called through run_until_complete; invoke it directly.
     v.loop.run_until_complete = lambda coro: coro
 
     def fake_subtensor_ctor(config=None):
@@ -78,10 +74,9 @@ def make_validator(monkeypatch, fail_times, reconnect_raises=False):
     monkeypatch.setattr("bittensor.Subtensor", fake_subtensor_ctor)
     monkeypatch.setattr("time.sleep", lambda s: None)
     monkeypatch.setattr(
-        "alpharidge_ai.base.validator.time", types.SimpleNamespace(sleep=lambda s: None)
+        "alpharidge_ai.chain.validator.time", types.SimpleNamespace(sleep=lambda s: None)
     )
 
-    v._verify_axon_reachable = lambda: None
     return v, state
 
 
@@ -148,6 +143,6 @@ def test_streak_resets_after_a_clean_pass(monkeypatch):
         if seen["forwards"] == 2:
             v.should_exit = True
 
-    v.concurrent_forward = fake_forward
+    v.forward = fake_forward
     v.run()
     assert state["rebuilds"] == 0

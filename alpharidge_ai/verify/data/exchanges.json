@@ -1,0 +1,31 @@
+{
+ "_note": "Names an exchange goes by. A claimed exchange that starts with one of a group's names is checked against all of that group's names on the page; any other claimed exchange must be on the page as written.",
+ "groups": [
+  ["nasdaq"],
+  ["new york stock exchange", "nyse"],
+  ["nyse american", "nyse mkt", "american stock exchange", "amex"],
+  ["nyse arca"],
+  ["cboe"],
+  ["national stock exchange", "nse"],
+  ["bombay stock exchange", "bse"],
+  ["australian securities exchange", "asx"],
+  ["singapore exchange", "sgx"],
+  ["hong kong stock exchange", "stock exchange of hong kong", "hong kong exchanges", "hkex"],
+  ["shanghai stock exchange", "sse"],
+  ["shenzhen stock exchange", "szse"],
+  ["korea exchange", "krx"],
+  ["kosdaq"],
+  ["london stock exchange", "lse"],
+  ["alternative investment market", "aim"],
+  ["toronto stock exchange", "tsx"],
+  ["tsx venture exchange", "tsxv"],
+  ["philippine stock exchange", "pse"],
+  ["tokyo stock exchange", "tse"],
+  ["euronext oslo", "oslo børs", "oslo bors", "oslo stock exchange"],
+  ["euronext dublin", "euronext access dublin", "irish stock exchange"],
+  ["nigerian exchange", "nigerian stock exchange", "ngx"],
+  ["johannesburg stock exchange", "jse"],
+  ["six swiss exchange", "six"],
+  ["frankfurt stock exchange", "xetra"]
+ ]
+}

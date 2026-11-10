@@ -167,21 +167,13 @@ testing/
 # Local subnet runtime/config/state (do not commit)
 .miner_env
 .vali_env
-.tweet_store.json
-.telegram_store.json
-.reward_store.json
-.penalty_store.json
-.broadcast_state.json
-.penalty_broadcast_state.json
-# Atomic-save temp files for the article store (transient; may leak on SIGKILL)
-.article_store.*.tmp
-# Article store runtime data (local snapshot, not code)
-article_store.json
 
 # Per-validator runtime state and secrets. Never commit these.
 alpharidge_ai/.audit_key
-.triage_draws/
 alpharidge_ai/.*_state.json
 alpharidge_ai/.mechanism_profile.json
 .audit_key
 .*_state.json
+.e2e/
+.e2e_env
+.live/
