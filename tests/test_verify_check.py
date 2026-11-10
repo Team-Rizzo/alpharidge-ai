@@ -389,3 +389,15 @@ def test_a_status_page_incident_is_dated_by_its_first_post():
     dt, inferred = publish_date(html, "https://www.githubstatus.com/incidents/abc")
     assert dt == datetime.fromtimestamp(1794268784, timezone.utc) and not inferred
     assert publish_date("<p>On 2026-11-18</p>", "https://www.githubstatus.com/incidents/m")[0] is None
+
+
+def test_status_page_times_in_seconds_or_after_a_mark():
+    from datetime import datetime, timezone
+    from alpharidge_ai.verify.dates import publish_date
+    slack = '<span data-timestamp="1778772888"></span><span data-timestamp="1778776488"></span>'
+    assert publish_date(slack, "https://slack-status.com/2026-05/x")[0] == \
+        datetime.fromtimestamp(1778772888, timezone.utc)
+    cf = ('<div>Started</div><div><time dateTime="2026-11-09T16:34:35.355Z">'
+          'Nov 9, 2026, 16:34 UTC</time></div>')
+    assert publish_date(cf, "https://www.cloudflarestatus.com/incidents/x")[0] == \
+        datetime(2026, 11, 9, 16, 34, 35, 355000, tzinfo=timezone.utc)

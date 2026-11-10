@@ -85,7 +85,9 @@ def publish_date(html: str, url: str = "") -> Tuple[Optional[datetime], bool]:
     official site the date the page states in its body wins over that guess."""
     rule = official.rule(url)
     if rule is not None and rule.unix:
-        return _first_post(html), False
+        return _first_post(html, rule.unix), False
+    if rule is not None and rule.time_mark:
+        return _time_after(html, rule.time_mark), False
     dt = _structured_date(html)
     if dt is not None:
         return dt, False
@@ -173,14 +175,24 @@ def _release_date(html: str, latest: date,
     return None
 
 
-_UNIX_MS = re.compile(r'data-datetime-unix="(\d{12,14})"')
-
-
-def _first_post(html: str) -> Optional[datetime]:
+def _first_post(html: str, attr: str) -> Optional[datetime]:
     """The earliest update time on a status-page incident."""
-    now_ms = datetime.now(timezone.utc).timestamp() * 1000
-    stamps = [int(m) for m in _UNIX_MS.findall(html) if int(m) <= now_ms]
-    return datetime.fromtimestamp(min(stamps) / 1000, timezone.utc) if stamps else None
+    now = datetime.now(timezone.utc).timestamp()
+    stamps = [int(v) / (1000 if len(v) > 11 else 1)
+              for v in re.findall(rf'{re.escape(attr)}="(\d{{10,14}})"', html)]
+    stamps = [t for t in stamps if t <= now]
+    return datetime.fromtimestamp(min(stamps), timezone.utc) if stamps else None
+
+
+_DATETIME_ATTR = re.compile(r'datetime="([^"]+)"', re.I)
+
+
+def _time_after(html: str, mark: str) -> Optional[datetime]:
+    """The first `datetime` attribute within a short span after the mark."""
+    i = html.find(mark)
+    m = _DATETIME_ATTR.search(html, i, i + 400) if i >= 0 else None
+    dt = parse_datetime(m.group(1)) if m else None
+    return dt if dt is not None and dt <= datetime.now(timezone.utc) else None
 
 
 def _structured_date(html: str) -> Optional[datetime]:

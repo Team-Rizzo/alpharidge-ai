@@ -28,15 +28,22 @@ class Rule:
     order: str = ""
     # A plain entry: a date guessed from the page counts too.
     guess: bool = True
-    # Status-page incidents: the first post's time from `data-datetime-unix` (milliseconds).
-    unix: bool = False
+    # Status-page incidents: the earliest Unix time in this attribute (seconds or
+    # milliseconds), e.g. `data-datetime-unix`.
+    unix: str = ""
+    # The `datetime` attribute that follows this mark in the markup (e.g. a status page's
+    # "Started" field): an exact time.
+    time_mark: str = ""
 
 
 def _rule(entry) -> Tuple[str, Rule]:
     if isinstance(entry, str):
         return entry, Rule()
-    if entry.get("unix") is True and set(entry) == {"site", "unix"}:
-        return entry["site"], Rule(unix=True, guess=False)
+    if set(entry) == {"site", "unix"} and entry["unix"]:
+        attr = "data-datetime-unix" if entry["unix"] is True else str(entry["unix"])
+        return entry["site"], Rule(unix=attr, guess=False)
+    if set(entry) == {"site", "time_mark"} and entry["time_mark"]:
+        return entry["site"], Rule(time_mark=entry["time_mark"], guess=False)
     order = entry.get("order", "")
     if order not in ("", "mdy", "dmy") or not (entry.get("labels") or entry.get("marks")):
         raise ValueError(f"official.json: bad entry {entry!r}")
