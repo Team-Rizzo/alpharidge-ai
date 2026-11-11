@@ -11,7 +11,6 @@ from typing import List, Optional
 
 from alpharidge_ai.schema import Claim
 
-FINAL = frozenset({"settled", "clawed_back", "rejected"})
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS page (
@@ -86,27 +85,6 @@ class MinerStore:
                 (claim.claim_hash(), str(response.get("id")) if response.get("id") else None,
                  claim.kind.value, claim.event_type.value, claim.event_id, claim.source_url,
                  response.get("status"), time.time()))
-
-    def open_claims(self, limit: int = 50) -> List[str]:
-        """Claim ids without a final outcome, least recently checked first."""
-        marks = ",".join("?" * len(FINAL))
-        with self._lock:
-            rows = self._db.execute(
-                f"SELECT claim_id FROM claim WHERE claim_id IS NOT NULL AND "
-                f"(status IS NULL OR status NOT IN ({marks})) "
-                f"ORDER BY COALESCE(checked_at, 0) LIMIT ?", (*sorted(FINAL), limit)).fetchall()
-        return [r["claim_id"] for r in rows]
-
-    def update(self, claim_id: str, status: dict) -> None:
-        points = status.get("points") or {}
-        with self._lock, self._db:
-            self._db.execute(
-                "UPDATE claim SET status = ?, reason = ?, provisional = ?, settled = ?, "
-                "clawed_back = ?, checked_at = ? "
-                "WHERE claim_id = ?",
-                (status.get("status"), status.get("reason"), float(points.get("provisional", 0)),
-                 float(points.get("settled", 0)), float(points.get("clawed_back", 0)),
-                 time.time(), str(claim_id)))
 
     def get(self, claim_id: str) -> Optional[dict]:
         with self._lock:

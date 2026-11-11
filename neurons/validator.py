@@ -22,6 +22,7 @@ from alpharidge_ai.validator.profile_client import ProfileClient
 from alpharidge_ai.validator.reverify import Reverifier
 from alpharidge_ai.validator.scan import Scanner
 from alpharidge_ai.validator.selector import Selector
+from alpharidge_ai.validator.watchdog import stall
 
 
 class Validator(BaseValidatorNeuron):
@@ -50,6 +51,7 @@ class Validator(BaseValidatorNeuron):
         if judge is None:
             bt.logging.info("[JUDGE] no page judge set up; this validator judges no pages")
         self._judge = JudgeWorker(self._api, judge, fetcher=reverifier.fetcher)
+        self._last_step = time.monotonic()
         self._ledger = LedgerLoop(
             self._api, self.metagraph, lambda: int(self.block),
             reverifier=reverifier,
@@ -85,7 +87,14 @@ class Validator(BaseValidatorNeuron):
             return
         super().set_weights()
 
+    def stalled(self):
+        """Why the validator has stopped working, or None."""
+        judging = self._judge.judge is not None
+        return stall(time.monotonic(), self._last_step,
+                     self._judge.last_pull if judging else None)
+
     async def forward(self):
+        self._last_step = time.monotonic()
         block = int(self.block)
         try:
             await asyncio.to_thread(self._mechanism_profile.refresh, block)
@@ -109,4 +118,9 @@ if __name__ == "__main__":
     with Validator() as validator:
         while True:
             bt.logging.info(f"Validator running... {time.time()}")
+            why = validator.stalled()
+            if why:
+                # pm2 starts the process again; a restart clears a stuck connection or thread.
+                bt.logging.error(f"[WATCHDOG] {why}; exiting so the process is restarted")
+                os._exit(1)
             time.sleep(5)

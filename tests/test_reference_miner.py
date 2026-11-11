@@ -206,11 +206,11 @@ def _run(site, api, store):
     return asyncio.run(go())
 
 
-def test_loop_submits_once_and_tracks_outcome(site, tmp_path):
+def test_loop_submits_once_and_keeps_the_reply(site, tmp_path):
     api, store = FakeAPI(), MinerStore(str(tmp_path / "miner.sqlite"))
     assert _run(site, api, store) == [1, 0]
     assert [c.source_url for c in api.sent] == [f"{site}/boe-rates"]
-    assert store.get("1")["status"] == "verified"
+    assert store.get("1")["status"] == "received"
     assert store.sent(api.sent[0])
 
     # A fresh run on the same state doesn't resend the page.

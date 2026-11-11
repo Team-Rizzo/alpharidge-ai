@@ -23,7 +23,7 @@ Then register if needed and run the miner as in section 1. No GPU or models are 
 2. Run `scripts/e2e_local.sh` on your machine. It starts fixture sites, a local API, the reference miner and a validator on a mock chain, and walks a claim through every step, so you can try changes without spending anything. It needs a checkout of the coordination API ([alpharidge-ai-api](https://github.com/Team-Rizzo/alpharidge-ai-api)) next to this repo and a local Postgres with pgvector.
 3. Read the trusted list: `GET /dashboard/sources` on the coordination API. Only pages from those sources win directly (section 4).
 4. Read the page judge's questions in `alpharidge_ai/judge/prompt.py`, with each type's `definition` and `about` in `alpharidge_ai/schema/data/types.json`.
-5. Send claims and read `GET /claims/{id}`: `reason` and `reason_detail` say why a claim was not paid (section 7).
+5. Send claims and keep the signed receipts. Follow your results on the dashboard (`GET /dashboard/items?hotkey=<your hotkey>`), or one claim with `GET /claims/{id}`: `reason` and `reason_detail` say why a claim was not paid (section 7). The reference miner does not poll claim status.
 
 ## Launch day
 

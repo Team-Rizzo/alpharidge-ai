@@ -785,3 +785,20 @@ def test_a_stuck_judge_item_times_out_and_the_pull_still_finishes(monkeypatch):
     monkeypatch.setattr(vj, "ITEM_TIMEOUT_S", 3600)
     assert asyncio.run(vj.JudgeWorker(JudgeAPI(items), ScriptedJudge({"subject": "yes"})).run()) \
         == {"posted": 2, "late": 1}
+
+
+def test_the_watchdog_names_a_stalled_step_or_judge_loop():
+    from alpharidge_ai.validator import watchdog
+    assert watchdog.stall(1000, 900, 950) is None
+    assert watchdog.stall(1000, 900, None) is None
+    assert "validator step" in watchdog.stall(2000, 1600, 2000)
+    assert "judge pull" in watchdog.stall(5000, 4990, 1000)
+    assert watchdog.stall(5000, 4990, None) is None
+
+
+def test_a_finished_judge_pull_is_recorded_for_the_watchdog():
+    from alpharidge_ai.validator.judge import JudgeWorker
+    w = JudgeWorker(JudgeAPI([]), ScriptedJudge({"subject": "yes"}))
+    w.last_pull = 0.0
+    asyncio.run(w._safe())
+    assert w.last_pull > 0

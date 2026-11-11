@@ -100,6 +100,8 @@ class JudgeWorker:
         self.answers: Dict[tuple, dict] = {}
         self.fails = 0
         self._next = 0.0
+        # When the last pull finished (monotonic), for the watchdog.
+        self.last_pull = time.monotonic()
         self._capped: Optional[object] = None
         self._task: Optional[asyncio.Task] = None
 
@@ -122,6 +124,7 @@ class JudgeWorker:
     async def _safe(self) -> None:
         try:
             await self.run()
+            self.last_pull = time.monotonic()
         except AuthorizationError:
             self._next = time.monotonic() + OFF_S
             bt.logging.info("[JUDGE] not a listed validator; judging paused")
@@ -191,7 +194,8 @@ class JudgeWorker:
             self.tries[key] = self.tries.get(key, 0) + 1
             if self.tries[key] >= FETCH_TRIES:
                 self.done.add(key)
-            return "unreachable"
+            # Why, in the pull's summary: the fetch reason or the HTTP status.
+            return f"unreachable:{page.reason or page.status or 'none'}"
         claim = claim_of(item, page.text)
         at = parse_datetime(item.get("at"))
         result = check_claim(claim, page, at) if claim is not None and at else None

@@ -9,7 +9,7 @@ import bittensor as bt
 
 from alpharidge_ai import config
 from alpharidge_ai.ledger import receipts as rc
-from alpharidge_ai.ledger.api_client import AlpharidgeAPIError, NotFoundError
+from alpharidge_ai.ledger.api_client import AlpharidgeAPIError
 from alpharidge_ai.miner.build import ClaimBuilder
 from alpharidge_ai.miner.discover import Discoverer
 from alpharidge_ai.miner.store import MinerStore
@@ -18,12 +18,12 @@ from alpharidge_ai.schema import TYPE_SPEC, Claim
 
 class MinerLoop:
     def __init__(self, client, store: MinerStore, discoverer: Discoverer, builder: ClaimBuilder,
-                 fetcher, items_per_tick: int = 40, status_per_tick: int = 50,
+                 fetcher, items_per_tick: int = 40,
                  backoff_s: float = 3600.0):
         self.client, self.store = client, store
         self.backoff_s = backoff_s
         self.discoverer, self.builder, self.fetcher = discoverer, builder, fetcher
-        self.items_per_tick, self.status_per_tick = items_per_tick, status_per_tick
+        self.items_per_tick = items_per_tick
         self.paused_until: Optional[datetime] = None
 
     async def known_event(self, claim: Claim, now: datetime) -> Optional[dict]:
@@ -93,17 +93,6 @@ class MinerLoop:
     def paused(self, now: datetime) -> bool:
         return self.paused_until is not None and now < self.paused_until
 
-    async def track(self) -> None:
-        for claim_id in self.store.open_claims(self.status_per_tick):
-            try:
-                status = await self.client.claim_status(claim_id)
-            except NotFoundError:
-                status = {"status": "rejected", "reason": "not_found"}
-            except AlpharidgeAPIError as e:
-                bt.logging.debug(f"[MINER] status {claim_id} failed: {e.detail or e}")
-                continue
-            self.store.update(claim_id, status)
-
     async def tick(self, now: Optional[datetime] = None) -> int:
         now = now or datetime.now(timezone.utc)
         sent = 0
@@ -117,5 +106,4 @@ class MinerLoop:
                 except Exception as e:
                     bt.logging.warning(f"[MINER] {item.url} failed: {e!r}")
                     self.store.mark_seen(item.url, "error")
-        await self.track()
         return sent

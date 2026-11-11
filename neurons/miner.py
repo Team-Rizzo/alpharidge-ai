@@ -53,8 +53,7 @@ def build_loop(client, state_dir: str) -> MinerLoop:
                            lead_sentences=config.MINER_LEAD_SENTENCES)
     store = MinerStore(config.MINER_STATE_PATH or os.path.join(state_dir, "miner.sqlite"))
     return MinerLoop(client, store, discoverer, builder, fetcher,
-                     items_per_tick=config.MINER_ITEMS_PER_TICK,
-                     status_per_tick=config.MINER_STATUS_PER_TICK)
+                     items_per_tick=config.MINER_ITEMS_PER_TICK)
 
 
 if __name__ == "__main__":

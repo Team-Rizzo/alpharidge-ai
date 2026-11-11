@@ -16,9 +16,8 @@ MINER_DOMAIN_RPS=0.5
 # MINER_FETCH_TIMEOUT_S=10
 # Connect to public addresses only; keep true
 # MINER_FETCH_PUBLIC_ONLY=true
-# Feed items read per pass, open claims polled per pass, lead sentences read per page
+# Feed items read per pass, lead sentences read per page
 # MINER_ITEMS_PER_TICK=40
-# MINER_STATUS_PER_TICK=50
 # MINER_LEAD_SENTENCES=6
 # SQLite state; empty keeps it under the neuron's log directory
 MINER_STATE_PATH=

@@ -52,7 +52,6 @@ MINER_CATEGORIES = tuple(c.strip() for c in os.getenv(
 MINER_POLL_SECONDS = float(os.getenv("MINER_POLL_SECONDS", "300"))
 MINER_MAX_AGE_H = float(os.getenv("MINER_MAX_AGE_H", "48"))
 MINER_ITEMS_PER_TICK = int(os.getenv("MINER_ITEMS_PER_TICK", "40"))
-MINER_STATUS_PER_TICK = int(os.getenv("MINER_STATUS_PER_TICK", "50"))
 MINER_LEAD_SENTENCES = int(os.getenv("MINER_LEAD_SENTENCES", "6"))
 # Contact URL or email added to the crawler user agent.
 USER_AGENT_CONTACT = os.getenv("USER_AGENT_CONTACT", "")
