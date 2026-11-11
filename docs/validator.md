@@ -106,6 +106,7 @@ Look for these log lines once per epoch:
 | `[REVERIFY] ALARM …` | Re-checks are disagreeing with the ledger more often than expected |
 | `[SCAN] open=… items=… checked=… posted=…` | Listed validators, while scoops are open: feed items read, pages checked and pages sent to the API |
 | `[JUDGE] pending=… {…} spent=$…` | Listed validators: items judged this pull by outcome (`accepted`, `unreachable`, `judge_failed`, …) and today's judge spend |
+| `[JUDGE] item … timed out` / `[JUDGE] pull ran over …` | An item took over 3 minutes, or a pull over 15; the rest is served again on the next pull |
 | `[JUDGE] daily cap … reached` | Your judge spend hit `EL_JUDGE_DAILY_CAP_USD`; pulling resumes at 00:00 UTC |
 
 A re-check that can't reach the source counts as `unreachable` and has no effect. Disagreements are reported to the API and alarm locally when they become frequent.

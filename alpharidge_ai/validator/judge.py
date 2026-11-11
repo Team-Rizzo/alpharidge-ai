@@ -26,6 +26,10 @@ OFF_S = 6 * 3600
 FETCH_TRIES = 3
 # A run stops calling the judge after this many failed calls in a row.
 JUDGE_TRIP = 3
+# Longest one item (fetch, check, judge, post) and one pull may take; what is left over is
+# served again on the next pull.
+ITEM_TIMEOUT_S = 180
+BATCH_TIMEOUT_S = 900
 
 
 def _retype(claim: Optional[Claim], kind: Optional[str]) -> Optional[Claim]:
@@ -147,12 +151,28 @@ class JudgeWorker:
         async def one(item):
             async with gate:
                 try:
-                    return await self.judge_item(item, types)
+                    return await asyncio.wait_for(self.judge_item(item, types), ITEM_TIMEOUT_S)
+                except asyncio.TimeoutError:
+                    key = item["key"]
+                    self.tries[key] = self.tries.get(key, 0) + 1
+                    if self.tries[key] >= FETCH_TRIES:
+                        self.done.add(key)
+                    bt.logging.warning(f"[JUDGE] item {item.get('claim_id')} timed out after "
+                                       f"{ITEM_TIMEOUT_S}s")
+                    return "timeout"
                 except Exception as e:
                     bt.logging.warning(f"[JUDGE] item {item.get('claim_id')} failed: {e!r}")
                     return "error"
 
-        outcomes = await asyncio.gather(*(one(i) for i in items))
+        tasks = [asyncio.ensure_future(one(i)) for i in items]
+        finished, late = await asyncio.wait(tasks, timeout=BATCH_TIMEOUT_S) if tasks else (
+            set(), set())
+        for t in late:
+            t.cancel()
+        if late:
+            bt.logging.warning(f"[JUDGE] pull ran over {BATCH_TIMEOUT_S}s; {len(late)} items "
+                               f"left for the next pull")
+        outcomes = [t.result() for t in finished] + ["late"] * len(late)
         counts: Dict[str, int] = {}
         for o in outcomes:
             counts[o] = counts.get(o, 0) + 1

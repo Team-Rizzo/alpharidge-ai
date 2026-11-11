@@ -765,3 +765,23 @@ def test_private_fetches_only_on_mock_or_local_chains(monkeypatch):
     config.check_fetch_guard(False, "local")
     with pytest.raises(SystemExit):
         config.check_fetch_guard(False, "finney")
+
+
+def test_a_stuck_judge_item_times_out_and_the_pull_still_finishes(monkeypatch):
+    from alpharidge_ai.validator import judge as vj
+    items = [{"kind": "claim", "claim_id": str(i), "key": f"k{i}"} for i in range(3)]
+    monkeypatch.setattr(vj, "ITEM_TIMEOUT_S", 0.05)
+
+    async def judge_item(self, item, types=None):
+        if item["key"] == "k1":
+            await asyncio.sleep(3600)
+        self.done.add(item["key"])
+        return "posted"
+    monkeypatch.setattr(vj.JudgeWorker, "judge_item", judge_item)
+    w = vj.JudgeWorker(JudgeAPI(items), ScriptedJudge({"subject": "yes"}))
+    assert asyncio.run(w.run()) == {"posted": 2, "timeout": 1}
+    assert w.tries == {"k1": 1} and "k1" not in w.done
+    monkeypatch.setattr(vj, "BATCH_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(vj, "ITEM_TIMEOUT_S", 3600)
+    assert asyncio.run(vj.JudgeWorker(JudgeAPI(items), ScriptedJudge({"subject": "yes"})).run()) \
+        == {"posted": 2, "late": 1}
