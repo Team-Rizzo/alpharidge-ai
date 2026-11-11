@@ -21,7 +21,7 @@ from alpharidge_ai.schema.hashing import canonical_json
 from alpharidge_ai.validator.reverify import fetch_config
 from alpharidge_ai.verify.check import check_claim
 from alpharidge_ai.verify.dates import parse_datetime
-from alpharidge_ai.verify.fetch import Fetcher
+from alpharidge_ai.verify.fetch import Fetcher, Paced
 
 OFF_S = 6 * 3600
 FETCH_TRIES = 3
@@ -156,6 +156,9 @@ class JudgeWorker:
             async with gate:
                 try:
                     return await asyncio.wait_for(self.judge_item(item, types), ITEM_TIMEOUT_S)
+                except Paced:
+                    # The page's host is not to be asked yet; the next pull serves it again.
+                    return "paced"
                 except asyncio.TimeoutError:
                     key = item["key"]
                     self.tries[key] = self.tries.get(key, 0) + 1

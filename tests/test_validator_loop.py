@@ -824,3 +824,15 @@ def test_served_config_counts_as_loaded_only_after_a_good_read(monkeypatch):
     assert cfg.refresh_remote_config(force=True) == {} and not cfg.remote_config_loaded()
     monkeypatch.setattr(cfg, "_remote_config_last_fetch", 1.0)
     assert cfg.remote_config_loaded()
+
+
+def test_a_judge_item_on_a_host_that_is_being_left_alone_is_served_again_later(monkeypatch):
+    from alpharidge_ai.validator import judge as vj
+    from alpharidge_ai.verify.fetch import Paced
+
+    async def judge_item(self, item, types=None):
+        raise Paced(120)
+    monkeypatch.setattr(vj.JudgeWorker, "judge_item", judge_item)
+    w = vj.JudgeWorker(JudgeAPI([{"kind": "claim", "claim_id": "1", "key": "k1"}]),
+                       ScriptedJudge({"subject": "yes"}))
+    assert asyncio.run(w.run()) == {"paced": 1} and "k1" not in w.done and not w.tries
