@@ -58,6 +58,7 @@ miner ── signed claim + source URL ──► API
 - **Trusted:** a reviewed list of official sites, newsrooms and outlets per category. A company's or club's own site counts only for claims that name it.
 - **Says it:** the page must be live, recent and openly readable, contain every name and figure in the claim and the miner's quote, and pass the page judge run by the listed validators.
 - **First:** by the API's receipt time, with a recomputable draw for ties.
+- **Receipts:** every claim gets a receipt signed by the API with its receipt time, kept by the miner and shown on the dashboard.
 
 Details: [docs/mechanism.md](docs/mechanism.md).
 
@@ -132,7 +133,7 @@ alpharidge-ai/
 │   ├── schema/               # Claim model, event types, stages, slots, canonical hashing
 │   ├── verify/               # Shared fetch rules and the claim-against-page check
 │   ├── judge/                # Page judge prompt, client and verdict combination
-│   ├── ledger/               # API client, request signing, signed ledger pulls
+│   ├── ledger/               # API client, request signing, signed ledger pulls, claim receipts
 │   ├── mechanism/            # settle(), window points, mechanism profile
 │   ├── validator/            # Ledger loop, keyed re-check, scoop scan, page judge, mechanism profile client
 │   ├── miner/                # Reference miner: feed discovery, entity linking, claim building

@@ -7,6 +7,8 @@ from typing import Optional
 
 import bittensor as bt
 
+from alpharidge_ai import config
+from alpharidge_ai.ledger import receipts as rc
 from alpharidge_ai.ledger.api_client import AlpharidgeAPIError, NotFoundError
 from alpharidge_ai.miner.build import ClaimBuilder
 from alpharidge_ai.miner.discover import Discoverer
@@ -52,9 +54,27 @@ class MinerLoop:
             bt.logging.warning(f"[MINER] submit failed ({e.status_code}): {e.detail or e}")
             return None
         self.store.record(claim, response)
+        self.keep_receipt(claim, response)
         bt.logging.info(f"[MINER] sent {claim.kind.value} {claim.event_type.value} "
                     f"id={response.get('id')} {claim.source_url}")
         return response
+
+    def keep_receipt(self, claim: Claim, response: dict) -> None:
+        """Keep the API's signed receipt for the claim, once it checks out."""
+        r = response.get("receipt")
+        if not r:
+            return
+        try:
+            received = datetime.fromisoformat(str(response["received_at"]).replace("Z", "+00:00"))
+            ok = rc.valid(r, config.API_ATTESTATION_PUBKEY) and rc.matches(
+                r, response["id"], self.client.ss58_address, claim.claim_hash(),
+                round(received.timestamp() * 1000))
+        except (KeyError, TypeError, ValueError, AttributeError):
+            ok = False
+        if not ok:
+            bt.logging.warning(f"[MINER] receipt for claim {response.get('id')} does not check out")
+            return
+        self.store.keep_receipt(r)
 
     async def process(self, url: str, now: datetime) -> int:
         page = await self.fetcher.fetch(url)

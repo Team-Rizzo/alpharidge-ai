@@ -95,6 +95,10 @@ bt.Subtensor("finney").get_subnet_owner_hotkey(45) == bt.Subtensor("finney").met
 
 Its incentive follows the `burn=` share each validator logs per epoch.
 
+## Claim receipts
+
+Every stored claim gets a receipt signed with the ledger's pinned key: claim id, hotkey, body hash, receipt time (`received_ms`) and its place in the API's sequence (`seq`, and `prev`, the previous receipt's hash). `POST /claims` returns it, `GET /claims/{id}` and `/dashboard/items` show it, and the miner keeps it as proof of when its claim arrived. Format: [`ledger/receipts.py`](../alpharidge_ai/ledger/receipts.py).
+
 ## Signed ledger
 
 The ledger is central and signed, so every validator computes the same weights from the same data. Each validator checks the signature against a pinned key and rebuilds the totals from the individual rows instead of trusting them.

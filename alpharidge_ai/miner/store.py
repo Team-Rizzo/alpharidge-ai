@@ -1,6 +1,8 @@
-"""Local SQLite state: pages already read, claims already sent and their outcomes."""
+"""Local SQLite state: pages already read, claims already sent, their outcomes and their
+signed receipts."""
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import time
@@ -33,6 +35,12 @@ CREATE TABLE IF NOT EXISTS claim (
     checked_at REAL
 );
 CREATE INDEX IF NOT EXISTS claim_open ON claim (status, checked_at);
+CREATE TABLE IF NOT EXISTS receipt (
+    claim_id TEXT PRIMARY KEY,
+    seq INTEGER NOT NULL,
+    hash TEXT NOT NULL,
+    body TEXT NOT NULL
+);
 """
 
 
@@ -105,3 +113,16 @@ class MinerStore:
             row = self._db.execute("SELECT * FROM claim WHERE claim_id = ?",
                                    (str(claim_id),)).fetchone()
         return dict(row) if row else None
+
+    def keep_receipt(self, receipt: dict) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR IGNORE INTO receipt (claim_id, seq, hash, body) VALUES (?, ?, ?, ?)",
+                (str(receipt["claim_id"]), int(receipt["seq"]), str(receipt["hash"]),
+                 json.dumps(receipt, sort_keys=True)))
+
+    def receipts(self, limit: int = 1000) -> List[dict]:
+        with self._lock:
+            rows = self._db.execute("SELECT body FROM receipt ORDER BY seq LIMIT ?",
+                                    (limit,)).fetchall()
+        return [json.loads(r["body"]) for r in rows]

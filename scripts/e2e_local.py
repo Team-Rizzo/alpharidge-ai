@@ -272,8 +272,10 @@ def cmd_miner(_args) -> None:
     os.environ.setdefault("MINER_FEEDS", str(feeds_file()))
     os.environ.setdefault("MINER_STATE_PATH", str(E2E_DIR / "miner.sqlite"))
     sys.argv = neuron_argv("miner", "miner")
+    from alpharidge_ai import config
     from alpharidge_ai.miner import link
     from neurons.miner import Miner
+    config.API_ATTESTATION_PUBKEY = os.environ["API_ATTESTATION_PUBKEY"]
 
     shipped = link.load_entities
     link.load_entities = lambda path=link.ENTITIES_PATH: shipped(path) + shipped(FIXTURE_ENTITIES)
@@ -292,6 +294,10 @@ def cmd_miner(_args) -> None:
     rows = loop.store._db.execute("SELECT claim_id, source_url FROM claim").fetchall()
     remember({r["claim_id"]: r["source_url"] for r in rows if r["claim_id"]})
     print(f"[miner] one cycle: {sent} claims sent by {miner.wallet.hotkey.ss58_address[:10]}..")
+    kept = loop.store.receipts()
+    print(f"[miner] {len(kept)} signed receipts kept")
+    if len(kept) != sum(1 for r in rows if r["claim_id"]):
+        sys.exit("[miner] FAIL a sent claim has no checked receipt")
 
 
 def event_of(page: str) -> str:

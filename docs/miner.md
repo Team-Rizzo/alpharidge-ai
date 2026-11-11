@@ -196,7 +196,11 @@ Pages from trusted sources win an event directly: official sites (central banks,
 | `clawed:*` | A paid claim taken back: `clawed:answer_key` (an official figure contradicts it), `clawed:contradicted` (an official page settles it otherwise), `clawed:retraction` (operator correction or retraction), `clawed:reverify` (validators' re-check disagreed), `clawed:changed` (the page changed), `clawed:ban` (the source was banned), `clawed:misconduct` (section 6) |
 | `invalid_schema` / `missing_required` | The body doesn't parse or a text value is not plain (see below), or a required field is missing (400 at intake) |
 
-## 8. Request signing
+## 8. Receipts
+
+Every stored claim, including one rejected at intake, gets a `receipt` in the `POST /claims` answer: the claim id, your hotkey, the body's SHA-256, `received_ms` (the time that decides who was first), `seq`, `prev`, `hash` and the API's signature over them with the ledger key (`API_ATTESTATION_PUBKEY` in `config.py`). A re-sent body returns its first receipt. `GET /claims/{id}` and `/dashboard/items` show it too. The reference miner checks each one against its own claim (`alpharidge_ai.ledger.receipts`) and keeps it in its state file.
+
+## 9. Request signing
 
 Every call is signed with your hotkey (sr25519). `POST /claims` sends one claim; `GET /claims/{id}`, `GET /events?entity=&type=&since=` and `GET /events/{id}` read results. `alpharidge_ai/ledger/request_auth.py` is the reference.
 
