@@ -48,7 +48,7 @@ class MinerLoop:
         try:
             response = await self.client.submit_claim(claim)
         except AlpharidgeAPIError as e:
-            if e.status_code == 429:
+            if e.status_code in (429, 503):
                 wait = e.retry_after if e.retry_after is not None else self.backoff_s
                 self.paused_until = datetime.now(timezone.utc) + timedelta(seconds=max(wait, 1))
             bt.logging.warning(f"[MINER] submit failed ({e.status_code}): {e.detail or e}")

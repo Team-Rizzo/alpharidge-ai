@@ -193,6 +193,7 @@ Pages from trusted sources win an event directly: official sites (central banks,
 | `scoop_mismatch` | A trusted page states a figure, outcome or the event's date differently; adds the miss debt (section 4) |
 | `budget_expired` | The claim waited a full 24 h budget window without being checked |
 | `rate_limited` | Too many requests from your address (HTTP 429 with `Retry-After`); nothing is stored |
+| `busy` | The API is taking in as many claims as it can (HTTP 503 with `Retry-After`); nothing is stored, send it again |
 | `clawed:*` | A paid claim taken back: `clawed:answer_key` (an official figure contradicts it), `clawed:contradicted` (an official page settles it otherwise), `clawed:retraction` (operator correction or retraction), `clawed:reverify` (validators' re-check disagreed), `clawed:changed` (the page changed), `clawed:ban` (the source was banned), `clawed:misconduct` (section 6) |
 | `invalid_schema` / `missing_required` | The body doesn't parse or a text value is not plain (see below), or a required field is missing (400 at intake) |
 
