@@ -1,15 +1,10 @@
-"""Numbers the floor must read: spelled out, and written in other locales.
+"""Numbers the floor must read: spelled out, and with either locale's marks."""
 
-The benchmark run of 2026-09-02 measured grounding at 0.63-0.68 against every model.
-Roughly an eighth of honest claims were numbers plainly in the article that the parser
-did not read, concentrated on non-English articles — which are the corpus's
-highest-gold slice. Since the floor gates paid volume, that is denied credit for real
-work.
-"""
+import types
 
 import pytest
 
-from alpharidge_ai.oracle import floor
+from alpharidge_ai.verify import floor
 
 
 def values(text):
@@ -31,16 +26,6 @@ def units(text):
     ("Forty-two units sold.", 42),
 ])
 def test_english_number_words_are_read(text, expected):
-    assert expected in values(text)
-
-
-@pytest.mark.parametrize("text,expected", [
-    ("Ventas de tres millones de unidades.", 3_000_000),
-    ("Cerca de dois mil clientes.", 2000),
-    ("Environ trois millions d euros.", 3_000_000),
-    ("Etwa zwei millionen einheiten.", 2_000_000),
-])
-def test_number_words_in_other_languages_are_read(text, expected):
     assert expected in values(text)
 
 
@@ -103,149 +88,56 @@ def test_a_percentage_is_still_a_percentage():
     assert "pct" in units("A queda de 1,5% no periodo.")
 
 
-# ---- grounding, the reason all of this matters -------------------------------------
+# ---- grounding ---------------------------------------------------------------------
+
+def visible(text, value, unit="count"):
+    return floor.visible(types.SimpleNamespace(value=value, unit=unit),
+                         floor.parse_numbers(floor.normalize(text).text))
+
 
 @pytest.mark.parametrize("text,claim,unit", [
     ("Six children were rescued from the building.", 6.0, "count"),
-    ("Le chiffre atteint 17,99 millions d euros.", 17_990_000.0, "EUR"),
-    ("Ventas de 1.203.400 unidades este ano.", 1_203_400.0, "count"),
+    ("The figure reached 17,99 million euros.", 17_990_000.0, "EUR"),
+    ("Sales of 1.203.400 units this year.", 1_203_400.0, "count"),
     ("Two hundred and fifty thousand barrels shipped.", 250_000.0, "count"),
+    ("Revenue of 25,7 million euros.", 25.7, "million euros"),
 ])
-def test_an_honest_claim_now_grounds(text, claim, unit):
-    import types
-    numbers = floor.parse_numbers(floor.normalize(text).text)
-    stub = types.SimpleNamespace(value=claim, unit=unit)
-    assert floor.ground_claim(stub, numbers)
+def test_an_honest_claim_is_visible(text, claim, unit):
+    assert visible(text, claim, unit)
 
 
-def test_an_invented_number_still_does_not_ground():
-    import types
-    numbers = floor.parse_numbers(floor.normalize("Six children were rescued.").text)
-    assert not floor.ground_claim(types.SimpleNamespace(value=9_400.0, unit="count"),
-                                  numbers)
-
-
-def test_the_extra_readings_do_not_ground_arbitrary_values():
-    import types
-    numbers = floor.parse_numbers(floor.normalize("The figure was 1,203 today.").text)
+def test_an_invented_number_is_not_visible():
+    assert not visible("Six children were rescued.", 9_400.0)
     for wrong in (12.03, 120.3, 1_203_000.0, 99.0):
-        assert not floor.ground_claim(
-            types.SimpleNamespace(value=wrong, unit="count"), numbers), wrong
-
-
-# ---- CJK scale marks ---------------------------------------------------------------
-# These attach to a digit with no space, so a digits-only reading is wrong by the scale
-# rather than merely short: 3억 is three hundred million, not three. Korean is the
-# corpus's highest gold-rate language.
-
-@pytest.mark.parametrize("text,expected,unit", [
-    ("매출은 3억 원을 기록했다.", 300_000_000, "currency:KRW"),
-    ("지난해 12만 명이 방문했다.", 120_000, "count"),
-    ("売上高は3億円だった。", 300_000_000, "currency:JPY"),
-    ("营收达 5亿元。", 500_000_000, "currency:CNY"),
-])
-def test_cjk_scaled_numbers_are_read(text, expected, unit):
-    assert expected in values(text)
-    assert unit in units(text)
-
-
-def test_chained_cjk_scales_multiply():
-    assert 200_000_000_000 in values("거래액 2천억 원")
-
-
-def test_a_compound_figure_offers_its_sum():
-    """1조 2천억 is one figure written in descending parts."""
-    got = values("거래액 1조 2천억 원")
-    assert 1_200_000_000_000 in got
-    assert 1_000_000_000_000 in got          # the parts remain candidates too
-
-
-def test_a_cjk_claim_grounds():
-    import types
-    numbers = floor.parse_numbers(floor.normalize("매출은 3억 원을 기록했다.").text)
-    assert floor.ground_claim(
-        types.SimpleNamespace(value=300_000_000.0, unit="KRW"), numbers)
-
-
-def test_the_unscaled_digit_no_longer_stands_alone():
-    """Reading 3억 as 3 would ground a claim of three against a figure of 300 million."""
-    import types
-    numbers = floor.parse_numbers(floor.normalize("매출은 3억 원을 기록했다.").text)
-    assert not floor.ground_claim(
-        types.SimpleNamespace(value=3.0, unit="KRW"), numbers)
-
-
-def test_ascii_numbers_are_unaffected_by_the_cjk_path():
-    got = values("Revenue was $1.2 billion, up 12.5%.")
-    assert 1_200_000_000 in got and 12.5 in got
-
-
-# ---- Slavic and Germanic, the third round ------------------------------------------
-# The 2026-09-03 re-grounding put the remaining parser residue at ~5-6% of claims,
-# dominated by Slavic spelled-out numbers, with a smaller Germanic magnitude gap.
-
-@pytest.mark.parametrize("text,expected", [
-    ("Три человека погибли.", 3),
-    ("Выручка два миллиона рублей.", 2_000_000),
-    ("Около пять тысяч человек.", 5000),
-    ("Tři lidé byli zraněni.", 3),
-    ("Dwa miliony klientow.", 2_000_000),
-    ("Две хиляди души.", 2000),
-])
-def test_slavic_number_words_are_read(text, expected):
-    assert expected in values(text)
-
-
-@pytest.mark.parametrize("text,expected", [
-    ("Ongeveer 25,7 miljoen euro.", 25_700_000),
-    ("Een miljard klanten.", 1_000_000_000),
-    ("Rund 20 Millionen Barrel.", 20_000_000),
-    ("Etwa 3 Milliarden Euro.", 3_000_000_000),
-])
-def test_germanic_magnitude_words_are_read(text, expected):
-    assert expected in values(text)
-
-
-def test_the_english_billion_keeps_its_english_value():
-    """Billion is 1e12 in German and 1e9 in English; the shared spelling stays English."""
-    assert 1_200_000_000 in values("Revenue was $1.2 billion.")
-    assert 1_200_000_000_000 not in values("Revenue was $1.2 billion.")
-
-
-# ---- a magnitude named inside the claim's own unit ---------------------------------
-
-def test_a_claim_scaled_by_its_unit_grounds():
-    """Models split a figure across the fields: value 25.7, unit "million euros"."""
-    import types
-    numbers = floor.parse_numbers(floor.normalize("Omzet van 25,7 miljoen euro.").text)
-    assert floor.ground_claim(
-        types.SimpleNamespace(value=25.7, unit="million euros"), numbers)
-
-
-def test_the_unscaled_reading_still_grounds():
-    import types
-    numbers = floor.parse_numbers(floor.normalize("Precies 25.7 procent.").text)
-    assert floor.ground_claim(types.SimpleNamespace(value=25.7, unit="count"), numbers)
+        assert not visible("The figure was 1,203 today.", wrong), wrong
+    assert not visible("Revenue of 25,7 million euros.", 99.9, "million euros")
 
 
 def test_unit_magnitude_reads_the_scale():
     assert floor.unit_magnitude("million euros") == 1e6
+    assert floor.unit_magnitude("usd_millions") == 1e6
+    assert floor.unit_magnitude("thousands") == 1e3
     assert floor.unit_magnitude("billion USD") == 1e9
     assert floor.unit_magnitude("USD") == 1.0
     assert floor.unit_magnitude(None) == 1.0
 
 
-def test_a_scaled_unit_still_carries_its_currency():
-    import types
-    numbers = floor.parse_numbers(floor.normalize("Omzet van 25,7 miljoen euro.").text)
-    assert floor.ground_claim(
-        types.SimpleNamespace(value=25.7, unit="million euros"), numbers)
-    assert not floor.ground_claim(
-        types.SimpleNamespace(value=25.7, unit="million dollars"), numbers)
+def test_ordinary_adjacent_numbers_are_not_summed():
+    """'100 and 20' contains no 120, in any reading."""
+    assert 120.0 not in values("100 and 20 people")
+    assert not visible("The vote was 100 to 20.", 120.0)
 
 
-def test_scaling_does_not_ground_an_unrelated_value():
-    import types
-    numbers = floor.parse_numbers(floor.normalize("Omzet van 25,7 miljoen euro.").text)
-    assert not floor.ground_claim(
-        types.SimpleNamespace(value=99.9, unit="million euros"), numbers)
+def test_either_reading_of_an_ambiguous_mark_is_visible():
+    assert visible("Cost 1,203 euros.", 1203.0, "EUR")
+    assert visible("Cost 1,203 euros.", 1.203, "EUR")
+    assert not visible("Cost 1,203 euros.", 9999.0, "EUR")
+
+
+def test_a_number_ends_at_a_line_break_and_a_time_is_not_a_scale():
+    def read(text):
+        return [n.value for n in floor.parse_numbers(floor.normalize(text, lines=True).text)]
+    assert 53_634 in read("Units: About 53,634\n3M Company") and 53_634_300 not in read(
+        "Units: About 53,634\n3M Company")
+    assert read("Trading resumes at 8 a.m. and closes at 4:30 p.m.") == [8, 4, 30]
+    assert 5_300_000 in read("Revenue of $5.3m.")

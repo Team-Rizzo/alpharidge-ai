@@ -1,0 +1,13 @@
+{
+  "sources": [
+    {"url": "https://www.federalreserve.gov/feeds/press_monetary.xml", "category": "finance"},
+    {"url": "https://www.bls.gov/feed/bls_latest.rss", "category": "finance"},
+    {"url": "https://apps.bea.gov/rss/rss.xml", "category": "finance"},
+    {"url": "https://www.ecb.europa.eu/rss/press.html", "category": "finance"},
+    {"url": "https://www.bankofengland.co.uk/rss/news", "category": "finance"},
+    {"url": "https://www.nasdaqtrader.com/rss.aspx?feed=tradehalts", "category": "finance"},
+    {"url": "https://www.prnewswire.com/rss/news-releases-list.rss", "category": "finance"},
+    {"url": "https://feeds.bbci.co.uk/news/business/rss.xml", "category": "finance"},
+    {"url": "https://www.cnbc.com/id/10001147/device/rss/rss.html", "category": "finance"}
+  ]
+}

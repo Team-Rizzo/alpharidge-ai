@@ -1,45 +1,11 @@
-pip>=23.0
-setuptools>=68
-wheel
-starlette>=0.30.0
-pydantic>=2
-rich>=13
-pytest>=8
-pytest-asyncio>=0.23   # required to run the async tests (e.g. tests/test_api_client_attestation.py)
-torch>=2
-numpy>=1
-requests>=2.31.0
-httpx>=0.24.0
-pandas>=2.0.0
-python-dotenv>=1.0.0
-python-dateutil>=2.8.0
-bittensor>=10.0.0,<11   # stay on bittensor 10 until the codebase is updated
-tweepy>=4.14.0
-openai>=1.0.0
-sentence-transformers>=2.2.0
-substrateinterface>=1.0.0
-
-# --- NER / entity-recognition stack ---------------------------------------
-# These power the deterministic NER fusion engine (alpharidge_ai/analyzer).
-# They MUST be present and version-aligned on both miner and validator: the
-# validator re-runs this exact pipeline and hard-gates output determinism, so
-# a version skew between sides breaks consensus. Pinned (not >=) for that reason.
-spacy==3.8.14
-# spaCy transformer model, pinned as a wheel URL so `pip install -r` pulls it (no separate `spacy download`):
-en_core_web_trf @ https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl
-gliner==0.2.27           # urchade/gliner_base + urchade/gliner_multi-v2.1
-rapidfuzz==3.9.7          # deterministic fuzzy alignment for quote grounding
-wordfreq==3.1.1            # deterministic word-frequency table -> common-word ticker ambiguity gate
-flair==0.15.1            # flair/ner-english-ontonotes-large (English path)
-# refined (Amazon ReFinED, aida_model + wikidata English entity linking) is NOT on PyPI.
-# Install it separately, AFTER this file, from GitHub with --no-deps (so it does not
-# downgrade torch/transformers — the analyzer monkeypatches AutoTokenizer for the new API):
-#   pip install --no-deps git+https://github.com/amazon-science/ReFinED.git@V1
-# It is part of the consensus-critical NER stack above: install the SAME ref on miner
-# and validator. Full steps in docs/2026-06-23-alpharidge-venv-setup.md.
-transformers==4.53.2     # FinBERT + WikiNEuRal multilingual NER backbone
-langdetect==1.0.9        # deterministic language detection (seeded)
-trafilatura==2.1.0       # HTML main-content extraction (boilerplate removal)
-jusText==3.0.2           # stopword lists + heuristic for plain-text boilerplate
-# WikiNEuRal multilingual NER model: Babelscape/wikineural-multilingual-ner
-# (pulled at runtime via transformers; no extra dependency)
+# Pinned exactly, with the shared page check's packages (requirements-verify.txt). The input of
+# requirements.lock, which pins every package by hash.
+-r requirements-verify.txt
+pydantic==2.12.5
+numpy==2.2.6
+requests==2.34.2
+httpx==0.28.1
+python-dotenv==1.2.1
+bittensor==10.5.0
+async-substrate-interface==2.2.1
+cyscale==0.5.0

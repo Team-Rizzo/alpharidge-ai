@@ -1,0 +1,507 @@
+{
+  "monetary_policy": {
+    "tier": "low", "category": "finance", "group": "monetary_policy", "label": "rate decision", "window_days": 1, "place_level": "country", "max_subjects": 1,
+    "definition": "{subject} announcing an interest-rate decision",
+    "about": "a central bank announcing an interest-rate decision",
+    "fields": {
+      "change_bps": {"text": "the change in the policy rate", "judged": true},
+      "new_rate": {"text": "the policy rate (the benchmark rate the bank sets, such as a cash rate, bank rate or target range) after this decision (for a target range, its upper bound)"},
+      "vote_split": {"kind": "text", "ask": "Does the page give the vote as {v}?"}
+    },
+    "actor_roles": {"central_bank": "central_bank"},
+    "slots": ["change_bps", "new_rate", "vote_split"], "required": ["change_bps"],
+    "keywords": ["interest rate", "rates", "policy rate", "federal funds rate", "target range", "benchmark rate", "basis points", "rate cut", "rate hike", "cuts rates", "raises rates", "holds rates", "left rates", "kept rates", "rate decision", "monetary policy"]
+  },
+  "economic_data": {
+    "tier": "low", "category": "finance", "group": "economic_data", "label": "data release", "window_days": 1, "place_level": "country",
+    "definition": "a new reading of {indicator}[ of {place}][ for {period}][, published by {publisher}]",
+    "about": "a new reading of an economic statistic being released",
+    "subject_slot": "indicator",
+    "notes": {"timing": " The date is the day the data was released, not the period it covers; a period that ended earlier does not make it an earlier event."},
+    "fields": {
+      "indicator": {"kind": "name"},
+      "actual": {"text": "the newly released reading of {indicator}[ for {place}][, {measure}][ for {period}]"},
+      "prior": {"text": "the previous reading of {indicator}[ for {place}][, {measure}]"},
+      "period": {"kind": "qualifier"},
+      "measure": {"kind": "qualifier", "values": {"mom": "change from the previous month", "yoy": "change from a year earlier", "qoq": "change from the previous quarter", "level": "level (not a change)", "annualized": "annualized rate"}}
+    },
+    "actor_roles": {"statistics_agency": "publisher", "regulator": "publisher", "central_bank": "publisher"},
+    "slots": ["indicator", "actual", "prior", "period", "measure"], "required": ["indicator", "actual"],
+    "keywords": ["inflation", "consumer price", "producer price", "payrolls", "jobs report", "unemployment", "jobless claims", "gdp", "gross domestic product", "retail sales", "housing starts", "home sales", "industrial production", "durable goods", "trade balance", "trade deficit", "pmi", "purchasing managers", "consumer confidence", "data showed", "figures showed", "report showed"]
+  },
+  "earnings": {
+    "tier": "low", "category": "finance", "group": "results", "label": "results", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "{subject} reporting its results[ for {period}]",
+    "about": "a company reporting its financial results for a period",
+    "notes": {"timing": " The date is the day the results were reported, not the period they cover; a period that ended earlier does not make it an earlier event."},
+    "fields": {
+      "revenue": {"text": "total revenue (sales, net sales or turnover) of the whole company[ for {period}]"},
+      "eps": {"text": "[{eps_basis} ]earnings per share[ for {period}]"},
+      "net_income": {"text": "net income (profit, or loss if negative; net income attributable or available to common shareholders counts)[ for {period}]"},
+      "period": {"kind": "qualifier"},
+      "eps_basis": {"kind": "qualifier", "values": {"gaap": "GAAP (reported, unadjusted)", "adjusted": "adjusted (non-GAAP)"}}
+    },
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "filing_items": ["2.02"],
+    "slots": ["revenue", "eps", "net_income", "period", "eps_basis"], "required": ["period", ["eps", "revenue"]],
+    "keywords": ["earnings", "results", "quarterly", "revenue", "net income", "profit", "per share", "reported", "reports", "posted", "quarter", "fiscal year"]
+  },
+  "guidance": {
+    "category": "finance", "group": "results", "label": "guidance", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "slots": ["metric", "low", "high", "period"], "required": [],
+    "keywords": ["guidance", "outlook", "forecast", "expects", "projects", "raised its", "cut its", "lowered its", "reaffirmed", "full-year", "full year"]
+  },
+  "merger_acquisition": {
+    "tier": "high", "category": "finance", "group": "deal", "label": "acquisition", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "{acquirer} (the buyer) {stage} {target} (the company being bought)",
+    "about": {"announced": "a company agreeing, offering or bidding to buy another company or a stake in it", "approved": "a planned acquisition winning shareholder, court or regulatory approval", "completed": "an acquisition being completed or closed", "cancelled": "a planned acquisition or offer being called off"},
+    "subject_slot": "target",
+    "stage_text": {"": "acquiring (agreeing, offering or bidding to acquire, or a later step such as a tender offer result or the closing)", "announced": "agreeing, offering or bidding to acquire", "approved": "winning approval to acquire", "completed": "completing its acquisition of (has acquired or has bought; an agreement, an approval or a planned closing is not that)", "cancelled": "calling off its planned acquisition of"},
+    "notes": {"status": " A named bidder's public offer or bid, binding or not, and a deal proposal filed with an exchange or regulator are fact: the offer was made."},
+    "fields": {
+      "deal_value": {"text": "the value of this acquisition (the whole price, not an earn-out or other contingent part alone)"},
+      "stake_pct": {"text": "the stake being acquired"}
+    },
+    "actor_roles": {"company": "acquirer", "exchange": "acquirer"},
+    "stages": ["announced", "approved", "completed"], "exits": ["cancelled"],
+    "filing_items": {"completed": ["2.01"]},
+    "slots": ["target", "acquirer", "deal_value", "counterparties", "expected_close", "stake_pct"], "required": ["target", "acquirer"],
+    "keywords": ["acquire", "acquires", "acquired", "acquisition", "merger", "merge", "buy", "buys", "takeover", "buyout", "purchase", "deal to"],
+    "stage_keywords": {
+      "announced": ["agreed", "agrees", "announced", "announces", "to acquire", "to buy", "will acquire", "deal"],
+      "approved": ["approve", "approved", "approves", "approval", "cleared", "clears", "clearance"],
+      "completed": ["completed", "completes", "finalized", "finalised", "closed the deal", "closes the deal", "closed the acquisition", "closed its acquisition", "closes its acquisition", "closed the merger", "closed its merger", "closed the transaction", "deal closed", "acquisition closed", "merger closed", "transaction closed"],
+      "cancelled": ["terminated", "terminates", "called off", "abandoned", "abandons", "cancelled", "canceled", "scrapped", "walked away"]
+    }
+  },
+  "funding": {
+    "tier": "high", "category": "technology", "group": "funding", "label": "funding round", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "{subject} raising money from investors in a funding round[ ({round})]",
+    "about": "a private company raising money from investors in a funding round (seed, series A and later, or a strategic investment)",
+    "notes": {"status": " A round the company or its lead investor confirms is fact; a report that it is in talks to raise, or seeking money, is not."},
+    "fields": {
+      "amount": {"text": "the amount raised in this round"},
+      "valuation": {"text": "the company's valuation in this round"},
+      "round": {"kind": "text", "ask": "Is the round {v}?"},
+      "lead_investor": {"kind": "text", "ask": "Does the page say {v} led the round?"}
+    },
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "slots": ["amount", "round", "lead_investor", "valuation"], "required": ["amount"],
+    "keywords": ["raised", "raises", "funding", "funding round", "series a", "series b", "series c", "series d", "seed round", "investment led by", "valuation", "financing"]
+  },
+  "bankruptcy": {
+    "tier": "high", "category": "finance", "group": "bankruptcy", "label": "bankruptcy filing", "window_days": 7, "place_level": "none", "max_subjects": 1,
+    "definition": "{subject} entering a court insolvency proceeding",
+    "about": "a company entering a court insolvency proceeding (bankruptcy, administration, receivership or liquidation)",
+    "notes": {"event": " Any court insolvency proceeding counts: Chapter 7 or 11, insolvency, administration, receivership, liquidation, judicial management or a similar court-supervised restructuring, including the application for it or the appointment of administrators, receivers or judicial managers."},
+    "fields": {
+      "chapter": {"kind": "text", "ask": "Is the proceeding {v}?"},
+      "court": {"kind": "text", "ask": "Is the filing in the {v}?"},
+      "liabilities": {"text": "the company's total liabilities"}
+    },
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "filing_items": ["1.03"],
+    "slots": ["chapter", "court", "liabilities"], "required": ["chapter"],
+    "keywords": ["bankruptcy", "chapter 11", "chapter 7", "insolvency", "administration", "receivership", "creditor protection"]
+  },
+  "personnel": {
+    "tier": "low", "category": "finance", "group": "personnel", "label": "leadership change", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "{person} {direction} {role} of {subject}",
+    "about": "a company naming or losing its CEO, CFO, COO, president or chair",
+    "name_slots": ["person"],
+    "office": {"person": "person", "office": "role", "direction": "direction", "leaving": ["departing", "departed", "left"]},
+    "notes": {"event": " In a succession, the predecessor's departure counts as news too."},
+    "fields": {
+      "role": {"kind": "qualifier", "values": {"ceo": "chief executive officer", "cfo": "chief financial officer", "coo": "chief operating officer", "chair": "chair of the board (chair, chairman or executive chair)", "president": "president", "cto": "chief technology officer"}},
+      "direction": {"kind": "qualifier", "default": "appointed", "values": {"appointed": "being appointed", "departing": "leaving the post of", "departed": "leaving the post of", "left": "leaving the post of"}},
+      "effective_date": {"kind": "date", "text": "it takes effect"}
+    },
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "filing_items": ["5.02"],
+    "slots": ["person", "role", "direction", "effective_date"], "required": ["person", "role"],
+    "keywords": ["appointed", "appoints", "names", "named", "steps down", "resigns", "resigned", "retire", "retires", "chief executive", "ceo", "chief financial", "cfo", "chair", "successor"]
+  },
+  "layoffs": {
+    "tier": "high", "category": "finance", "group": "layoffs", "label": "job cuts", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "{subject} cutting jobs",
+    "about": "a company cutting jobs",
+    "notes": {"whole": " Cuts in one of its own divisions, units or sites are its cuts."},
+    "fields": {
+      "jobs_cut": {"text": "the number of jobs cut or being cut"},
+      "pct_workforce": {"text": "the share of the whole company's workforce being cut"}
+    },
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "filing_items": ["2.05"],
+    "slots": ["jobs_cut", "pct_workforce", "sites"], "required": [["jobs_cut", "pct_workforce"]],
+    "keywords": ["layoffs", "lay off", "laying off", "job cuts", "cut jobs", "cuts jobs", "eliminate", "positions", "workforce", "redundancies", "headcount"]
+  },
+  "regulatory": {
+    "category": "finance", "group": "regulatory", "label": "regulatory action", "window_days": 7, "place_level": "none",
+    "actor_roles": {"company": "subject", "exchange": "subject"},
+    "stages": ["pending", "approved"],
+    "slots": ["regulator", "instrument", "fine_amount"], "required": [],
+    "keywords": ["regulator", "regulatory", "approval", "approved", "fined", "fine", "penalty", "probe", "investigation", "consent order", "license", "authorization", "clearance"],
+    "stage_keywords": {
+      "pending": ["filed for", "applied", "application", "seeking approval", "under review", "submitted"],
+      "approved": ["approve", "approved", "approves", "granted", "cleared", "authorized", "authorised"]
+    }
+  },
+  "legal": {
+    "category": "finance", "group": "legal", "label": "legal case", "window_days": 7, "place_level": "none",
+    "actor_roles": {"company": "party", "exchange": "party"},
+    "stages": ["filed", "ruled", "appealed"],
+    "slots": ["court", "docket", "amount"], "required": [],
+    "keywords": ["lawsuit", "sued", "sues", "suit", "court", "judge", "ruling", "verdict", "settlement", "settled", "complaint", "class action", "appeal"],
+    "stage_keywords": {
+      "filed": ["filed", "files", "sued", "sues", "brought a suit", "complaint"],
+      "ruled": ["ruled", "rules", "ruling", "verdict", "judgment", "judgement", "found liable", "dismissed"],
+      "appealed": ["appeal", "appealed", "appeals"]
+    }
+  },
+  "product_launch": {
+    "tier": "low", "category": "technology", "group": "product_launch", "label": "product launch", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "{subject} launching {product}",
+    "about": "a company launching or releasing a new product, model, app, chip, device or service",
+    "name_slots": ["product"],
+    "notes": {"event": " The product must be released, made available or formally unveiled by the company; a leak, a teaser or a rumoured launch is not this. Bringing an existing product or service to new places or users, or updating it, is not a launch."},
+    "fields": {
+      "price": {"text": "the price of {product}"},
+      "release_date": {"kind": "date", "text": "{product} becomes available"}
+    },
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "slots": ["product", "price", "release_date"], "required": ["product"],
+    "keywords": ["launch", "launches", "launched", "unveil", "unveils", "unveiled", "introduces", "introduced", "release", "releases", "rolls out", "debut"]
+  },
+  "partnership": {
+    "tier": "low", "category": "technology", "group": "partnership", "label": "partnership", "window_days": 3, "place_level": "none", "max_subjects": 3,
+    "definition": "{subject} entering a partnership or commercial agreement",
+    "about": "companies announcing a partnership, collaboration, joint venture or commercial agreement with each other",
+    "fields": {
+      "deal_value": {"text": "the value of the agreement"},
+      "counterparties": {"kind": "text", "ask": "Does the page name {v} as a party to the agreement?"},
+      "term": {"kind": "text", "ask": "Does the page give the agreement's term as {v}?"}
+    },
+    "actor_roles": {"company": "party", "exchange": "party"},
+    "slots": ["counterparties", "deal_value", "term"], "required": [],
+    "keywords": ["partnership", "partner", "partners with", "teams up", "alliance", "collaboration", "joint venture", "agreement", "contract", "signed"]
+  },
+  "security_incident": {
+    "tier": "high", "category": "technology", "group": "security_incident", "label": "security incident", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "a security incident (breach, hack or cyberattack) at {subject}",
+    "about": "a security incident (breach, hack or cyberattack, including an outage an attack causes) at an organisation",
+    "notes": {"whole": " An incident at one of its own businesses, brands, services or sites is its incident, and so is one at a vendor or partner that exposed its own customers' data, or one at a subsidiary that it reports in its own filing or release. So is malware spread through its own marketplace or store, and theft or fraud by its own staff.", "status": " An incident the affected organisation, its operator or a regulator acknowledges is fact, even when the page also reports what the attackers claim.", "timing": " The claimed date may be the day it happened or the day it was discovered or disclosed, as the page states."},
+    "fields": {
+      "incident_kind": {"kind": "text", "ask": "Does the page describe the incident as {v} (or the same thing in other words)?"},
+      "records_affected": {"text": "the number of people or records whose data was affected"}
+    },
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "filing_items": ["1.05"],
+    "slots": ["incident_kind", "records_affected"], "required": [],
+    "keywords": ["breach", "hack", "hacked", "cyberattack", "cyber attack", "ransomware", "data leak", "compromised", "unauthorized access"]
+  },
+  "breakthrough": {
+    "tier": "high", "category": "technology", "group": "breakthrough", "label": "breakthrough", "window_days": 3, "place_level": "none", "max_subjects": 2,
+    "definition": "{subject} reporting a new scientific or technical result[ ({kind})]: {result}",
+    "about": "a company, university, lab or agency reporting a new scientific or technical result: a first, a record or a peer-reviewed finding",
+    "notes": {"event": " The organisation, its researchers or a peer-reviewed journal must report the result as achieved. A product going on sale, a goal, a plan, a grant, a result it only expects, or what the work could lead to is not this.", "whole": " Any institution that led or co-led the work is the party, even when others took part.", "status": " A result the organisation or a journal reports as achieved or published is fact; an aim, a target, an expected result, a possible use, or a result the page calls possible, tentative or unconfirmed (\"may have\") is not."},
+    "fields": {
+      "result": {"kind": "text", "ask": "Does the page describe the result as {v} (or the same thing in other words)?"},
+      "kind": {"kind": "qualifier", "values": {"first": "a first", "record": "a record", "published": "a peer-reviewed published finding"}},
+      "research_field": {"kind": "text", "ask": "Is the work in {v}?"},
+      "value": {"text": "the measured result"},
+      "journal": {"kind": "text", "ask": "Does the page say it was published in {v}?"},
+      "doi": {"kind": "text", "ask": "Does the page give the DOI {v}?"}
+    },
+    "actor_roles": {"company": "organisation", "exchange": "organisation", "government": "organisation", "regulator": "organisation", "research": "organisation"},
+    "slots": ["result", "kind", "research_field", "value", "journal", "doi"], "required": ["result"],
+    "keywords": ["breakthrough", "world first", "world record", "researchers", "scientists", "published in", "peer-reviewed", "demonstrated", "discovery"]
+  },
+  "outage": {
+    "tier": "high", "category": "technology", "group": "outage", "label": "outage", "window_days": 1, "place_level": "none", "max_subjects": 1,
+    "definition": "{subject} suffering a major outage[ of {service}]",
+    "about": "a major, widespread outage of a company's cloud, internet or platform service",
+    "notes": {"event": " The outage must be widespread: a core service failing or unavailable for many customers or users, or for a whole region. Planned maintenance, a problem at a single customer, or a problem limited to one feature, one model, one app platform, a marketing or status site, or delays in a non-core function is not this.", "status": " An outage the provider acknowledges is fact, and so are widespread failures the page reports as observed from user reports or monitoring.", "timing": " The claimed date is the day the outage began."},
+    "fields": {
+      "service": {"kind": "text", "ask": "Does the page say {v} was affected?"},
+      "regions": {"kind": "text", "ask": "Does the page say {v} was affected?"},
+      "started_at": {"kind": "date", "text": "the outage began"},
+      "resolved_at": {"kind": "date", "text": "the outage was resolved"}
+    },
+    "actor_roles": {"company": "provider", "exchange": "provider"},
+    "slots": ["service", "regions", "started_at", "resolved_at"], "required": [],
+    "keywords": ["outage", "outages", "service disruption", "went down", "is down", "status page", "service restored"]
+  },
+  "vulnerability": {
+    "tier": "low", "category": "technology", "group": "vulnerability", "label": "vulnerability", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "a critical or actively exploited vulnerability[ {cve_id}] in {subject}'s software[ ({product})]",
+    "about": "a critical (CVSS 9.0 or higher) or actively exploited vulnerability in a vendor's software or hardware being disclosed",
+    "notes": {"event": " The vulnerability must be rated critical (CVSS 9.0 or higher) or reported as exploited in the wild; a lower-rated one that is not exploited is not this. Its disclosure, the vendor's advisory or patch, or its listing as known exploited counts.", "whole": " For this event the vendor whose product has the flaw is the party, not a company attacked through it; for open-source software the project (WordPress, the Linux kernel, OpenSSH) is the vendor.", "timing": " The claimed date may be the day it was disclosed, patched or listed as exploited, as the page states; an older flaw newly listed as exploited counts on the listing day."},
+    "name_slots": ["cve_id"],
+    "fields": {
+      "product": {"kind": "text", "ask": "Is the flaw in {v}?"},
+      "cvss": {"text": "the vulnerability's CVSS score"},
+      "exploited": {"kind": "text", "ask": "Does the page say the vulnerability is exploited in the wild?"}
+    },
+    "actor_roles": {"company": "vendor", "exchange": "vendor"},
+    "slots": ["cve_id", "product", "cvss", "exploited"], "required": [["cve_id", "product"]],
+    "keywords": ["vulnerability", "cve", "zero-day", "zero day", "exploited", "critical", "patch", "security update", "advisory", "cvss", "remote code execution"]
+  },
+  "tech_regulation": {
+    "tier": "low", "category": "technology", "group": "tech_regulation", "label": "regulatory action", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "an antitrust or regulatory enforcement action against {subject}[ by {regulator}][ ({action})]",
+    "about": "a regulator, government or court taking an antitrust or regulatory enforcement action against a technology company: a fine, a lawsuit, a ruling or a settlement",
+    "notes": {"event": " The subject must be a technology company (software, internet, platform, hardware, telecom or fintech). A fine imposed, a lawsuit filed by a regulator or government, a court ruling or a settlement counts. An action against a non-technology business or a public body, an investigation opened, a complaint by a rival, a proposed rule, a law being passed or a trade measure against a country is not this.", "status": " An action the regulator, the court or the company announces is fact; a reported plan to fine or sue is not."},
+    "name_slots": ["regulator"],
+    "fields": {
+      "action": {"kind": "qualifier", "values": {"fine": "a fine", "lawsuit": "a lawsuit", "ruling": "a court ruling", "settlement": "a settlement"}},
+      "amount": {"text": "the amount of the fine or settlement"},
+      "law": {"kind": "text", "ask": "Is the action taken under {v}?"}
+    },
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "slots": ["regulator", "action", "amount", "law"], "required": [],
+    "keywords": ["antitrust", "fined", "lawsuit", "sued", "sues", "ruling", "settlement", "competition authority", "regulator"]
+  },
+  "infrastructure_investment": {
+    "tier": "low", "category": "technology", "group": "infrastructure", "label": "infrastructure investment", "window_days": 3, "place_level": "country", "max_subjects": 2,
+    "definition": "{subject} announcing an investment in {facility}[ in {place}]",
+    "about": "a company announcing an investment in a data centre, chip plant or compute facility",
+    "notes": {"event": " The company must announce or commit to the investment, with a site or an amount. A reported plan, a site search, a local approval, a funding round or an acquisition is not this."},
+    "fields": {
+      "facility": {"kind": "qualifier", "default": "other", "values": {"datacenter": "a data centre", "fab": "a chip plant", "other": "a data centre, chip plant or compute facility"}},
+      "amount": {"text": "the amount of the investment"},
+      "capacity_mw": {"text": "the facility's power capacity in megawatts"}
+    },
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "slots": ["facility", "amount", "capacity_mw"], "required": [],
+    "keywords": ["data center", "data centre", "data centers", "data centres", "chip plant", "chip factory", "semiconductor plant", "fab", "megawatts", "gigawatt"]
+  },
+  "supply_chain": {
+    "category": "finance", "group": "supply_chain", "label": "supply disruption", "window_days": 7, "place_level": "none", "max_subjects": 1,
+    "actor_roles": {"company": "company", "exchange": "company"},
+    "slots": ["supplier", "product", "duration"], "required": [],
+    "keywords": ["supply", "shortage", "disruption", "recall", "plant", "factory", "shutdown", "halted production", "suspends production", "strike"]
+  },
+  "ipo_listing": {
+    "tier": "low", "category": "finance", "group": "ipo_listing", "label": "listing", "window_days": 7, "place_level": "none", "max_subjects": 1,
+    "definition": "{subject} {stage}[ on {exchange}]",
+    "about": {"announced": "a company announcing or filing plans for an IPO", "scheduled": "a company pricing its IPO or setting its terms or first trading date", "completed": "a company's shares starting to trade after its IPO, or its IPO closing", "cancelled": "a company postponing or withdrawing its IPO"},
+    "stage_text": {"": "listing its shares: the IPO priced or closed or the shares began trading (a filing or plan to go public is not this)", "announced": "announcing or filing plans for an IPO", "scheduled": "pricing its IPO or setting its terms or first trading date", "completed": "listing its shares: the shares began trading or the IPO closed (pricing alone is not this)", "cancelled": "postponing or withdrawing its IPO"},
+    "fields": {
+      "exchange": {"kind": "exchange"},
+      "ticker": {"kind": "ticker"},
+      "offer_price": {"text": "the price per share"},
+      "shares": {"text": "the number of shares offered in the whole IPO"},
+      "raise_amount": {"text": "the amount the listing raises"}
+    },
+    "actor_roles": {"company": "issuer"},
+    "stages": ["announced", "scheduled", "completed"], "exits": ["cancelled"],
+    "slots": ["exchange", "ticker", "offer_price", "shares", "raise_amount"], "required": ["exchange"],
+    "keywords": ["ipo", "initial public offering", "listing", "lists", "listed", "go public", "goes public", "debut", "direct listing", "files to list"],
+    "stage_keywords": {
+      "announced": ["files for", "filed for", "plans", "confidentially", "intends", "announced"],
+      "scheduled": ["prices", "priced", "set to", "expected to begin trading", "will begin trading", "terms"],
+      "completed": ["began trading", "begins trading", "debuted", "debuts", "opened", "started trading"],
+      "cancelled": ["postpones", "postponed", "withdraws", "withdrawn", "shelves", "pulled"]
+    }
+  },
+  "delisting": {
+    "tier": "low", "category": "finance", "group": "delisting", "label": "delisting", "window_days": 7, "place_level": "none", "max_subjects": 1,
+    "definition": "{subject}'s shares being removed from listing[ on {exchange}], or a decision to remove them being announced",
+    "about": "a company's shares being removed from an exchange, or that removal being announced",
+    "notes": {"status": " A delisting the company or the exchange announces (a decision to delist, a Form 25 filed or to be filed, or a liquidation that ends the listing) is fact.", "timing": " The date is the day the shares were removed or the decision was announced; an update on an appeal or hearing, or a letter recounting the proceedings, reports an earlier event."},
+    "fields": {
+      "exchange": {"kind": "exchange"},
+      "ticker": {"kind": "ticker"},
+      "effective_date": {"kind": "date", "text": "it takes effect"},
+      "reason": {"kind": "text", "ask": "Does the page give the reason as {v} (or the same thing in other words)?"}
+    },
+    "actor_roles": {"company": "issuer"},
+    "slots": ["exchange", "ticker", "effective_date", "reason"], "required": ["exchange"],
+    "keywords": ["delist", "delisted", "delisting", "removed from", "suspended from trading", "notice of non-compliance", "voluntary delisting"]
+  },
+  "trading_halt": {
+    "tier": "low", "category": "finance", "group": "trading_halt", "label": "trading halt", "window_days": 1, "place_level": "none", "max_subjects": 1,
+    "definition": "trading in {subject}'s shares being halted or suspended[ on {exchange}]",
+    "about": "trading in a company's shares being halted or suspended",
+    "notes": {"event": " The page must say trading was halted or suspended; the company asking the exchange to do it is not enough on its own."},
+    "fields": {
+      "exchange": {"kind": "exchange"},
+      "ticker": {"kind": "ticker"},
+      "reason": {"kind": "text", "ask": "Does the page give the reason as {v} (or the same thing in other words)?"},
+      "resume_time": {"kind": "text", "ask": "Does the page say trading resumes at {v}?"}
+    },
+    "actor_roles": {"company": "subject"},
+    "slots": ["exchange", "ticker", "reason", "resume_time"], "required": ["exchange"],
+    "keywords": ["halt", "halted", "halts", "trading halt", "suspended trading", "trading suspended", "trading pause", "circuit breaker"]
+  },
+  "index_change": {
+    "category": "finance", "group": "index_change", "label": "index change", "window_days": 7, "place_level": "none",
+    "actor_roles": {"company": "constituent"},
+    "slots": ["index", "action", "effective_date", "replaces"], "required": [],
+    "keywords": ["join", "joins", "added to", "to be added", "removed from", "to replace", "replace", "replaces", "rebalance", "rebalancing", "index changes", "constituent"]
+  },
+  "match_result": {
+    "tier": "low", "category": "sports", "group": "match_result", "label": "result", "window_days": 1, "place_level": "none", "max_subjects": 2,
+    "definition": "the match between {subject} ending {score}[ in {competition}]",
+    "about": "a match or game finishing, with its final result",
+    "notes": {"event": " The match must be over: a half-time or live score, a preview or a schedule is not this."},
+    "fields": {
+      "score": {"kind": "text", "ask": "Does the page give {v} as the final score of this match itself (not a series, aggregate, half-time or live score)?"},
+      "scorers": {"kind": "text", "ask": "Does the page say {v} scored in this match?"},
+      "competition": {"kind": "text", "ask": "Was the match part of {v}?"},
+      "venue": {"kind": "text", "ask": "Was the match played at {v}?"}
+    },
+    "actor_roles": {"team": "team"},
+    "slots": ["score", "scorers", "competition", "venue"], "required": ["score"],
+    "keywords": ["beat", "beats", "defeated", "defeats", "won", "wins", "lost", "loses", "drew", "draw", "victory", "win over", "final score"]
+  },
+  "transfer": {
+    "tier": "high", "category": "sports", "group": "transfer", "label": "transfer", "window_days": 7, "place_level": "none", "max_subjects": 1,
+    "definition": "{player} moving to {to_team}[ from {from_team}]",
+    "about": "a player signing for, joining, being traded to or loaned to another team",
+    "subject_slot": "player", "name_slots": ["to_team"],
+    "notes": {"status": " A move a club, the league or the player confirms is fact; agreed personal terms, a player close to or in talks over a move, or a reporter's word that a deal is done are not."},
+    "fields": {
+      "fee": {"text": "the transfer fee"},
+      "contract_years": {"text": "the length of {player}'s contract in years"}
+    },
+    "actor_roles": {"team": "club", "athlete": "player"}, "subject_roles": ["player"],
+    "slots": ["player", "fee", "from_team", "to_team", "contract_years"], "required": ["player", "to_team"],
+    "keywords": ["signs", "signed", "signing", "transfer", "joins", "joined", "acquired", "traded", "trade", "loan", "free agent", "contract"]
+  },
+  "injury": {
+    "tier": "low", "category": "sports", "group": "injury", "label": "injury", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "{player} being injured or ruled out by an injury[ ({injury})]",
+    "about": "a player being injured, ruled out or sidelined by an injury, or having surgery",
+    "subject_slot": "player",
+    "fields": {
+      "injury": {"kind": "text", "ask": "Does the page describe the injury as {v} (or the same thing in other words)?"},
+      "expected_return": {"kind": "text", "ask": "Does the page say {player} is expected back {v}?"}
+    },
+    "actor_roles": {"team": "team", "athlete": "player"}, "subject_roles": ["player"],
+    "slots": ["player", "injury", "expected_return"], "required": ["player"],
+    "keywords": ["injury", "injured", "injured list", "out for", "sidelined", "ruled out", "surgery", "torn", "fracture", "strain", "sprain"]
+  },
+  "award": {
+    "tier": "low", "category": "sports", "group": "award", "label": "award", "window_days": 3, "place_level": "none", "max_subjects": 1,
+    "definition": "{subject} winning {award}[ for {season}]",
+    "about": "a player, coach or team being given an individual or season award (not a match result or a title won on the field)",
+    "name_slots": ["award"],
+    "fields": {
+      "season": {"kind": "text", "ask": "Is the award for {v}?"}
+    },
+    "actor_roles": {"team": "recipient", "athlete": "recipient"},
+    "slots": ["award", "recipient", "season"], "required": ["award", "recipient"],
+    "keywords": ["award", "awarded", "wins", "won", "named", "mvp", "player of the year", "trophy", "honor", "honour"]
+  },
+  "election_result": {
+    "tier": "low", "category": "politics", "group": "election_result", "label": "election result", "window_days": 3, "place_level": "admin1", "max_subjects": 1,
+    "definition": "{subject} winning the election[ for {office}]",
+    "about": "an election, referendum or leadership vote being won or decided",
+    "notes": {"status": " A result the election authority declares, that the loser concedes, or that a news organisation calls or projects as won is fact; an exit poll, a lead in a partial count, a forecast or a candidate's own claim of victory is not."},
+    "fields": {
+      "office": {"kind": "text", "ask": "Was the election for {v}?"},
+      "vote_share": {"text": "{subject}'s share of the vote"},
+      "seats": {"text": "the seats {subject} won"},
+      "turnout": {"text": "the turnout"}
+    },
+    "actor_roles": {"official": "candidate", "party": "party"},
+    "slots": ["office", "vote_share", "seats", "turnout"], "required": ["office"],
+    "keywords": ["election", "elected", "re-elected", "wins election", "won the election", "won election", "declared winner", "projected winner", "defeated", "votes", "seats", "majority", "runoff", "ballot", "referendum"]
+  },
+  "legislation_passed": {
+    "tier": "low", "category": "politics", "group": "legislation", "label": "legislation", "window_days": 3, "place_level": "country", "max_subjects": 1,
+    "definition": "{bill} {stage}[ in {subject}]",
+    "about": {
+      "approved": "a legislature or one of its chambers passing a bill",
+      "completed": "a bill becoming law: signed, given assent or promulgated",
+      "cancelled": "a bill being voted down, vetoed or withdrawn"
+    },
+    "stage_text": {
+      "": "being passed or becoming law",
+      "approved": "being passed by a vote",
+      "completed": "becoming law (signed, given assent or promulgated; passing a vote alone is not this)",
+      "cancelled": "being voted down, vetoed or withdrawn"
+    },
+    "name_slots": ["bill"],
+    "fields": {
+      "chamber": {"kind": "text", "ask": "Was the vote in the {v}?"},
+      "votes_for": {"text": "the votes for {bill}"},
+      "votes_against": {"text": "the votes against {bill}"}
+    },
+    "actor_roles": {"legislature": "legislature"},
+    "stages": ["approved", "completed"], "exits": ["cancelled"],
+    "slots": ["bill", "chamber", "votes_for", "votes_against"], "required": ["bill"],
+    "keywords": ["bill", "act", "legislation", "law", "passed", "passes", "voted", "vote", "approved", "enacted", "signed into law", "royal assent", "ratified", "parliament", "senate", "congress"],
+    "stage_keywords": {
+      "approved": ["passed", "passes", "approved", "approves", "voted to pass", "adopted", "adopts"],
+      "completed": ["signed into law", "signs into law", "enacted", "royal assent", "became law", "becomes law", "promulgated", "entered into force"],
+      "cancelled": ["vetoed", "vetoes", "veto", "rejected", "rejects", "voted down", "withdrawn"]
+    }
+  },
+  "appointment": {
+    "tier": "low", "category": "politics", "group": "appointment", "label": "appointment", "window_days": 3, "place_level": "country", "max_subjects": 1,
+    "definition": "{appointee} {stage} {office}[ by {appointed_by}]",
+    "about": {
+      "announced": "a person being named or nominated to public office, or resigning or being removed from it (company officers are leadership changes)",
+      "approved": "a nominee to public office being confirmed",
+      "completed": "a person being sworn in or taking public office",
+      "cancelled": "a nomination to public office being withdrawn or rejected"
+    },
+    "stage_text": {
+      "": "being named to, taking or leaving the office of",
+      "announced": "being named or nominated to, or resigning or being removed from, the office of",
+      "approved": "being confirmed as",
+      "completed": "being sworn in or taking office as",
+      "cancelled": "having a nomination withdrawn or rejected as"
+    },
+    "subject_slot": "office",
+    "fields": {
+      "action": {"kind": "text", "ask": "Does the page say {appointee} is {v}?"},
+      "appointed_by": {"kind": "text", "ask": "Was {appointee} named by {v}?"},
+      "effective_date": {"kind": "date", "text": "it takes effect"}
+    },
+    "actor_roles": {"official": "appointee"},
+    "stages": ["announced", "approved", "completed"], "exits": ["cancelled"],
+    "slots": ["office", "appointee", "action", "appointed_by", "effective_date"], "required": ["office", "appointee"],
+    "keywords": ["appointed", "appoints", "nominated", "nominates", "nominee", "named", "confirmed", "sworn in", "takes office", "resigns", "resigned", "resignation", "steps down", "removed from office", "dismissed", "fired", "impeached", "ousted", "minister", "secretary", "ambassador", "cabinet"],
+    "stage_keywords": {
+      "announced": ["nominated", "nominates", "nominee", "named", "picks", "appointed", "appoints", "resigns", "resigned", "steps down", "dismissed", "fired", "removed from office", "ousted"],
+      "approved": ["confirmed", "confirms", "approved", "approves", "vote to confirm"],
+      "completed": ["sworn in", "takes office", "took office", "assumed office"],
+      "cancelled": ["withdrew", "withdraws", "withdrawn", "rejected", "rejects", "blocked"]
+    }
+  },
+  "sanction_or_tariff": {
+    "tier": "low", "category": "politics", "group": "trade_measure", "label": "sanctions or tariffs", "window_days": 3, "place_level": "country", "max_subjects": 1,
+    "definition": "{subject} {stage} [{measure} ]on {targets}",
+    "about": {
+      "announced": "a government imposing or announcing sanctions, tariffs, export controls or other trade restrictions on a country, company or person",
+      "completed": "sanctions, tariffs or trade restrictions taking effect",
+      "cancelled": "sanctions, tariffs or trade restrictions being lifted, suspended or revoked"
+    },
+    "stage_text": {
+      "": "imposing, putting into effect or lifting",
+      "announced": "imposing or announcing",
+      "completed": "putting into effect",
+      "cancelled": "lifting, suspending or revoking"
+    },
+    "name_slots": ["targets"],
+    "fields": {
+      "measure": {"kind": "text", "ask": "Is the measure {v} (or the same thing in other words)?"},
+      "rate": {"text": "the tariff rate"},
+      "program": {"kind": "text", "ask": "Is the measure taken under {v}?"},
+      "effective_date": {"kind": "date", "text": "it takes effect"}
+    },
+    "actor_roles": {"government": "imposer", "regulator": "imposer"},
+    "stages": ["announced", "completed"], "exits": ["cancelled"],
+    "slots": ["measure", "targets", "rate", "program", "effective_date"], "required": ["targets"],
+    "keywords": ["sanction", "sanctions", "sanctioned", "designated", "designates", "asset freeze", "export controls", "embargo", "tariff", "tariffs", "duties", "levy", "trade restrictions", "blacklist", "entity list"],
+    "stage_keywords": {
+      "announced": ["announced", "announces", "imposes", "imposed", "designated", "designates", "will impose", "unveiled"],
+      "completed": ["takes effect", "took effect", "in effect", "came into force", "entered into force", "effective"],
+      "cancelled": ["lifted", "lifts", "revoked", "revokes", "suspended", "suspends", "removed", "delisted", "rescinded"]
+    }
+  }
+}

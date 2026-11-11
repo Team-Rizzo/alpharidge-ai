@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+<title>Example business news</title>
+<item><title>Bank of England cuts interest rates to 4.5%</title><link>/boe-rates</link>
+<pubDate>Tue, 13 Oct 2026 11:00:00 GMT</pubDate></item>
+<item><title>An older story</title><link>/old</link>
+<pubDate>Thu, 01 Oct 2026 09:00:00 GMT</pubDate></item>
+</channel></rss>

@@ -1,0 +1,103 @@
+{
+ "_note": "Fictional companies with placeholder ids, for tests and the local end-to-end run.",
+ "entities": [
+  {
+   "scheme": "wikidata",
+   "id": "Q99999001",
+   "name": "Acme Inc.",
+   "kind": "company",
+   "aliases": [
+    "Acme"
+   ],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999002",
+   "name": "Globex Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999003",
+   "name": "Initech Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999004",
+   "name": "Umbrella Corp.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999005",
+   "name": "Northwind Traders",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999006",
+   "name": "Hooli Inc.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999007",
+   "name": "Soylent Corp.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999008",
+   "name": "Vandelay Industries",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999009",
+   "name": "Wonka Industries",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999010",
+   "name": "Stark Motors",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999011",
+   "name": "Cyberdyne Systems",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  },
+  {
+   "scheme": "wikidata",
+   "id": "Q99999012",
+   "name": "Tyrell Corp.",
+   "kind": "company",
+   "aliases": [],
+   "xrefs": []
+  }
+ ]
+}

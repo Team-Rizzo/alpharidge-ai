@@ -5,7 +5,6 @@ import json
 import pytest
 
 import alpharidge_ai.config as config
-from alpharidge_ai.mechanism import profile as mp
 from alpharidge_ai.validator import profile_client as pc
 
 
@@ -16,20 +15,9 @@ def valid(version=2, activation_block=10_000, capacity=301_743.0,
         "publish_block": (activation_block - 400 if publish_block is None
                           else publish_block),
         "activation_block": activation_block,
-        "schema_version": "1.2.0",
+        "schema_version": "2.0.0",
         "settlement": {"C": capacity},
-        "emission": {"midpoint": 0.766, "gain": 15.0, "ceiling": 1.0,
-                     "bonus_start": 0.716, "bonus_full": 0.816,
-                     "n_min": 100, "ema_alpha": 0.03},
-        "rations": {"explore": 25.0, "probe_day": 2.0, "alpha_day": 0.5,
-                    "cap": 5000.0, "slack_target": 0.15, "fill_gate": 0.97,
-                    "boost": 200.0, "boost_days": 14, "boost_tranche_max": 0.05},
-        "oracle": {"pool_tiers": ["number_bearing"], "keyed_rate_pool": 0.9,
-                   "keyed_rate_keeper": 0.03, "claim_cap": 40, "keeper_weight": 0.3,
-                   "grader_models": [{"id": "m", "weight": 1.0}],
-                   "schema_cutover_block": 12_000},
-        "controller": {"roi_lo": 1.5, "roi_hi": 6.0, "arm_days": 3,
-                       "max_step": 0.2, "gap_days": 14, "cost_per_point": 0.000292},
+        "ledger": {"window_epochs": 216},
         "signature": "aa" * 32,
     }
 
@@ -49,7 +37,7 @@ class Response:
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "MINER_API_URL", "http://test.invalid", raising=False)
     monkeypatch.setattr(config, "REMOTE_CONFIG_REFRESH_SECONDS", 3600, raising=False)
-    monkeypatch.setattr(config, "_build_auth_headers", lambda: {}, raising=False)
+    monkeypatch.setattr(config, "_build_auth_headers", lambda *a: {}, raising=False)
     return pc.ProfileClient(path=tmp_path / "profile.json", require_signature=False)
 
 
@@ -84,7 +72,7 @@ def test_a_fetch_failure_leaves_the_running_profile_alone(client, monkeypatch):
 
 def test_a_malformed_profile_is_refused(client, monkeypatch):
     broken = valid()
-    broken["emission"]["gain"] = 500.0
+    broken["settlement"]["C"] = 0.0
     serve(monkeypatch, {"next": broken})
     assert not client.refresh(block=9_000, force=True)
     assert client.resolve(20_000) is None
@@ -93,15 +81,16 @@ def test_a_malformed_profile_is_refused(client, monkeypatch):
 def test_refresh_is_rate_limited_unless_forced(client, monkeypatch):
     calls = []
 
-    def counted(*a, **kw):
-        calls.append(1)
+    def counted(url, **kw):
+        calls.append(url.rsplit("/", 2)[-2:])
         return Response({"next": valid()})
     monkeypatch.setattr(pc.requests, "get", counted)
 
     client.refresh(block=9_000, force=True)
     client.refresh(block=9_000)
     client.refresh(block=9_000)
-    assert len(calls) == 1
+    # One config fetch and one profile fetch per refresh.
+    assert calls == [["config", "subnet"], ["mechanism", "profile"]]
 
 
 def test_no_api_url_is_not_an_error(tmp_path, monkeypatch):
@@ -114,7 +103,7 @@ def test_no_api_url_is_not_an_error(tmp_path, monkeypatch):
 
 def test_a_bad_signature_is_rejected(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "MINER_API_URL", "http://test.invalid", raising=False)
-    monkeypatch.setattr(config, "_build_auth_headers", lambda: {}, raising=False)
+    monkeypatch.setattr(config, "_build_auth_headers", lambda *a: {}, raising=False)
     monkeypatch.setattr(pc, "verify_signature", lambda m, s: False)
     serve(monkeypatch, {"next": valid()})
 
@@ -125,7 +114,7 @@ def test_a_bad_signature_is_rejected(tmp_path, monkeypatch):
 
 def test_a_good_signature_is_accepted(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "MINER_API_URL", "http://test.invalid", raising=False)
-    monkeypatch.setattr(config, "_build_auth_headers", lambda: {}, raising=False)
+    monkeypatch.setattr(config, "_build_auth_headers", lambda *a: {}, raising=False)
     seen = {}
 
     def verify(message, signature):
@@ -200,20 +189,14 @@ def test_a_replayed_older_version_cannot_displace_a_newer_one(client, monkeypatc
     assert client.resolve(2_000).settlement.C == pytest.approx(301_743.0)
 
 
-# ---- epoch length ------------------------------------------------------------------
-
-def test_a_mismatched_epoch_length_is_reported(monkeypatch, caplog):
-    """The conversion constant is fleet-wide, so a local disagreement must be visible."""
-    monkeypatch.setattr(config, "BLOCK_LENGTH", 10, raising=False)
-    warnings = []
-    monkeypatch.setattr(pc.bt.logging, "warning", lambda msg: warnings.append(msg))
-    pc.ProfileClient._check_epoch_length()
-    assert warnings and "BLOCK_LENGTH" in warnings[0]
-
-
-def test_a_matching_epoch_length_is_silent(monkeypatch):
-    monkeypatch.setattr(config, "BLOCK_LENGTH", mp.BLOCKS_PER_EPOCH, raising=False)
-    warnings = []
-    monkeypatch.setattr(pc.bt.logging, "warning", lambda msg: warnings.append(msg))
-    pc.ProfileClient._check_epoch_length()
-    assert warnings == []
+def test_served_config_applies_unless_overridden(monkeypatch):
+    monkeypatch.setattr(config, "MINER_API_URL", "http://test.invalid", raising=False)
+    monkeypatch.setattr(config, "_build_auth_headers", lambda *a: {}, raising=False)
+    monkeypatch.setattr(config, "JUDGE_URL", "")
+    monkeypatch.setattr(config, "REVERIFY_FETCH_TIMEOUT_S", 15.0)
+    monkeypatch.setenv("OVERRIDE_REVERIFY_FETCH_TIMEOUT_S", "20")
+    serve(monkeypatch, {"config": {"EL_JUDGE_URL": "https://judge.test/v1",
+                                   "REVERIFY_FETCH_TIMEOUT_S": "5"}})
+    config.refresh_remote_config(force=True)
+    assert config.JUDGE_URL == "https://judge.test/v1"
+    assert config.REVERIFY_FETCH_TIMEOUT_S == 20.0

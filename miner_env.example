@@ -1,22 +1,24 @@
-# LLM Analysis (Article Intelligence V2 — deepseek-v4-flash via OpenRouter)
-MODEL=deepseek/deepseek-v4-flash
-# OpenRouter API key (sk-or-...). Get one at https://openrouter.ai/keys
-API_KEY=
-LLM_BASE=https://openrouter.ai/api/v1
-
-# X/Twitter API Configuration
-X_BEARER_TOKEN=
-X_API_BASE=https://api.twitter.com/2
-
-# Miner API Configuration (API v2)
-# Base URL for the miner API (API v2 endpoint: /v2/submit)
+# API that receives signed claims
 MINER_API_URL=https://api.alpharidge.ai
-# HTTP timeout in seconds for API requests
 BATCH_HTTP_TIMEOUT=30.0
 
-# Block-based Rate Limiting Configuration
-# Number of blocks per rate limit window (default: 100 blocks, ~20 minutes at 12s per block)
-BLOCKS_PER_WINDOW=100
-# Maximum posts to scrape and submit per block window (default: 5, matches API v2 rate limit)
-# Must match MAX_SUBMISSION_RATE in api_v2 if using API v2
-MAX_SUBMISSIONS_PER_WINDOW=5
+# Reference miner
+# JSON list of feeds and listing pages; empty uses the bundled sample
+MINER_FEEDS=
+MINER_CATEGORIES=finance
+MINER_POLL_SECONDS=300
+MINER_MAX_AGE_H=48
+# Contact URL or email for the AlphaRidgeBot user agent
+USER_AGENT_CONTACT=https://example.org/contact
+# Full user agent override; empty uses AlphaRidgeBot/<version> (+USER_AGENT_CONTACT)
+MINER_USER_AGENT=
+MINER_DOMAIN_RPS=0.5
+# MINER_FETCH_TIMEOUT_S=10
+# Connect to public addresses only; keep true
+# MINER_FETCH_PUBLIC_ONLY=true
+# Feed items read per pass, open claims polled per pass, lead sentences read per page
+# MINER_ITEMS_PER_TICK=40
+# MINER_STATUS_PER_TICK=50
+# MINER_LEAD_SENTENCES=6
+# SQLite state; empty keeps it under the neuron's log directory
+MINER_STATE_PATH=

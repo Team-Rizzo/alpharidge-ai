@@ -33,7 +33,7 @@ class Settlement:
 def settle(work: Mapping[str, float], capacity: float) -> Settlement:
     """Split one epoch's emission across UIDs by verified work.
 
-    `work` is per-UID verified points, already carrying the quality multiplier.
+    `work` is per-UID verified points.
     """
     capacity = float(capacity)
     if capacity <= 0.0:
@@ -48,8 +48,7 @@ def settle(work: Mapping[str, float], capacity: float) -> Settlement:
     return Settlement(shares=shares, burn=burn, work=total, capacity=capacity)
 
 
-def weight_vector(shares: Mapping[str, float], burn: float,
-                  hotkeys: Sequence[str], burn_uid: int,
+def weight_vector(shares: Mapping[str, float], hotkeys: Sequence[str], burn_uid: int,
                   size: Optional[int] = None) -> list:
     """Lay the shares onto a UID-indexed vector, with the remainder on the burn UID.
 
@@ -70,14 +69,3 @@ def weight_vector(shares: Mapping[str, float], burn: float,
         weights[int(burn_uid)] += max(0.0, min(1.0, 1.0 - allocated))
     return weights
 
-
-def capacity_for_continuity(alpha_emission: float, alpha_usd: float,
-                            usd_per_point: float) -> float:
-    """The capacity that leaves per-point pay unchanged at cutover.
-
-    Used once, to set the starting capacity from what the previous pegged mechanism was
-    already paying. Afterwards capacity only moves by controller steps.
-    """
-    if usd_per_point <= 0:
-        raise ValueError("usd_per_point must be positive")
-    return float(alpha_emission) * float(alpha_usd) / float(usd_per_point)
