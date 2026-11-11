@@ -87,6 +87,8 @@ class FetchConfig:
     # Longest wait for a domain slot; a longer wait raises Paced.
     pace_max_wait_s: float = float("inf")
     robots_ttl_s: float = 3600.0
+    # A robots.txt that could not be read counts as disallowing everything, for this long.
+    robots_retry_s: float = 60.0
     login_min_words: int = 40
     public_only: bool = True
     headers: Tuple[Tuple[str, str], ...] = ()
@@ -111,6 +113,8 @@ class FetchedPage:
     # robots.txt, a timeout, a connection error, a 5xx, a body that is not text, too big or
     # with no text found. A scoop may still cite it.
     unread: bool = False
+    # Why a page was blocked without a status: "robots", "not_public", "refused" or "walled".
+    blocked_by: Optional[str] = None
 
     @property
     def ok(self) -> bool:
@@ -227,7 +231,7 @@ def read_page(url: str, final_url: str, status: int, raw: bytes, html: str,
     if not text and not walled:
         return FetchedPage(reason=FETCH_FAILED, unread=True, **base)
     if walled:
-        return FetchedPage(reason=BLOCKED, unread=True, **base)
+        return FetchedPage(reason=BLOCKED, unread=True, blocked_by="walled", **base)
     published, inferred = publish_date(html, final_url or url)
     return FetchedPage(html=html, text=text, published_at=published, date_inferred=inferred,
                        canonical_url=canonical_url(html, final_url),
@@ -370,7 +374,8 @@ class Fetcher:
         hit = self._robots.get(key)
         if hit is None or hit[0] < time.monotonic():
             rp = await self._load_robots(f"{parts.scheme}://{parts.netloc}/robots.txt")
-            hit = (time.monotonic() + self.cfg.robots_ttl_s, rp)
+            ttl = self.cfg.robots_ttl_s if rp is not None else self.cfg.robots_retry_s
+            hit = (time.monotonic() + ttl, rp)
             self._robots[key] = hit
         return hit[1] is not None and hit[1].can_fetch(self.cfg.user_agent, url)
 
@@ -454,12 +459,12 @@ class Fetcher:
         parts = urlsplit(url)
         if parts.scheme not in ("http", "https") or not parts.hostname or (
                 self.cfg.public_only and not await _public(parts.hostname)):
-            return FetchedPage(url=url, reason=BLOCKED)
+            return FetchedPage(url=url, reason=BLOCKED, blocked_by="not_public")
         try:
             if not await self.allowed(url):
-                return FetchedPage(url=url, reason=BLOCKED, unread=True)
+                return FetchedPage(url=url, reason=BLOCKED, unread=True, blocked_by="robots")
         except _Refused:
-            return FetchedPage(url=url, reason=BLOCKED)
+            return FetchedPage(url=url, reason=BLOCKED, blocked_by="refused")
         for attempt in range(self.cfg.retries + 1):
             if attempt:
                 await asyncio.sleep(self.cfg.retry_delay_s)
@@ -472,7 +477,7 @@ class Fetcher:
                 return await asyncio.get_running_loop().run_in_executor(
                     _PARSE, read_page, url, *got, self.cfg)
             except _Refused:
-                return FetchedPage(url=url, reason=BLOCKED)
+                return FetchedPage(url=url, reason=BLOCKED, blocked_by="refused")
             except _Retry as e:
                 status = e.status
             except (asyncio.TimeoutError, httpx.TimeoutException):
@@ -500,6 +505,7 @@ class Fetcher:
                                    reason=FETCH_FAILED)
             if not await self.allowed(str(request.url)):
                 return FetchedPage(url=url, final_url=str(request.url), reason=BLOCKED,
+                                   blocked_by="robots",
                                    unread=True)
         return FetchedPage(url=url, final_url=str(request.url), reason=FETCH_FAILED)
 

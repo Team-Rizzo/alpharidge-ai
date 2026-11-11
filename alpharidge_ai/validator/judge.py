@@ -10,6 +10,7 @@ import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Callable, Dict, Optional, Set
+from urllib.parse import urlsplit
 
 import bittensor as bt
 
@@ -194,8 +195,9 @@ class JudgeWorker:
             self.tries[key] = self.tries.get(key, 0) + 1
             if self.tries[key] >= FETCH_TRIES:
                 self.done.add(key)
-            # Why, in the pull's summary: the fetch reason or the HTTP status.
-            return f"unreachable:{page.reason or page.status or 'none'}"
+            # Why, in the pull's summary: the fetch reason, its cause or HTTP status, the host.
+            host = urlsplit(page.final_url or page.url).hostname or "-"
+            return f"unreachable:{page.reason}:{page.blocked_by or page.status or '-'}:{host}"
         claim = claim_of(item, page.text)
         at = parse_datetime(item.get("at"))
         result = check_claim(claim, page, at) if claim is not None and at else None

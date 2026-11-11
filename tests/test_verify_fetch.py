@@ -384,3 +384,31 @@ def test_a_page_the_parser_refuses_is_a_failed_fetch():
                               headers={"content-type": "text/html"})
     got = _mock_fetch("https://news.example.org/a", handler)
     assert (got.ok, got.reason, got.unread) == (False, "fetch_failed", False)
+
+
+def test_an_unreadable_robots_txt_blocks_only_for_a_short_while():
+    calls = []
+
+    def handler(request):
+        if request.url.path == "/robots.txt":
+            calls.append(1)
+            if len(calls) == 1:
+                return httpx.Response(503, text="busy")
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+        return httpx.Response(200, content=ARTICLE, headers={"content-type": "text/html"})
+
+    async def go(retry_s):
+        f = Fetcher(FetchConfig(public_only=False, retry_delay_s=0, domain_rps=1000,
+                                robots_retry_s=retry_s), transport=httpx.MockTransport(handler))
+        try:
+            first = await f.fetch("https://news.example.org/a")
+            second = await f.fetch("https://news.example.org/a")
+        finally:
+            await f.aclose()
+        return first, second
+
+    first, second = asyncio.run(go(0))
+    assert (first.reason, first.blocked_by) == ("blocked", "robots") and second.ok
+    calls.clear()
+    first, second = asyncio.run(go(60))
+    assert not first.ok and not second.ok and len(calls) == 1
