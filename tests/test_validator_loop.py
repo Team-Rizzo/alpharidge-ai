@@ -814,3 +814,13 @@ def test_a_chain_call_that_stops_answering_times_out():
     with pytest.raises(ChainTimeout):
         bounded(stuck.wait, 0.05, "block read")
     stuck.set()
+
+
+def test_served_config_counts_as_loaded_only_after_a_good_read(monkeypatch):
+    from alpharidge_ai import config as cfg
+    monkeypatch.setattr(cfg, "_remote_config_last_fetch", 0.0)
+    monkeypatch.setattr(cfg, "MINER_API_URL", "http://127.0.0.1:9")
+    assert not cfg.remote_config_loaded()
+    assert cfg.refresh_remote_config(force=True) == {} and not cfg.remote_config_loaded()
+    monkeypatch.setattr(cfg, "_remote_config_last_fetch", 1.0)
+    assert cfg.remote_config_loaded()

@@ -167,6 +167,11 @@ def _version_tuple(v: str) -> tuple:
     return tuple(int(x) for x in v.split("."))
 
 
+def remote_config_loaded() -> bool:
+    """True once the served config has been read at least once."""
+    return _remote_config_last_fetch > 0
+
+
 def refresh_remote_config(force: bool = False) -> dict:
     """Fetch the served config from the API and apply it, unless a local OVERRIDE_<KEY> is set.
     Warns when this validator is below the minimum version. Returns the response ({} on

@@ -28,6 +28,10 @@ from alpharidge_ai.validator.watchdog import stall
 from alpharidge_ai.verify import parse_pool
 
 
+# Seconds between tries to read the served settings until the first read succeeds.
+CONFIG_RETRY_S = 60
+
+
 class Validator(BaseValidatorNeuron):
     """Validator neuron for SN45."""
 
@@ -56,6 +60,7 @@ class Validator(BaseValidatorNeuron):
             bt.logging.info("[JUDGE] no page judge set up; this validator judges no pages")
         self._judge = JudgeWorker(self._api, judge, fetcher=reverifier.fetcher)
         self._last_step = time.monotonic()
+        self._config_retry = time.monotonic()
         self._ledger = LedgerLoop(
             self._api, self.metagraph, lambda: int(self.block),
             reverifier=reverifier,
@@ -105,6 +110,12 @@ class Validator(BaseValidatorNeuron):
             self._mechanism_profile.resolve(block)
         except Exception as e:
             bt.logging.debug(f"[PROFILE] refresh failed: {e}")
+        if not config.remote_config_loaded() and (
+                time.monotonic() - self._config_retry >= CONFIG_RETRY_S):
+            # The served settings (the page judge's among them) were never read: try again
+            # each minute rather than at the hourly refresh.
+            self._config_retry = time.monotonic()
+            await asyncio.to_thread(config.refresh_remote_config, True)
         self._refresh_judge()
 
         self._scan.tick()
