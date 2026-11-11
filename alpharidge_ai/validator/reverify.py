@@ -50,7 +50,8 @@ def fetch_config() -> FetchConfig:
                        timeout_s=config.REVERIFY_FETCH_TIMEOUT_S,
                        retries=config.REVERIFY_FETCH_RETRY,
                        domain_rps=config.REVERIFY_DOMAIN_RPS,
-                       public_only=config.REVERIFY_FETCH_PUBLIC_ONLY)
+                       public_only=config.REVERIFY_FETCH_PUBLIC_ONLY,
+                       parse_timeout_s=config.REVERIFY_PARSE_TIMEOUT_S)
 
 
 def keyed(items: Iterable[dict], selector: Selector, rate: float) -> List[dict]:

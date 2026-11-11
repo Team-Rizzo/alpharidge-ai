@@ -53,7 +53,7 @@ _ENCODINGS = {"gzip": zlib.MAX_WBITS | 16, "x-gzip": zlib.MAX_WBITS | 16,
               "deflate": zlib.MAX_WBITS}
 # lxml and trafilatura corrupt the heap when pages are parsed in several threads at once, so
 # every page is parsed on this one thread.
-_PARSE = ThreadPoolExecutor(max_workers=1, thread_name_prefix="read_page")
+_PARSE = _THREAD = ThreadPoolExecutor(max_workers=1, thread_name_prefix="read_page")
 
 
 def user_agent(contact: str = "") -> str:
@@ -89,6 +89,9 @@ class FetchConfig:
     robots_ttl_s: float = 3600.0
     # A robots.txt that could not be read counts as disallowing everything, for this long.
     robots_retry_s: float = 60.0
+    # Longest one page may take to parse (0: no limit). Past it the page counts as unread
+    # and parse workers that can be restarted are.
+    parse_timeout_s: float = 0.0
     login_min_words: int = 40
     public_only: bool = True
     headers: Tuple[Tuple[str, str], ...] = ()
@@ -473,9 +476,19 @@ class Fetcher:
                 got = await asyncio.wait_for(self._get(url), self.cfg.timeout_s)
                 if isinstance(got, FetchedPage):
                     return got
-                # Parsing is outside the time limit: pages wait their turn on one thread.
-                return await asyncio.get_running_loop().run_in_executor(
+                # Parsing is outside the fetch time limit: pages wait their turn to parse.
+                parse = asyncio.get_running_loop().run_in_executor(
                     _PARSE, read_page, url, *got, self.cfg)
+                if not self.cfg.parse_timeout_s:
+                    return await parse
+                try:
+                    return await asyncio.wait_for(parse, self.cfg.parse_timeout_s)
+                except asyncio.TimeoutError:
+                    restart = getattr(_PARSE, "restart", None)
+                    if restart is not None:
+                        restart()
+                    return FetchedPage(url=url, final_url=got[0], status=got[1],
+                                       reason=FETCH_FAILED, unread=True)
             except _Refused:
                 return FetchedPage(url=url, reason=BLOCKED, blocked_by="refused")
             except _Retry as e:

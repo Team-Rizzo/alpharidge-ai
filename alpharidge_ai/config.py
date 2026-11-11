@@ -86,6 +86,9 @@ if LEDGER_REVERIFY_RATE != 1.0:
 
 # Re-verifying the keyed sample. Check values are constants in verify/check.py.
 REVERIFY_CONCURRENCY = int(os.getenv("REVERIFY_CONCURRENCY", "4"))
+# Processes that parse fetched pages, and the longest one page may take to parse.
+PARSE_PROCESSES = int(os.getenv("PARSE_PROCESSES", "2"))
+REVERIFY_PARSE_TIMEOUT_S = float(os.getenv("REVERIFY_PARSE_TIMEOUT_S", "60"))
 REVERIFY_USER_AGENT = os.getenv("REVERIFY_USER_AGENT", "")
 REVERIFY_FETCH_TIMEOUT_S = float(os.getenv("REVERIFY_FETCH_TIMEOUT_S", "15"))
 REVERIFY_FETCH_RETRY = int(os.getenv("REVERIFY_FETCH_RETRY", "1"))

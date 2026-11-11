@@ -25,6 +25,10 @@ import bittensor as bt
 from alpharidge_ai import __spec_version__ as spec_version
 from alpharidge_ai.config import check_config, add_args, neuron_config
 from alpharidge_ai.chain.mock import MockSubtensor, MockMetagraph
+from alpharidge_ai.chain.deadline import bounded
+
+# Longest a chain head read may take.
+BLOCK_DEADLINE_S = 30
 
 
 def ttl_cache(maxsize: int = 128, ttl: int = -1):
@@ -74,7 +78,7 @@ class BaseNeuron(ABC):
 
     @property
     def block(self):
-        return ttl_get_block(self)
+        return bounded(lambda: ttl_get_block(self), BLOCK_DEADLINE_S, "block read")
 
     def __init__(self, config=None):
         base_config = copy.deepcopy(config or BaseNeuron.config())

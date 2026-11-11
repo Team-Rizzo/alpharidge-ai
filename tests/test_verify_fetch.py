@@ -412,3 +412,46 @@ def test_an_unreadable_robots_txt_blocks_only_for_a_short_while():
     calls.clear()
     first, second = asyncio.run(go(60))
     assert not first.ok and not second.ok and len(calls) == 1
+
+
+def test_a_parse_that_never_finishes_counts_as_unread_and_restarts_the_workers(monkeypatch):
+    from concurrent.futures import Executor, Future
+    from alpharidge_ai.verify import fetch as fetch_mod
+
+    class Stuck(Executor):
+        restarts = 0
+
+        def submit(self, fn, /, *args, **kwargs):
+            return Future()
+
+        def restart(self):
+            Stuck.restarts += 1
+
+    monkeypatch.setattr(fetch_mod, "_PARSE", Stuck())
+
+    def handler(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+        return httpx.Response(200, content=ARTICLE, headers={"content-type": "text/html"})
+    got = _mock_fetch("https://news.example.org/a", handler, parse_timeout_s=0.05)
+    assert (got.reason, got.unread, got.status) == ("fetch_failed", True, 200)
+    assert Stuck.restarts == 1
+
+
+def test_pages_parse_the_same_in_worker_processes():
+    from dataclasses import asdict
+    from alpharidge_ai.verify import parse_pool
+
+    def handler(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+        return httpx.Response(200, content=ARTICLE, headers={"content-type": "text/html"})
+    here = asdict(_mock_fetch("https://news.example.org/a", handler))
+    parse_pool.install(1)
+    try:
+        there = asdict(_mock_fetch("https://news.example.org/a", handler, parse_timeout_s=60))
+        parse_pool._installed.restart()
+        again = asdict(_mock_fetch("https://news.example.org/a", handler))
+    finally:
+        parse_pool.uninstall()
+    assert there == here == again and here["text"]

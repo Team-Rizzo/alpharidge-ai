@@ -802,3 +802,15 @@ def test_a_finished_judge_pull_is_recorded_for_the_watchdog():
     w.last_pull = 0.0
     asyncio.run(w._safe())
     assert w.last_pull > 0
+
+
+def test_a_chain_call_that_stops_answering_times_out():
+    import threading
+    from alpharidge_ai.chain.deadline import ChainTimeout, bounded
+    assert bounded(lambda: 7, 1) == 7
+    with pytest.raises(ValueError):
+        bounded(lambda: (_ for _ in ()).throw(ValueError("x")), 1)
+    stuck = threading.Event()
+    with pytest.raises(ChainTimeout):
+        bounded(stuck.wait, 0.05, "block read")
+    stuck.set()

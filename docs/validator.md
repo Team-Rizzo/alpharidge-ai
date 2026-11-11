@@ -53,6 +53,8 @@ Set `API_KEY` (your judge key) and leave the rest as it is. The settings marked 
 | `VALIDATION_POLL_SECONDS` | `10` | Seconds between loop passes |
 | `AUDIT_KEY` | generated | Your private sample key. Leave it unset to have one generated and kept in `alpharidge_ai/.audit_key`. Never share it, and don't reuse one key across validators |
 | `REVERIFY_CONCURRENCY` | `4` | Re-check fetches in flight |
+| `PARSE_PROCESSES` | `2` | Worker processes that parse fetched pages |
+| `REVERIFY_PARSE_TIMEOUT_S` | `60` | Longest one page may take to parse; past it the page counts as unread and the parse workers restart |
 | `REVERIFY_FETCH_TIMEOUT_S` | `15`, served | Seconds per request (robots.txt, page, feed), with a 5 s connect limit; the API reads with the same limit |
 | `REVERIFY_FETCH_RETRY` | `1` | Retries of a failed re-check fetch |
 | `REVERIFY_DOMAIN_RPS` | `1`, served | Requests per second to any one domain |

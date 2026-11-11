@@ -22,6 +22,8 @@ VALIDATION_POLL_SECONDS=10
 
 # Re-check fetches
 # REVERIFY_CONCURRENCY=4
+# PARSE_PROCESSES=2
+# REVERIFY_PARSE_TIMEOUT_S=60
 # REVERIFY_FETCH_RETRY=1
 # Connect to public addresses only; false is refused outside --mock and local chains
 # REVERIFY_FETCH_PUBLIC_ONLY=true

@@ -32,6 +32,10 @@ from alpharidge_ai.chain.weight_utils import (
     convert_weights_and_uids_for_emit,
 )
 from alpharidge_ai.config import add_validator_args
+from alpharidge_ai.chain.deadline import ChainTimeout, bounded
+
+# Longest a step's chain sync (registration, metagraph, weights) may take.
+SYNC_DEADLINE_S = 180
 
 
 class BaseValidatorNeuron(BaseNeuron):
@@ -99,8 +103,8 @@ class BaseValidatorNeuron(BaseNeuron):
                 if self.should_exit:
                     break
 
-                # Sync metagraph and potentially set weights.
-                self.sync()
+                # Sync metagraph and potentially set weights, within a deadline.
+                bounded(self.sync, SYNC_DEADLINE_S, "chain sync")
 
                 self.step += 1
                 consecutive_errors = 0
@@ -109,6 +113,12 @@ class BaseValidatorNeuron(BaseNeuron):
             except KeyboardInterrupt:
                 bt.logging.success("Validator killed by keyboard interrupt.")
                 exit()
+
+            # A chain call that stopped answering: rebuild the connection now.
+            except ChainTimeout as err:
+                bt.logging.warning(f"[SYNC] {err}; rebuilding the chain connection")
+                self._reconnect_subtensor()
+                continue
 
             # Transient errors: log and continue the loop.
             except Exception as err:

@@ -5,7 +5,9 @@ import os
 os.environ.setdefault("BT_NO_PARSE_CLI_ARGS", "0")
 
 from alpharidge_ai.packages import repair_substrate_codec
-repair_substrate_codec()
+if __name__ == "__main__":
+    # Only in the validator process: page-parse workers import this module too.
+    repair_substrate_codec()
 
 import asyncio
 import time
@@ -23,6 +25,7 @@ from alpharidge_ai.validator.reverify import Reverifier
 from alpharidge_ai.validator.scan import Scanner
 from alpharidge_ai.validator.selector import Selector
 from alpharidge_ai.validator.watchdog import stall
+from alpharidge_ai.verify import parse_pool
 
 
 class Validator(BaseValidatorNeuron):
@@ -44,6 +47,7 @@ class Validator(BaseValidatorNeuron):
         self._mechanism_profile = ProfileClient()
         self._mechanism_profile.load()
 
+        parse_pool.install(config.PARSE_PROCESSES)
         reverifier = Reverifier(self._api, Selector(audit_key.load()))
         self._scan = Scanner(self._api, fetcher=reverifier.fetcher)
         self._judge_setup = self._judge_settings()
