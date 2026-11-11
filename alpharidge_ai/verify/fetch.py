@@ -15,7 +15,7 @@ import time
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from html import unescape
 from http.cookiejar import CookieJar, DefaultCookiePolicy
 from typing import Dict, Iterable, List, Optional, Tuple, Union
@@ -92,6 +92,10 @@ class FetchConfig:
     # Longest one page may take to parse (0: no limit). Past it the page counts as unread
     # and parse workers that can be restarted are.
     parse_timeout_s: float = 0.0
+    # Requests per second for particular hosts, (host, rate); others use domain_rps.
+    host_rps: Tuple[Tuple[str, float], ...] = ()
+    # How long a host that answered 429 without Retry-After is left alone.
+    throttle_s: float = 60.0
     login_min_words: int = 40
     public_only: bool = True
     headers: Tuple[Tuple[str, str], ...] = ()
@@ -126,6 +130,21 @@ class FetchedPage:
 
 class _Refused(Exception):
     pass
+
+
+def _retry_after(value: Optional[str], default: float) -> float:
+    """Seconds a Retry-After header asks for (a number or an HTTP date), else `default`."""
+    if not value:
+        return default
+    value = value.strip()
+    if value.isdigit():
+        return max(1.0, min(float(value), 3600.0))
+    try:
+        from email.utils import parsedate_to_datetime
+        at = parsedate_to_datetime(value)
+        return max(1.0, min((at - datetime.now(timezone.utc)).total_seconds(), 3600.0))
+    except (TypeError, ValueError):
+        return default
 
 
 class Paced(Exception):
@@ -367,7 +386,8 @@ class Fetcher:
         start = max(self._next.get(host, 0.0), now)
         if start - now > self.cfg.pace_max_wait_s:
             raise Paced(start - now)
-        self._next[host] = start + 1.0 / max(self.cfg.domain_rps, 1e-6)
+        rate = dict(self.cfg.host_rps).get(host, self.cfg.domain_rps)
+        self._next[host] = start + 1.0 / max(rate, 1e-6)
         if start > now:
             await asyncio.sleep(start - now)
 
@@ -527,6 +547,13 @@ class Fetcher:
         final, status = str(r.url), r.status_code
         if status >= 500:
             raise _Retry(status)
+        if status == 429:
+            # The host asks us to slow down: leave it alone for that long and fetch again
+            # later, rather than count the page as unreadable.
+            wait = _retry_after(r.headers.get("retry-after"), self.cfg.throttle_s)
+            host = urlsplit(final).netloc
+            self._next[host] = max(self._next.get(host, 0.0), time.monotonic() + wait)
+            raise Paced(wait)
         if status in (401, 402, 403, 407, 451):
             return FetchedPage(url=url, final_url=final, status=status, reason=BLOCKED,
                                unread=True)
