@@ -203,6 +203,32 @@ def test_a_filing_is_published_at_its_acceptance_time():
     assert asyncio.run(run(folder + "ex99.htm"))[0].reason == "fetch_failed"
 
 
+def test_a_filing_index_without_an_acceptance_time_is_read_again():
+    folder = "https://www.sec.gov/Archives/edgar/data/1023128/000102312826000057/"
+    index = folder + "0001023128-26-000057-index.htm"
+    accepted = '<div class="infoHead">Accepted</div>\n<div class="info">2026-10-15 17:33:31</div>'
+    bodies = ["<html>Request Rate Threshold Exceeded</html>", accepted]
+
+    def site(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="")
+        if str(request.url) == index:
+            return httpx.Response(200, text=bodies.pop(0))
+        return httpx.Response(200, content=ARTICLE, headers={"Content-Type": "text/html"})
+
+    async def run():
+        f = Fetcher(FetchConfig(public_only=False, domain_rps=1000, retry_delay_s=0),
+                    transport=httpx.MockTransport(site))
+        try:
+            return [await f.fetch(folder + "ex99.htm") for _ in range(2)]
+        finally:
+            await f.aclose()
+
+    first, second = asyncio.run(run())
+    assert first.reason == "fetch_failed"
+    assert second.published_at == datetime(2026, 10, 15, 21, 33, 31, tzinfo=timezone.utc)
+
+
 def test_a_busy_domain_never_leaves_a_filing_unread():
     import time
     folder = "https://www.sec.gov/Archives/edgar/data/1023128/000102312826000057/"
@@ -352,7 +378,7 @@ def test_robots_txt_is_read_with_the_same_cap():
 
 
 @pytest.mark.parametrize("status,unread", [(401, True), (402, True), (403, True), (407, True),
-                                           (429, True), (451, True), (404, False),
+                                           (451, True), (404, False),
                                            (410, False), (400, True), (418, True)])
 def test_a_page_held_back_is_unread_and_a_missing_one_is_not(status, unread):
     def handler(request):
@@ -455,3 +481,43 @@ def test_pages_parse_the_same_in_worker_processes():
     finally:
         parse_pool.uninstall()
     assert there == here == again and here["text"]
+
+
+def test_a_host_that_answers_429_is_left_alone_for_its_retry_after():
+    from alpharidge_ai.verify.fetch import Paced
+
+    def handler(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+        return httpx.Response(429, text="slow down", headers={"retry-after": "30"})
+
+    async def go():
+        f = Fetcher(FetchConfig(public_only=False, retries=0, pace_max_wait_s=1,
+                                host_rps=(("news.example.org", 1000),)),
+                    transport=httpx.MockTransport(handler))
+        try:
+            with pytest.raises(Paced) as first:
+                await f.fetch("https://news.example.org/a")
+            with pytest.raises(Paced) as second:
+                await f.fetch("https://news.example.org/b")
+        finally:
+            await f.aclose()
+        return first.value.wait_s, second.value.wait_s
+
+    first, second = asyncio.run(go())
+    assert first == 30 and 28 < second <= 30
+
+
+def test_a_host_rate_spaces_that_hosts_requests_only():
+    from alpharidge_ai.verify.fetch import Paced
+
+    async def go():
+        f = Fetcher(FetchConfig(public_only=False, pace_max_wait_s=1, domain_rps=1000,
+                                host_rps=(("slow.example", 0.2),)))
+        await f._pace("slow.example")
+        await f._pace("fast.example")
+        await f._pace("fast.example")
+        with pytest.raises(Paced):
+            await f._pace("slow.example")
+        await f.aclose()
+    asyncio.run(go())

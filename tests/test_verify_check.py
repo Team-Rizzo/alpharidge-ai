@@ -401,3 +401,41 @@ def test_status_page_times_in_seconds_or_after_a_mark():
           'Nov 9, 2026, 16:34 UTC</time></div>')
     assert publish_date(cf, "https://www.cloudflarestatus.com/incidents/x")[0] == \
         datetime(2026, 11, 9, 16, 34, 35, 355000, tzinfo=timezone.utc)
+
+
+def test_a_breakthrough_names_an_organisation_and_a_listed_kind(monkeypatch):
+    from alpharidge_ai.verify import check
+    from alpharidge_ai.verify.check import author_list, check_unread
+
+    text = ("Acme Labs said on Tuesday its team built a solar cell that converts 47.6% of "
+            "sunlight, a record for the design.")
+
+    def bt(name, kind="record"):
+        return claim(event_type="breakthrough", category="technology",
+                     headline="Acme Labs sets a solar record",
+                     actors=[{"id_scheme": "other", "id": "x", "role": "organisation",
+                              "name": name}],
+                     facts=[{"field": "result", "value": "a 47.6% efficient solar cell"},
+                            {"field": "kind", "value": kind}],
+                     quote=text)
+
+    for name in ("Kuchel, P.W., Yong, KT., Mohanty, B. et al.", "Xu, B., Liu, M.",
+                 "Smith J et al"):
+        assert author_list(name), name
+    for name in ("Acme Labs", "Moderna, Inc.", "Novo Nordisk, U.S.", "Smith, Jones & Co.",
+                 "Johnson & Johnson"):
+        assert not author_list(name), name
+    authors = bt("Xu, B., Liu, M. et al.")
+    published = bt("Acme Labs", kind="published")
+    # Before the rules take effect neither is refused for it.
+    assert check_claim(authors, page(text), RECEIVED).reason != "not_an_event"
+    assert check_claim(published, page(text), RECEIVED).reason != "not_an_event"
+    monkeypatch.setattr(check, "BREAKTHROUGH_RULES_FROM", RECEIVED)
+    got = check_claim(authors, page(text), RECEIVED)
+    assert (got.reason, got.detail) == ("not_an_event", {"subject": "Xu, B., Liu, M. et al."})
+    got = check_claim(published, page(text), RECEIVED)
+    assert (got.reason, got.detail) == ("not_an_event", {"fact": "kind"})
+    assert check_unread(authors, RECEIVED).reason == "not_an_event"
+    assert check_claim(bt("Acme Labs"), page(text), RECEIVED).reason != "not_an_event"
+    # Other types are not touched.
+    assert check_claim(claim(), page(DEAL), RECEIVED).reason != "not_an_event"

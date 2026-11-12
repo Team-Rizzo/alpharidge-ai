@@ -89,6 +89,9 @@ REVERIFY_CONCURRENCY = int(os.getenv("REVERIFY_CONCURRENCY", "4"))
 # Processes that parse fetched pages, and the longest one page may take to parse.
 PARSE_PROCESSES = int(os.getenv("PARSE_PROCESSES", "2"))
 REVERIFY_PARSE_TIMEOUT_S = float(os.getenv("REVERIFY_PARSE_TIMEOUT_S", "60"))
+# Longest a fetch waits for its host's next slot (a host that answered 429 is left alone for
+# its Retry-After); a longer wait gives the item back to the next pull.
+REVERIFY_PACE_MAX_WAIT_S = float(os.getenv("REVERIFY_PACE_MAX_WAIT_S", "30"))
 REVERIFY_USER_AGENT = os.getenv("REVERIFY_USER_AGENT", "")
 REVERIFY_FETCH_TIMEOUT_S = float(os.getenv("REVERIFY_FETCH_TIMEOUT_S", "15"))
 REVERIFY_FETCH_RETRY = int(os.getenv("REVERIFY_FETCH_RETRY", "1"))
@@ -165,6 +168,11 @@ def _build_auth_headers(method: str = "GET", url: str = "/") -> dict:
 
 def _version_tuple(v: str) -> tuple:
     return tuple(int(x) for x in v.split("."))
+
+
+def remote_config_loaded() -> bool:
+    """True once the served config has been read at least once."""
+    return _remote_config_last_fetch > 0
 
 
 def refresh_remote_config(force: bool = False) -> dict:

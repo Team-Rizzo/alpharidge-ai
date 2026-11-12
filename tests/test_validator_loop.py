@@ -814,3 +814,40 @@ def test_a_chain_call_that_stops_answering_times_out():
     with pytest.raises(ChainTimeout):
         bounded(stuck.wait, 0.05, "block read")
     stuck.set()
+
+
+def test_served_config_counts_as_loaded_only_after_a_good_read(monkeypatch):
+    from alpharidge_ai import config as cfg
+    monkeypatch.setattr(cfg, "_remote_config_last_fetch", 0.0)
+    monkeypatch.setattr(cfg, "MINER_API_URL", "http://127.0.0.1:9")
+    assert not cfg.remote_config_loaded()
+    assert cfg.refresh_remote_config(force=True) == {} and not cfg.remote_config_loaded()
+    monkeypatch.setattr(cfg, "_remote_config_last_fetch", 1.0)
+    assert cfg.remote_config_loaded()
+
+
+def test_a_judge_item_on_a_host_that_is_being_left_alone_is_served_again_later(monkeypatch):
+    from alpharidge_ai.validator import judge as vj
+    from alpharidge_ai.verify.fetch import Paced
+
+    async def judge_item(self, item, types=None):
+        raise Paced(120)
+    monkeypatch.setattr(vj.JudgeWorker, "judge_item", judge_item)
+    w = vj.JudgeWorker(JudgeAPI([{"kind": "claim", "claim_id": "1", "key": "k1"}]),
+                       ScriptedJudge({"subject": "yes"}))
+    assert asyncio.run(w.run()) == {"paced": 1} and "k1" not in w.done and not w.tries
+
+
+def test_judge_spend_survives_a_restart_within_the_day(tmp_path):
+    from datetime import datetime, timezone
+    from alpharidge_ai.validator import judge as vj
+    path = tmp_path / ".judge_spend_state.json"
+    now = [datetime(2026, 11, 12, 9, tzinfo=timezone.utc)]
+    spend = vj.Spend(1.0, lambda: now[0], path)
+    spend.add(0.9)
+    again = vj.Spend(1.0, lambda: now[0], path)
+    assert again.usd == 0.9 and not again.room(0.2)
+    now[0] = datetime(2026, 11, 13, 0, 1, tzinfo=timezone.utc)
+    assert again.room(0.2)
+    path.write_text("not json")
+    assert vj.Spend(1.0, lambda: now[0], path).room(0.2)
