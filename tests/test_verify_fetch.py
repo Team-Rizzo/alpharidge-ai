@@ -203,6 +203,32 @@ def test_a_filing_is_published_at_its_acceptance_time():
     assert asyncio.run(run(folder + "ex99.htm"))[0].reason == "fetch_failed"
 
 
+def test_a_filing_index_without_an_acceptance_time_is_read_again():
+    folder = "https://www.sec.gov/Archives/edgar/data/1023128/000102312826000057/"
+    index = folder + "0001023128-26-000057-index.htm"
+    accepted = '<div class="infoHead">Accepted</div>\n<div class="info">2026-10-15 17:33:31</div>'
+    bodies = ["<html>Request Rate Threshold Exceeded</html>", accepted]
+
+    def site(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="")
+        if str(request.url) == index:
+            return httpx.Response(200, text=bodies.pop(0))
+        return httpx.Response(200, content=ARTICLE, headers={"Content-Type": "text/html"})
+
+    async def run():
+        f = Fetcher(FetchConfig(public_only=False, domain_rps=1000, retry_delay_s=0),
+                    transport=httpx.MockTransport(site))
+        try:
+            return [await f.fetch(folder + "ex99.htm") for _ in range(2)]
+        finally:
+            await f.aclose()
+
+    first, second = asyncio.run(run())
+    assert first.reason == "fetch_failed"
+    assert second.published_at == datetime(2026, 10, 15, 21, 33, 31, tzinfo=timezone.utc)
+
+
 def test_a_busy_domain_never_leaves_a_filing_unread():
     import time
     folder = "https://www.sec.gov/Archives/edgar/data/1023128/000102312826000057/"

@@ -454,6 +454,9 @@ class Fetcher:
                 text = None
             if text is None:
                 return None
+            if accepted_at(text) is None:
+                # Not an index page (an error page served as one): read again next time.
+                return text
             while len(self._indexes) >= FILING_INDEX_CACHE_MAX:
                 del self._indexes[next(iter(self._indexes))]
             self._indexes[index] = text
