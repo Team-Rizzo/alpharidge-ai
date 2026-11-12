@@ -53,6 +53,34 @@ def _fail(reason: str, **kw) -> CheckResult:
     return CheckResult(REJECTED, reason, **kw)
 
 
+# ---- type rules ----------------------------------------------------------------------
+
+# Claims received from this time on: a breakthrough's subject is an organisation, never a
+# paper's author list, and its kind is one the type lists.
+BREAKTHROUGH_RULES_FROM = datetime(2099, 1, 1, tzinfo=timezone.utc)
+_ET_AL = re.compile(r"\bet\s+al\b", re.I)
+_AUTHOR = re.compile(r"\b[A-Z][\w'’-]+,\s*(?:[A-Z]{1,2}\.\s*-?\s*)+")
+
+
+def author_list(name: Optional[str]) -> bool:
+    """A name written as a paper's authors: "et al." or two or more "Surname, A." entries."""
+    return bool(name) and bool(_ET_AL.search(name) or len(_AUTHOR.findall(name)) >= 2)
+
+
+def type_rule(claim, received_at: datetime) -> Optional[CheckResult]:
+    if getattr(claim.event_type, "value", claim.event_type) != "breakthrough" or (
+            received_at < BREAKTHROUGH_RULES_FROM):
+        return None
+    spec = TYPE_SPEC[claim.event_type]
+    for a in claim.actors:
+        if (not a.role or a.role in spec.subject_roles) and author_list(a.name or a.id):
+            return _fail("not_an_event", detail={"subject": a.name or a.id})
+    listed = spec.fields.get("kind", {}).get("values", {})
+    if any(f.field == "kind" and str(f.value) not in listed for f in claim.facts):
+        return _fail("not_an_event", detail={"fact": "kind"})
+    return None
+
+
 # ---- names ---------------------------------------------------------------------------
 
 _SUFFIXES = frozenset(
@@ -266,6 +294,9 @@ def check_claim(claim, page: FetchedPage, received_at: datetime,
     # 1-2. Page rules, then a page that can't be read.
     if excluded:
         return _fail("page_type")
+    ruled = type_rule(claim, received_at)
+    if ruled:
+        return ruled
     if not page.ok:
         return _fail(page.reason or "fetch_failed")
     lang = detect_language(page.text[:5000])
@@ -312,6 +343,9 @@ def check_unread(claim, received_at: datetime, excluded: Optional[str] = None) -
     """A scoop whose page could not be read: the page rules, then the event date's gates."""
     if excluded:
         return _fail("page_type")
+    ruled = type_rule(claim, received_at)
+    if ruled:
+        return ruled
     day, gate = _day(claim.event_date), timedelta(days=MAX_AGE_D)
     if day > _day(received_at) + timedelta(days=FUTURE_SLACK_D):
         why = "future_date"

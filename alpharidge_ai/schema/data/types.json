@@ -203,11 +203,11 @@
   "breakthrough": {
     "tier": "high", "category": "technology", "group": "breakthrough", "label": "breakthrough", "window_days": 3, "place_level": "none", "max_subjects": 2,
     "definition": "{subject} reporting a new scientific or technical result[ ({kind})]: {result}",
-    "about": "a company, university, lab or agency reporting a new scientific or technical result: a first, a record or a peer-reviewed finding",
-    "notes": {"event": " The organisation, its researchers or a peer-reviewed journal must report the result as achieved. A product going on sale, a goal, a plan, a grant, a result it only expects, or what the work could lead to is not this.", "whole": " Any institution that led or co-led the work is the party, even when others took part.", "status": " A result the organisation or a journal reports as achieved or published is fact; an aim, a target, an expected result, a possible use, or a result the page calls possible, tentative or unconfirmed (\"may have\") is not."},
+    "about": "a company, university, lab or agency reporting a new scientific or technical result it achieved: a first, a record, a working demonstration, or a study or trial result",
+    "notes": {"event": " The organisation or its researchers achieved the result, and the page reports it as achieved. A publication itself (a paper published, accepted or posted), a survey or poll, a ranking, a report or index, a customer or marketing study, an opinion, a forecast or a possible use is not this; nor is a product going on sale, a goal, a plan, a grant or a result it only expects.", "whole": " Any institution that led or co-led the work is the party, even when others took part. A person, or a paper's authors, is never the party.", "status": " A result the organisation reports as achieved is fact; an aim, a target, an expected result, a possible use, or a result the page calls possible, tentative or unconfirmed (\"may have\") is not."},
     "fields": {
       "result": {"kind": "text", "ask": "Does the page describe the result as {v} (or the same thing in other words)?"},
-      "kind": {"kind": "qualifier", "values": {"first": "a first", "record": "a record", "published": "a peer-reviewed published finding"}},
+      "kind": {"kind": "qualifier", "values": {"first": "a first", "record": "a record"}},
       "research_field": {"kind": "text", "ask": "Is the work in {v}?"},
       "value": {"text": "the measured result"},
       "journal": {"kind": "text", "ask": "Does the page say it was published in {v}?"},
