@@ -836,3 +836,18 @@ def test_a_judge_item_on_a_host_that_is_being_left_alone_is_served_again_later(m
     w = vj.JudgeWorker(JudgeAPI([{"kind": "claim", "claim_id": "1", "key": "k1"}]),
                        ScriptedJudge({"subject": "yes"}))
     assert asyncio.run(w.run()) == {"paced": 1} and "k1" not in w.done and not w.tries
+
+
+def test_judge_spend_survives_a_restart_within_the_day(tmp_path):
+    from datetime import datetime, timezone
+    from alpharidge_ai.validator import judge as vj
+    path = tmp_path / ".judge_spend_state.json"
+    now = [datetime(2026, 11, 12, 9, tzinfo=timezone.utc)]
+    spend = vj.Spend(1.0, lambda: now[0], path)
+    spend.add(0.9)
+    again = vj.Spend(1.0, lambda: now[0], path)
+    assert again.usd == 0.9 and not again.room(0.2)
+    now[0] = datetime(2026, 11, 13, 0, 1, tzinfo=timezone.utc)
+    assert again.room(0.2)
+    path.write_text("not json")
+    assert vj.Spend(1.0, lambda: now[0], path).room(0.2)

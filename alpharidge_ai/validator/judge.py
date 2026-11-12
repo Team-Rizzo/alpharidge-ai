@@ -7,8 +7,10 @@ judge calls and stops pulling at its daily cap.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Callable, Dict, Optional, Set
 from urllib.parse import urlsplit
 
@@ -63,11 +65,19 @@ def verdict_body(item: dict, claim: Optional[Claim], content_hash: str, answers:
 
 
 class Spend:
-    """This validator's judge spend in the current UTC day."""
+    """This validator's judge spend in the current UTC day, kept in a file when given one so a
+    restart does not reset it."""
 
-    def __init__(self, cap_usd: float, clock: Callable[[], datetime]):
-        self.cap, self.clock = float(cap_usd), clock
+    def __init__(self, cap_usd: float, clock: Callable[[], datetime],
+                 path: Optional[Path] = None):
+        self.cap, self.clock, self.path = float(cap_usd), clock, path
         self.day, self.usd = None, 0.0
+        if path is not None:
+            try:
+                saved = json.loads(path.read_text())
+                self.day, self.usd = date.fromisoformat(saved["day"]), float(saved["usd"])
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
 
     def _roll(self) -> None:
         today = self.clock().date()
@@ -81,19 +91,27 @@ class Spend:
     def add(self, usd: float) -> None:
         self._roll()
         self.usd += usd
+        if self.path is not None:
+            try:
+                tmp = self.path.with_suffix(".tmp")
+                tmp.write_text(json.dumps({"day": self.day.isoformat(), "usd": self.usd}))
+                tmp.replace(self.path)
+            except OSError:
+                pass
 
 
 class JudgeWorker:
     def __init__(self, client, judge=None, fetcher: Optional[Fetcher] = None,
                  interval: Optional[float] = None, cap_usd: Optional[float] = None,
                  concurrency: Optional[int] = None,
-                 clock: Optional[Callable[[], datetime]] = None):
+                 clock: Optional[Callable[[], datetime]] = None,
+                 spend_path: Optional[Path] = None):
         self.client, self.judge = client, judge
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self._fetcher = fetcher
         self.interval = float(config.JUDGE_POLL_S if interval is None else interval)
         self.spend = Spend(config.JUDGE_DAILY_CAP_USD if cap_usd is None else cap_usd,
-                           self.clock)
+                           self.clock, spend_path)
         self.concurrency = max(1, int(concurrency or config.REVERIFY_CONCURRENCY))
         self.done: Set[str] = set()
         self.tries: Dict[str, int] = {}

@@ -11,6 +11,7 @@ if __name__ == "__main__":
 
 import asyncio
 import time
+from pathlib import Path
 
 import bittensor as bt
 from alpharidge_ai import config
@@ -30,6 +31,9 @@ from alpharidge_ai.verify import parse_pool
 
 # Seconds between tries to read the served settings until the first read succeeds.
 CONFIG_RETRY_S = 60
+# The day's judge spend, kept across restarts.
+JUDGE_SPEND_PATH = (Path(__file__).resolve().parent.parent / "alpharidge_ai"
+                    / ".judge_spend_state.json")
 
 
 class Validator(BaseValidatorNeuron):
@@ -58,7 +62,8 @@ class Validator(BaseValidatorNeuron):
         judge = from_env({**os.environ, **self._judge_setup})
         if judge is None:
             bt.logging.info("[JUDGE] no page judge set up; this validator judges no pages")
-        self._judge = JudgeWorker(self._api, judge, fetcher=reverifier.fetcher)
+        self._judge = JudgeWorker(self._api, judge, fetcher=reverifier.fetcher,
+                                  spend_path=JUDGE_SPEND_PATH)
         self._last_step = time.monotonic()
         self._config_retry = time.monotonic()
         self._ledger = LedgerLoop(
