@@ -306,6 +306,29 @@ def test_reverify_fetches_the_page_the_api_ended_at():
     assert asyncio.run(run(_item("1", claim)))["verdict"] == DISAGREE
 
 
+def test_reverify_checks_a_restamped_page_at_the_date_the_api_saw():
+    claim = _deal()
+    restamped = PAGE.replace("2026-10-13T12:00:00Z", "2026-10-14T09:00:00Z")
+
+    def site(request):
+        if request.url.path == "/robots.txt":
+            return _site(request)
+        return httpx.Response(200, text=restamped, headers={"content-type": "text/html"})
+
+    async def run(item):
+        fetcher = Fetcher(FetchConfig(public_only=False, domain_rps=1000, retry_delay_s=0),
+                          transport=httpx.MockTransport(site))
+        try:
+            return await reverify(item, fetcher, JUDGES)
+        finally:
+            await fetcher.aclose()
+
+    seen = {**_item("1", claim), "published_at": "2026-10-13T12:00:00.000Z"}
+    assert asyncio.run(run(seen))["verdict"] == AGREE
+    late = {**seen, "published_at": "2026-10-13T12:50:00.000Z"}
+    assert asyncio.run(run(late))["observed"]["reason"] == "pre_published"
+    assert asyncio.run(run(_item("1", claim)))["observed"]["reason"] == "pre_published"
+
 def test_a_held_back_claim_binds_by_its_body_hash_and_is_checked_after_settle():
     full = _item("1", _deal())
     held = {**{k: v for k, v in full.items() if k not in ("body", "judge")},

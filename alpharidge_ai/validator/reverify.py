@@ -19,6 +19,7 @@ import asyncio
 import json
 import math
 from collections import Counter
+from dataclasses import replace
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import bittensor as bt
@@ -289,6 +290,10 @@ async def reverify(item: dict, fetcher: Fetcher, judges=()) -> dict:
     page = await fetcher.fetch(item.get("final_url") or claim.source_url)
     if page.reason in (FETCH_FAILED, BLOCKED):
         return _result(item, UNREACHABLE, reason=page.reason, status=page.status)
+    # A page restamped since the API read it (an update) is checked at the date the API saw.
+    stored = parse_datetime(item.get("published_at"))
+    if stored is not None and page.published_at is not None and page.published_at > stored:
+        page = replace(page, published_at=stored, date_inferred=False)
     got = check_claim(claim, page, received)
     observed = {"verdict": got.verdict, "reason": got.reason, "content_hash": page.content_hash}
     if not got.passed:
