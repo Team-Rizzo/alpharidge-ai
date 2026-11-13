@@ -781,10 +781,33 @@ def test_a_stuck_judge_item_times_out_and_the_pull_still_finishes(monkeypatch):
     w = vj.JudgeWorker(JudgeAPI(items), ScriptedJudge({"subject": "yes"}))
     assert asyncio.run(w.run()) == {"posted": 2, "timeout": 1}
     assert w.tries == {"k1": 1} and "k1" not in w.done
-    monkeypatch.setattr(vj, "BATCH_TIMEOUT_S", 0.05)
-    monkeypatch.setattr(vj, "ITEM_TIMEOUT_S", 3600)
-    assert asyncio.run(vj.JudgeWorker(JudgeAPI(items), ScriptedJudge({"subject": "yes"})).run()) \
-        == {"posted": 2, "late": 1}
+
+
+def test_a_slow_judge_item_never_holds_up_the_next_pull(monkeypatch):
+    from alpharidge_ai.validator import judge as vj
+    items = [{"kind": "claim", "claim_id": str(i), "key": f"k{i}"} for i in range(3)]
+    monkeypatch.setattr(vj, "PULL_WAIT_S", 0.05)
+    slow = {"k1": 0.3}
+    started = []
+
+    async def judge_item(self, item, types=None):
+        started.append(item["key"])
+        await asyncio.sleep(slow.get(item["key"], 0))
+        self.done.add(item["key"])
+        return "posted"
+    monkeypatch.setattr(vj.JudgeWorker, "judge_item", judge_item)
+
+    async def pulls():
+        w = vj.JudgeWorker(JudgeAPI(items), ScriptedJudge({"subject": "yes"}), concurrency=2)
+        first = await w.run()
+        again = await w.run()
+        await asyncio.sleep(0.4)
+        return first, again, await w.run()
+    first, again, last = asyncio.run(pulls())
+    assert first == {"posted": 2, "running": 1}
+    # k1 is still running, so it is not served again; the next pull does not wait for it.
+    assert again == {"running": 1} and started.count("k1") == 1
+    assert last == {"posted": 1}
 
 
 def test_the_watchdog_names_a_stalled_step_or_judge_loop():
@@ -851,3 +874,49 @@ def test_judge_spend_survives_a_restart_within_the_day(tmp_path):
     assert again.room(0.2)
     path.write_text("not json")
     assert vj.Spend(1.0, lambda: now[0], path).room(0.2)
+
+
+def test_a_ledger_step_that_runs_over_keeps_the_last_weights(monkeypatch):
+    from alpharidge_ai.validator import loop as loop_mod
+    monkeypatch.setattr(loop_mod, "WEIGHTS_STEP_S", 0.05)
+    lp = loop(api(signed_points()))
+
+    async def stuck(epoch):
+        await asyncio.sleep(3600)
+    monkeypatch.setattr(lp, "weights", stuck)
+    assert asyncio.run(lp.tick()) is None and lp._weights_epoch is None
+
+
+def test_scan_matching_keeps_to_its_budget_and_never_blocks_the_loop(monkeypatch):
+    from dataclasses import replace
+    from alpharidge_ai.validator import scan as vscan
+    base = parse_scoop(OPEN)
+    scoops = [replace(base, id=i) for i in range(3)]
+    keyed = [(i, vscan.item_keys(i)) for i in parse_sitemap(SITEMAP)]
+    assert list(vscan.match_items(scoops, keyed)) == [0, 1, 2]
+    assert vscan.match_items(scoops, keyed)[0] == {WIRE_URL: keyed[0][0].published}
+    # Past the budget, scoops not reached are left for a later scan; one is always matched.
+    assert list(vscan.match_items(scoops, keyed, budget_s=0)) == [0]
+    assert vscan.match_items(scoops, keyed, {0: 3}, [1, 2, 3])[0] == {}
+
+    import time
+    real = vscan.mentions
+
+    def slow(*a, **kw):
+        time.sleep(0.05)
+        return real(*a, **kw)
+    monkeypatch.setattr(vscan, "mentions", slow)
+
+    async def both():
+        ticks = 0
+
+        async def beat():
+            nonlocal ticks
+            while True:
+                ticks += 1
+                await asyncio.sleep(0.01)
+        task = asyncio.create_task(beat())
+        await asyncio.to_thread(vscan.match_items, scoops, keyed)
+        task.cancel()
+        return ticks
+    assert asyncio.run(both()) > 10

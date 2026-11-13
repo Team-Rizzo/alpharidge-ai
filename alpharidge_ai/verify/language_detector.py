@@ -6,6 +6,7 @@ Short or undetectable text falls back to ``en`` with confidence 0.0.
 
 from __future__ import annotations
 
+import threading
 from typing import NamedTuple
 
 from langdetect import DetectorFactory, detect_langs
@@ -15,6 +16,9 @@ from langdetect.lang_detect_exception import LangDetectException
 DetectorFactory.seed = 0
 
 _DEFAULT_CODE = "en"
+# langdetect loads its language profiles on first use, and a detection racing that load in
+# another thread can come out wrong; one detection at a time.
+_LOCK = threading.Lock()
 
 
 class LanguageResult(NamedTuple):
@@ -36,7 +40,8 @@ def detect_language(text: str) -> LanguageResult:
         return LanguageResult(_DEFAULT_CODE, 0.0)
 
     try:
-        langs = detect_langs(text)
+        with _LOCK:
+            langs = detect_langs(text)
     except LangDetectException:
         return LanguageResult(_DEFAULT_CODE, 0.0)
 

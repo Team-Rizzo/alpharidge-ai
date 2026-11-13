@@ -31,6 +31,9 @@ STALE_WARN_EPOCHS = 3
 # Unchecked epochs are caught up while inside the API's re-verify deadline, a few per tick.
 REVERIFY_DEADLINE_H = 24
 REVERIFY_EPOCHS_PER_TICK = 3
+# Longest one epoch's pull and weights may take; past it the last weights are kept and the
+# epoch is tried again on the next step.
+WEIGHTS_STEP_S = 240
 # Claims whose page was held back are re-verified once they settle, inside the same span.
 # A signed profile's ledger.settle_delay_h overrides it.
 SETTLE_DELAY_H = 72
@@ -253,7 +256,7 @@ class LedgerLoop:
         weights = None
         if epoch != self._weights_epoch:
             try:
-                weights = await self.weights(epoch)
+                weights = await asyncio.wait_for(self.weights(epoch), WEIGHTS_STEP_S)
             except Exception as e:
                 bt.logging.warning(f"[LEDGER] epoch={epoch} pull failed: {e!r}")
                 return self._stale(epoch)

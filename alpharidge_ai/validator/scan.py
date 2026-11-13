@@ -42,6 +42,8 @@ OFF_S = 6 * 3600
 FEED_MIN_S, FEED_MAX_S = 120, 1800
 ITEMS_KEEP_S = 5 * 86400
 ITEMS_MAX = 100_000
+# Seconds of matching per scan; scoops not reached are matched on later scans.
+MATCH_BUDGET_S = 60
 FILING_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{acc}/{doc}"
 
 
@@ -161,17 +163,44 @@ def item_words(item: Item) -> Tuple[Tuple[str, ...], ...]:
             name_words(item.summary))
 
 
-def mentions(scoop: Scoop, item: Item, words: Optional[Tuple] = None) -> bool:
+def item_keys(item: Item) -> Tuple[str, str, Tuple]:
+    """What an item is matched on, worked out once per item: its normalised title, its URL
+    slug and its words."""
+    return floor.normalize(item.title).text, _slug(item.url), item_words(item)
+
+
+def mentions(scoop: Scoop, item: Item, keys: Optional[Tuple] = None) -> bool:
     """The item's title, URL slug or summary names one of the scoop's subjects, as written,
     shorter or longer, or gives one of its tickers."""
-    title, slug = floor.normalize(item.title).text, _slug(item.url)
+    title, slug, words = keys or item_keys(item)
     if any(find(title, f) or find(slug, f.replace(".", "").replace(",", ""))
            for s in scoop.subjects for f in name_forms(s)):
         return True
     if any(ticker_on(t, item.title) or ticker_on(t, item.summary) for t in scoop.tickers):
         return True
-    words = words or item_words(item)
     return any(named_in(w, s) for s in scoop.subjects for w in words if w)
+
+
+def match_items(scoops: List[Scoop], items: List[Tuple[Item, Tuple]],
+                after: Optional[Dict[int, int]] = None, numbers: Optional[List[int]] = None,
+                budget_s: Optional[float] = None) -> Dict[int, Dict[str, Optional[datetime]]]:
+    """Per scoop matched, the items that name it, published from its `since` on; with `after`
+    and `numbers`, only items numbered after the scoop's last look. Scoops are taken in turn
+    until `budget_s` is spent; those not reached are left out. CPU only, for a worker
+    thread."""
+    stop = None if budget_s is None else time.monotonic() + budget_s
+    out: Dict[int, Dict[str, Optional[datetime]]] = {}
+    for s in scoops:
+        if stop is not None and out and time.monotonic() >= stop:
+            break
+        named = out.setdefault(s.id, {})
+        upto = (after or {}).get(s.id, 0)
+        for k, (item, keys) in enumerate(items):
+            if numbers is not None and numbers[k] <= upto:
+                continue
+            if (item.published is None or item.published >= s.since) and mentions(s, item, keys):
+                named[item.url] = item.published
+    return out
 
 
 def held_claim(scoop: Scoop, url: str, text: str) -> Optional[Claim]:
@@ -323,7 +352,7 @@ class Scanner:
                 had = self._items.get(i.url)
                 if had is None:
                     self._count += 1
-                    had = (i, now, self._count, item_words(i))
+                    had = (i, now, self._count, item_keys(i))
                 self._items[i.url] = (had[0], now, had[2], had[3])
         finally:
             if state.due == float("inf"):
@@ -362,15 +391,20 @@ class Scanner:
         items = list(self._items.values())
         own = {s.id: await asyncio.gather(*(sec(c, s.since) for c in s.ciks)) for s in scoops}
 
+        # Matching is CPU only and grows with scoops times items: a worker thread keeps the
+        # event loop, and with it judging and weights, running meanwhile.
+        upto, count = {s.id: self._seen[s.id].upto for s in scoops}, self._count
+        # Scoops furthest behind go first, so a new scoop is not starved by the budget.
+        order = sorted(scoops, key=lambda s: upto[s.id])
+        found = await asyncio.to_thread(match_items, order, [(i, k) for i, _, _, k in items],
+                                        upto, [n for _, _, n, _ in items], MATCH_BUDGET_S)
         work = []
         last = datetime.max.replace(tzinfo=timezone.utc)
         for s in scoops:
             seen = self._seen[s.id]
-            for item, _, n, words in items:
-                if n > seen.upto and (item.published is None or item.published >= s.since) \
-                        and mentions(s, item, words):
-                    seen.named[item.url] = item.published
-            seen.upto = self._count
+            if s.id in found:
+                seen.named.update(found[s.id])
+                seen.upto = count
             pool = {i.url: i.published for g in own[s.id] for i in g}
             pool.update((u, p) for u, p in seen.named.items() if u not in seen.urls)
             fresh = [u for u in sorted(pool, key=lambda u: pool[u] or last)
@@ -415,6 +449,6 @@ class Scanner:
                 new[s.id] += 1
                 posted += 1
             seen.done = status in ("already_confirmed", "closed")
-        bt.logging.info(f"[SCAN] open={len(scoops)} items={len(items)} checked={len(work)} "
-                        f"posted={posted}")
+        bt.logging.info(f"[SCAN] open={len(scoops)} items={len(items)} matched={len(found)} "
+                        f"checked={len(work)} posted={posted}")
         return {"open": len(scoops), "checked": len(work), "posted": posted}

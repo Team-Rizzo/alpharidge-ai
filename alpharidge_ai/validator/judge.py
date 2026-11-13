@@ -11,7 +11,7 @@ import json
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, Optional, Set
+from typing import Callable, Dict, Optional, Set, Tuple
 from urllib.parse import urlsplit
 
 import bittensor as bt
@@ -29,10 +29,12 @@ OFF_S = 6 * 3600
 FETCH_TRIES = 3
 # A run stops calling the judge after this many failed calls in a row.
 JUDGE_TRIP = 3
-# Longest one item (fetch, check, judge, post) and one pull may take; what is left over is
-# served again on the next pull.
+# Longest one item (fetch, check, judge, post) may take; it is served again on a later pull.
 ITEM_TIMEOUT_S = 180
-BATCH_TIMEOUT_S = 900
+# How long a pull waits for its items. Items still running then carry on, inside the same
+# concurrency, and are not served again while they run, so a slow page never holds up the
+# next pull; they count in the summary of the pull during which they finish.
+PULL_WAIT_S = 60
 
 
 def _retype(claim: Optional[Claim], kind: Optional[str]) -> Optional[Claim]:
@@ -118,6 +120,9 @@ class JudgeWorker:
         # Answers by item key and page content, so a failed post never pays twice.
         self.answers: Dict[tuple, dict] = {}
         self.fails = 0
+        self._running: Dict[str, asyncio.Future] = {}
+        self._carried: Dict[str, int] = {}
+        self._gate: Optional[Tuple[asyncio.AbstractEventLoop, asyncio.Semaphore]] = None
         self._next = 0.0
         # When the last pull finished (monotonic), for the watchdog.
         self.last_pull = time.monotonic()
@@ -166,9 +171,12 @@ class JudgeWorker:
         self.done &= keys
         self.tries = {k: n for k, n in self.tries.items() if k in keys}
         self.answers = {k: a for k, a in self.answers.items() if k[0] in keys}
-        items = [i for i in served if i["key"] not in self.done]
+        items = [i for i in served if i["key"] not in self.done and i["key"] not in self._running]
         self.fails = 0
-        gate = asyncio.Semaphore(self.concurrency)
+        loop = asyncio.get_running_loop()
+        if self._gate is None or self._gate[0] is not loop:
+            self._gate = (loop, asyncio.Semaphore(self.concurrency))
+        gate = self._gate[1]
 
         async def one(item):
             async with gate:
@@ -189,22 +197,29 @@ class JudgeWorker:
                     bt.logging.warning(f"[JUDGE] item {item.get('claim_id')} failed: {e!r}")
                     return "error"
 
-        tasks = [asyncio.ensure_future(one(i)) for i in items]
-        finished, late = await asyncio.wait(tasks, timeout=BATCH_TIMEOUT_S) if tasks else (
+        tasks = []
+        for item in items:
+            task = asyncio.ensure_future(one(item))
+            self._running[item["key"]] = task
+            task.add_done_callback(lambda _, k=item["key"]: self._running.pop(k, None))
+            tasks.append(task)
+        finished, late = await asyncio.wait(tasks, timeout=PULL_WAIT_S) if tasks else (
             set(), set())
-        for t in late:
-            t.cancel()
-        if late:
-            bt.logging.warning(f"[JUDGE] pull ran over {BATCH_TIMEOUT_S}s; {len(late)} items "
-                               f"left for the next pull")
-        outcomes = [t.result() for t in finished] + ["late"] * len(late)
-        counts: Dict[str, int] = {}
-        for o in outcomes:
+        for task in late:
+            task.add_done_callback(self._carry)
+        counts, self._carried = self._carried, {}
+        for o in [t.result() for t in finished]:
             counts[o] = counts.get(o, 0) + 1
-        if items:
+        if self._running:
+            counts["running"] = len(self._running)
+        if items or counts:
             bt.logging.info(f"[JUDGE] pending={len(items)} {dict(sorted(counts.items()))} "
                             f"spent=${self.spend.usd:.4f}")
         return counts
+
+    def _carry(self, task: asyncio.Future) -> None:
+        o = "cancelled" if task.cancelled() else task.result()
+        self._carried[o] = self._carried.get(o, 0) + 1
 
     async def judge_item(self, item: dict, types=None) -> str:
         key = item["key"]
