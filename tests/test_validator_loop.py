@@ -71,6 +71,7 @@ def api(points, sample=(), posted=None, down=False, quality=None):
             assert q["validator"] == VALIDATOR.ss58_address
             return httpx.Response(200, json={"items": list(sample), "next_cursor": None})
         if path == "/ledger/quality" and quality is not None:
+            assert int(q["epoch"]) >= 0 and "from_ms" in q
             return httpx.Response(200, json=quality)
         if path == "/ledger/reverify":
             posted.append(json.loads(request.content))

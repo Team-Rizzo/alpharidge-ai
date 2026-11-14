@@ -153,7 +153,7 @@ class LedgerLoop:
         net = net_by_coldkey(pulled.points, coldkeys)
         if quality.active(datetime.now(timezone.utc)):
             try:
-                served = await self.client.ledger_quality(quality.from_ms())
+                served = await self.client.ledger_quality(quality.from_ms(), epoch)
                 owners = served["owners"]
                 q = quality.scores((owners[int(i)], bool(p)) for i, p in served["outcomes"])
             except Exception as e:
