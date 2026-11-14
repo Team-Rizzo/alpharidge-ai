@@ -22,10 +22,10 @@ def test_half_life_and_the_linear_band():
     assert quality.multiplier(0.9) == 1.0 and quality.multiplier(0.1) == 0.0
 
 
-def test_points_scale_by_the_coldkey_and_an_unscored_one_is_full():
+def test_points_scale_by_the_coldkey_and_an_unscored_one_starts_at_half():
     out = quality.scaled({"a": 4.0, "b": 2.0, "c": 1.0}, {"a": "ck", "b": "ck"},
                          {"ck": 0.225})
-    assert out == {"a": pytest.approx(3.0), "b": pytest.approx(1.5), "c": 1.0}
+    assert out == {"a": pytest.approx(3.0), "b": pytest.approx(1.5), "c": pytest.approx(0.5)}
 
 
 def test_the_start_is_off_until_set(monkeypatch):

@@ -111,7 +111,7 @@ def test_negative_balance_nets_against_its_coldkey(monkeypatch):
 def test_quality_scales_the_weights_only_from_its_start(monkeypatch):
     from datetime import datetime, timedelta, timezone
     from alpharidge_ai.mechanism import quality
-    served = {"owners": ["hk1"], "outcomes": [[0, 0]] * 60}
+    served = {"owners": ["hk1", "hk2"], "outcomes": [[0, 0]] * 60 + [[1, 1]] * 10}
     before = asyncio.run(loop(api(signed_points(), quality=served)).tick())
     assert before.tolist() == pytest.approx([0.0, 0.3, 0.1, 0.6])
     monkeypatch.setattr(quality, "QUALITY_FROM", datetime.now(timezone.utc) + timedelta(days=1))

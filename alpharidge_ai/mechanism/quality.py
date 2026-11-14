@@ -14,7 +14,7 @@ from typing import Dict, Iterable, Mapping, Optional, Tuple
 
 HALF_LIFE = 50
 DECAY = 0.5 ** (1 / HALF_LIFE)
-START = 0.30
+START = 0.20
 ZERO, FULL = 0.15, 0.25
 # Weights are scaled from this time on, by claims judged from it; set at release.
 QUALITY_FROM: Optional[datetime] = None
