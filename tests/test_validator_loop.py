@@ -57,7 +57,7 @@ def signed_points(key=API_KEY, capacity=10.0):
             "signature": sig, "capacity": capacity}
 
 
-def api(points, sample=(), posted=None, down=False):
+def api(points, sample=(), posted=None, down=False, quality=None):
     def handler(request: httpx.Request):
         path, q = request.url.path, request.url.params
         if down:
@@ -70,6 +70,8 @@ def api(points, sample=(), posted=None, down=False):
         if path == "/ledger/sample":
             assert q["validator"] == VALIDATOR.ss58_address
             return httpx.Response(200, json={"items": list(sample), "next_cursor": None})
+        if path == "/ledger/quality" and quality is not None:
+            return httpx.Response(200, json=quality)
         if path == "/ledger/reverify":
             posted.append(json.loads(request.content))
             return httpx.Response(200, json={"accepted": 1})
@@ -103,6 +105,22 @@ def test_negative_balance_nets_against_its_coldkey(monkeypatch):
     meta = SimpleNamespace(hotkeys=HOTKEYS, n=len(HOTKEYS), coldkeys=["v", "ck", "ck", "b"])
     shared = asyncio.run(loop(api(signed_points()), meta).tick())
     assert shared.tolist() == pytest.approx([0.0, 0.2, 0.0, 0.8])
+
+
+def test_quality_scales_the_weights_only_from_its_start(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from alpharidge_ai.mechanism import quality
+    served = {"owners": ["hk1"], "outcomes": [[0, 0]] * 60}
+    before = asyncio.run(loop(api(signed_points(), quality=served)).tick())
+    assert before.tolist() == pytest.approx([0.0, 0.3, 0.1, 0.6])
+    monkeypatch.setattr(quality, "QUALITY_FROM", datetime.now(timezone.utc) + timedelta(days=1))
+    assert asyncio.run(loop(api(signed_points(), quality=served)).tick()).tolist() == \
+        pytest.approx(before.tolist())
+    monkeypatch.setattr(quality, "QUALITY_FROM", datetime.now(timezone.utc) - timedelta(days=1))
+    after = asyncio.run(loop(api(signed_points(), quality=served)).tick())
+    assert after.tolist() == pytest.approx([0.0, 0.0, 0.1, 0.9])
+    # Without the outcomes the step keeps the last weights.
+    assert asyncio.run(loop(api(signed_points())).tick()) is None
 
 
 def test_bad_signature_keeps_the_last_weights():

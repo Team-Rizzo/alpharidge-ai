@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 import bittensor as bt
@@ -19,6 +20,7 @@ import numpy as np
 from alpharidge_ai import config
 from alpharidge_ai.ledger.attestation import BLOCK_LENGTH, CLOSE_GRACE_BLOCKS
 from alpharidge_ai.ledger.pull import LedgerPoints, LedgerPull, unbound
+from alpharidge_ai.mechanism import quality
 from alpharidge_ai.mechanism.pools import CAPACITY, net_by_coldkey
 from alpharidge_ai.mechanism.profile import SECONDS_PER_BLOCK
 from alpharidge_ai.mechanism.settlement import settle, weight_vector
@@ -148,7 +150,21 @@ class LedgerLoop:
         self._check_capacity(capacity, pulled, profile)
         coldkeys = {**dict(zip(hotkeys, getattr(self.metagraph, "coldkeys", None) or hotkeys)),
                     **pulled.coldkeys}
-        result = settle(net_by_coldkey(pulled.points, coldkeys), capacity)
+        net = net_by_coldkey(pulled.points, coldkeys)
+        if quality.active(datetime.now(timezone.utc)):
+            try:
+                served = await self.client.ledger_quality(quality.from_ms())
+                owners = served["owners"]
+                q = quality.scores((owners[int(i)], bool(p)) for i, p in served["outcomes"])
+            except Exception as e:
+                bt.logging.error(f"[LEDGER] ALARM epoch={epoch} quality unavailable ({e!r}); "
+                                 f"keeping the last weights")
+                return None
+            cut = {ck for ck in {coldkeys.get(hk, hk) for hk in net}
+                   if quality.multiplier(q.get(ck, quality.START)) < 1}
+            net = quality.scaled(net, coldkeys, q)
+            bt.logging.info(f"[QUALITY] epoch={epoch} scored={len(q)} cut={len(cut)}")
+        result = settle(net, capacity)
         size = int(getattr(self.metagraph, "n", len(hotkeys)))
         vector = weight_vector(result.shares, hotkeys, self.burn_uid, size)
         bt.logging.info(

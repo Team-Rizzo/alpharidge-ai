@@ -233,6 +233,9 @@ class AlpharidgeAPIClient:
             params["cursor"] = cursor
         return await self._request("GET", "/ledger/leaves", params=params)
 
+    async def ledger_quality(self, from_ms: int) -> Dict[str, Any]:
+        return await self._request("GET", "/ledger/quality", params={"from_ms": int(from_ms)})
+
     async def ledger_sample(self, epoch: int, cursor: Optional[str] = None,
                             limit: int = 500) -> Dict[str, Any]:
         params = {"epoch": int(epoch), "validator": self.ss58_address, "limit": int(limit)}
