@@ -150,20 +150,24 @@ class LedgerLoop:
         self._check_capacity(capacity, pulled, profile)
         coldkeys = {**dict(zip(hotkeys, getattr(self.metagraph, "coldkeys", None) or hotkeys)),
                     **pulled.coldkeys}
-        net = net_by_coldkey(pulled.points, coldkeys)
+        points = pulled.points
         if quality.active(datetime.now(timezone.utc)):
             try:
                 served = await self.client.ledger_quality(quality.from_ms(), epoch)
                 owners = served["owners"]
-                q = quality.scores((owners[int(i)], bool(p)) for i, p in served["outcomes"])
+                locks = quality.locked((owners[int(i)], bool(p), c)
+                                       for i, p, c in served["outcomes"])
             except Exception as e:
                 bt.logging.error(f"[LEDGER] ALARM epoch={epoch} quality unavailable ({e!r}); "
                                  f"keeping the last weights")
                 return None
-            cut = {ck for ck in {coldkeys.get(hk, hk) for hk in net}
-                   if quality.multiplier(q.get(ck, quality.START)) < 1}
-            net = quality.scaled(net, coldkeys, q)
-            bt.logging.info(f"[QUALITY] epoch={epoch} scored={len(q)} cut={len(cut)}")
+            leaves = []
+            for ep in range(epoch - window + 1, epoch + 1):
+                leaves.extend(await self.pull.leaves(ep))
+            points = quality.scaled(leaves, locks)
+            cut = sum(1 for m in locks.values() if m < 1)
+            bt.logging.info(f"[QUALITY] epoch={epoch} paid={len(locks)} cut={cut}")
+        net = net_by_coldkey(points, coldkeys)
         result = settle(net, capacity)
         size = int(getattr(self.metagraph, "n", len(hotkeys)))
         vector = weight_vector(result.shares, hotkeys, self.burn_uid, size)
