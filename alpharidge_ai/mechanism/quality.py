@@ -23,9 +23,10 @@ ZERO, FULL = 0.15, 0.25
 PAY_ZERO, PAY_FULL = 0.10, 0.90
 # Weights are scaled from this time on, by claims judged from it; set at release.
 QUALITY_FROM: Optional[datetime] = None
-# Rejects that say the claim does not match its page. A judge_unclear whose judge found none
-# of the types for the claim counts as junk too (the API serves it so).
-JUNK = ("judge_reject", "not_an_event", "unsupported", "page_type")
+# Rejects that say the claim does not match its page, and an old story sent as a scoop. A
+# judge_unclear whose judge found none of the types for the claim counts as junk too (the API
+# serves it so).
+JUNK = ("judge_reject", "not_an_event", "unsupported", "page_type", "scoop_stale")
 # Leaf kinds of a paid claim that carry its locked multiplier.
 LOCKED_KINDS = ("provisional", "settle", "clawback")
 
