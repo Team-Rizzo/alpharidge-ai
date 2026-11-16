@@ -505,6 +505,11 @@ EARLY = "2026-10-13T12:35:00Z"
     ({**_scoop_item(published_at=EARLY), "points": 3.0, "factors": {"base": 12, "T": 0.625}},
      {"pub": EARLY}, (AGREE, None)),
     (_scoop_item(published_at=EARLY), {"pub": EARLY}, (DISAGREE, "points_mismatch")),
+    # A trusted page about it was out before its receipt: the tier price, not the premium.
+    ({**_scoop_item(first_seen=EARLY), "points": 3.0, "factors": {"base": 12, "T": 0.625}}, {},
+     (AGREE, None)),
+    (_scoop_item(first_seen=EARLY), {}, (DISAGREE, "points_mismatch")),
+    (_scoop_item(first_seen="2026-10-13T13:00:00Z"), {}, (AGREE, None)),
     (_scoop_item(), {"pub": EARLY}, (DISAGREE, "published_mismatch")),
     (_scoop_item(trust=1.0), {}, (DISAGREE, "points_mismatch")),
     ({**_scoop_item(), "points": 3.0, "factors": {"base": 12, "T": 0.625}}, {},

@@ -203,12 +203,45 @@ def match_items(scoops: List[Scoop], items: List[Tuple[Item, Tuple]],
     return out
 
 
+_STEM = 5
+
+
+def _stems(scoop: Scoop) -> Set[str]:
+    """Word stems of the scoop's type key and label ("acqui" for an acquisition)."""
+    spec = TYPE_SPEC[scoop.event_type]
+    words = scoop.event_type.value.split("_") + (spec.label or "").split()
+    return {w[:_STEM] for w in words if len(w) >= 4}
+
+
+def second_mark(scoop: Scoop, name: str, norm: str, text: str) -> bool:
+    """Besides the subject `name`, the page (`text`, normalised `norm`) shows one more mark of the scoop: another of its
+    names that shares no word with `name`, a ticker, a fact it gives as text or figure, or a
+    word of its type."""
+    own = set(name_words(name))
+    for s in scoop.subjects:
+        if s != name and not own & set(name_words(s)) and any(
+                find(norm, f) for f in name_forms(s)):
+            return True
+    if any(ticker_on(t, text) for t in scoop.tickers):
+        return True
+    for f in scoop.facts:
+        value = f.get("value")
+        if isinstance(value, str) and len(value) >= 3 and find(norm, floor.normalize(value).text):
+            return True
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and find(
+                norm, f"{value:g}"):
+            return True
+    words = set(re.findall(r"[a-z]{4,}", norm))
+    stems = _stems(scoop)
+    return any(w[:_STEM] in stems for w in words)
+
+
 def held_claim(scoop: Scoop, url: str, text: str) -> Optional[Claim]:
     """The scoop as checked on a page: the subject name the page shows, its other facts less the
     figures the page does not show; None when a figure its type needs is missing."""
     norm = floor.normalize(text).text
     name = next((s for s in scoop.subjects if any(find(norm, f) for f in name_forms(s))), None)
-    if name is None:
+    if name is None or not second_mark(scoop, name, norm, text):
         return None
     spec = TYPE_SPEC[scoop.event_type]
     pivot = PIVOT_SLOTS.get(scoop.event_type.value)

@@ -32,7 +32,7 @@ from alpharidge_ai.mechanism.pools import PROVISIONAL_SHARE
 from alpharidge_ai.schema import (
     TYPE_SPEC, Claim, category_of, judged, kind_key, text_problem,
 )
-from alpharidge_ai.schema.types import TIER_PRICE, age_factor, scoop_multiple
+from alpharidge_ai.schema.types import TIER_PRICE, age_factor, event_price, scoop_multiple
 from alpharidge_ai.validator.selector import Selector
 from alpharidge_ai.verify.check import PIVOT_SLOTS, check_claim, verdict_hash
 from alpharidge_ai.verify.dates import parse_datetime
@@ -90,8 +90,9 @@ def unread(record: dict) -> bool:
 def paid_right(item: dict, claim: Claim, received) -> bool:
     """The paid points are the paid share of base × T × A, with T in [0, 1], A the age factor
     at receipt of the event date or the page's publish date, the earlier, and base the type's
-    tier price on the event route and that price × `scoop_multiple` of the confirming page's
-    publish time on the scoop route (1 when the record marks it contested)."""
+    event price on the event route and the tier price × `scoop_multiple` of the confirming
+    page's publish time and first trusted sighting on the scoop route (the event rate when the
+    record marks it contested)."""
     f = item.get("factors") or {}
     try:
         base, t, points = float(f["base"]), float(f["T"]), float(item["points"])
@@ -106,13 +107,14 @@ def paid_right(item: dict, claim: Claim, received) -> bool:
     tier = getattr(TYPE_SPEC.get(claim.event_type), "tier", "")
     route = item.get("route")
     if route in ("event", "scoop"):
-        price = TIER_PRICE.get(tier)
+        price = event_price(tier) if route == "event" else TIER_PRICE.get(tier)
         if route == "scoop" and price is not None:
             confirm = record.get("confirm") or {}
             if not isinstance(confirm, dict):
                 return False
             price = price * scoop_multiple(parse_datetime(confirm.get("published_at")), received,
-                                           bool(confirm.get("contested")))
+                                           bool(confirm.get("contested")),
+                                           parse_datetime(confirm.get("first_seen")))
         if price is None or not math.isclose(base, price):
             return False
     return math.isclose(points, PROVISIONAL_SHARE * base * t * a, rel_tol=1e-5, abs_tol=1e-6)

@@ -19,28 +19,36 @@ PLACE_LEVELS = ("none", "country", "admin1")
 TIERS = ("low", "high")
 # Points per tier, before trust; the API and validators must agree.
 TIER_PRICE = {"low": 3, "high": 12}
-# A confirmed scoop pays this multiple of the tier price when the confirming trusted page was
-# published after the scoop's receipt: it gave the event earlier.
-SCOOP_PREMIUM = 5.0
-
-
+# Pay settings, today's values by default; the API and validators must agree.
+# Event route points are the tier price × EVENT_PAY_X. A confirmed scoop pays SCOOP_PREMIUM × the
+# tier price when no trusted page about it was out before its receipt, else the event rate.
+EVENT_PAY_X = float(os.getenv("EL_EVENT_PAY_X", "1"))
+SCOOP_PREMIUM = float(os.getenv("EL_SCOOP_PREMIUM", "5"))
 # A scoop that closes unconfirmed or that a trusted page contradicts costs this multiple of
 # its 1x pay, at SCOOP_DEBT_TRUST: the highest trust the scoop route pays at.
-SCOOP_MISS_DEBT_X = 2.0
+SCOOP_MISS_DEBT_X = float(os.getenv("EL_SCOOP_MISS_DEBT_X", "2"))
 SCOOP_DEBT_TRUST = 1.0
 # An operator-confirmed misconduct penalty, in multiples of the claim's full value (or of a
 # missed scoop's debt).
 MISCONDUCT_PENALTY_X = 5
 
 
+def event_price(tier: str) -> Optional[float]:
+    """The event route's base points for a tier, None for an unknown tier."""
+    price = TIER_PRICE.get(tier)
+    return None if price is None else price * EVENT_PAY_X
+
+
 def scoop_multiple(published: Optional[datetime], received: Optional[datetime],
-                   contested: bool = False) -> float:
+                   contested: bool = False, first_seen: Optional[datetime] = None) -> float:
     """The tier price multiple of a confirmed scoop: SCOOP_PREMIUM when the confirming page was
-    published after the scoop's receipt, else 1 (it was first in, not first out); 1 when
+    published after the scoop's receipt and no trusted page about it was seen before
+    (`first_seen`), else the event rate (it was first in, not first out); the event rate when
     another scoop named a conflicting outcome."""
-    if contested:
-        return 1.0
-    return SCOOP_PREMIUM if published and received and published > received else 1.0
+    out = min((d for d in (published, first_seen) if d is not None), default=None)
+    if contested or not (out and received and out > received):
+        return EVENT_PAY_X
+    return SCOOP_PREMIUM
 
 
 def reverify_rate() -> float:
