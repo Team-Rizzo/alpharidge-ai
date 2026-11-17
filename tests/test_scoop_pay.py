@@ -1,7 +1,9 @@
 import os
+import shutil
 import subprocess
 import sys
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 from alpharidge_ai.schema import EventType
 from alpharidge_ai.schema import types
@@ -67,3 +69,18 @@ def test_a_found_page_must_show_one_more_mark_than_the_subject():
                  "Beta Systems sold itself for $1.2 billion.")
     assert held_claim(s, "https://wire.example.com/x",
                       "Beta Systems Inc. opened a new office on Tuesday.") is None
+
+
+def test_pay_values_in_the_vali_env_file_apply(tmp_path):
+    shutil.copytree(Path(types.__file__).resolve().parents[2] / "alpharidge_ai",
+                    tmp_path / "alpharidge_ai", ignore=shutil.ignore_patterns("__pycache__"))
+    (tmp_path / ".vali_env").write_text(
+        "EL_EVENT_PAY_X=1\nEL_SCOOP_PREMIUM=5\nEL_SCOOP_MISS_DEBT_X=2\n")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("EL_")}
+    env["PYTHONPATH"] = str(tmp_path)
+    out = subprocess.run(
+        [sys.executable, "-c", "from alpharidge_ai import config; "
+         "from alpharidge_ai.schema import types as t; "
+         "print(t.EVENT_PAY_X, t.SCOOP_PREMIUM, t.SCOOP_MISS_DEBT_X)"],
+        env=env, capture_output=True, text=True, check=True, cwd=tmp_path).stdout.split()
+    assert [float(x) for x in out[-3:]] == [1.0, 5.0, 2.0]

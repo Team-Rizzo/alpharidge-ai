@@ -11,9 +11,6 @@ import threading
 import time
 from typing import Optional
 
-from alpharidge_ai.ledger.attestation import BLOCK_LENGTH  # noqa: F401
-from alpharidge_ai.schema.types import reverify_rate
-
 # Repo root (this file is alpharidge_ai/config.py)
 _SUBNET_ROOT = Path(__file__).resolve().parent.parent
 
@@ -34,6 +31,10 @@ try:
 
 except ImportError:
     print("[CONFIG] Warning: python-dotenv not installed, using system environment variables only")
+
+# Imported after the env files load: these modules read settings (pay values) when imported.
+from alpharidge_ai.ledger.attestation import BLOCK_LENGTH  # noqa: E402,F401
+from alpharidge_ai.schema.types import reverify_rate  # noqa: E402
 
 
 # ============================================================================
