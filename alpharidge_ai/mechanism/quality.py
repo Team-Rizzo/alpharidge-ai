@@ -16,11 +16,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, Iterable, Mapping, Optional, Sequence
 
-HALF_LIFE = 50
+HALF_LIFE = 20
 DECAY = 0.5 ** (1 / HALF_LIFE)
-START = 0.30
+START = 0.50
 ZERO, FULL = 0.15, 0.25
-PAY_ZERO, PAY_FULL = 0.10, 0.90
+PAY_ZERO, PAY_FULL = 0.10, 0.60
 # Weights are scaled from this time on, by claims judged from it; set at release.
 QUALITY_FROM: Optional[datetime] = None
 # Rejects that say the claim does not match its page, and an old story sent as a scoop. A

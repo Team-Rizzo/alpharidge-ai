@@ -14,8 +14,8 @@ def test_half_life_and_the_bands():
     q = quality.scores([("ck", False)] * quality.HALF_LIFE)
     assert q["ck"] == pytest.approx(quality.START / 2)
     assert quality.multiplier(0.2) == pytest.approx(0.5)
-    assert quality.pay_multiplier(0.5) == pytest.approx(0.5)
-    assert quality.pay_multiplier(0.9) == 1.0 and quality.pay_multiplier(0.1) == 0.0
+    assert quality.pay_multiplier(0.35) == pytest.approx(0.5)
+    assert quality.pay_multiplier(0.6) == 1.0 and quality.pay_multiplier(0.1) == 0.0
 
 
 def test_each_paid_claim_is_locked_at_the_q_before_it():
