@@ -22,11 +22,11 @@ TIER_PRICE = {"low": 3, "high": 12}
 # Pay settings, today's values by default; the API and validators must agree.
 # Event route points are the tier price × EVENT_PAY_X. A confirmed scoop pays SCOOP_PREMIUM × the
 # tier price when no trusted page about it was out before its receipt, else the event rate.
-EVENT_PAY_X = float(os.getenv("EL_EVENT_PAY_X", "1"))
-SCOOP_PREMIUM = float(os.getenv("EL_SCOOP_PREMIUM", "5"))
+EVENT_PAY_X = float(os.getenv("EL_EVENT_PAY_X", "0.25"))
+SCOOP_PREMIUM = float(os.getenv("EL_SCOOP_PREMIUM", "10"))
 # A scoop that closes unconfirmed or that a trusted page contradicts costs this multiple of
 # its 1x pay, at SCOOP_DEBT_TRUST: the highest trust the scoop route pays at.
-SCOOP_MISS_DEBT_X = float(os.getenv("EL_SCOOP_MISS_DEBT_X", "2"))
+SCOOP_MISS_DEBT_X = float(os.getenv("EL_SCOOP_MISS_DEBT_X", "1"))
 SCOOP_DEBT_TRUST = 1.0
 # An operator-confirmed misconduct penalty, in multiples of the claim's full value (or of a
 # missed scoop's debt).

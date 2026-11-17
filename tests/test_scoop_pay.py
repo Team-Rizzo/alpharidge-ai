@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 from datetime import date, datetime, timezone
 
 from alpharidge_ai.schema import EventType
@@ -18,7 +21,16 @@ def test_the_premium_needs_no_trusted_page_out_before_the_receipt():
     assert types.scoop_multiple(AFTER, RECEIVED, contested=True) == types.EVENT_PAY_X
 
 
-def test_the_defaults_are_todays_pay_and_the_settings_scale_it(monkeypatch):
+def test_the_release_pays_event_a_quarter_scoop_10x_and_a_miss_1x():
+    env = {k: v for k, v in os.environ.items() if not k.startswith("EL_")}
+    out = subprocess.run(
+        [sys.executable, "-c", "from alpharidge_ai.schema import types as t; "
+         "print(t.EVENT_PAY_X, t.SCOOP_PREMIUM, t.SCOOP_MISS_DEBT_X)"],
+        env=env, capture_output=True, text=True, check=True).stdout.split()
+    assert [float(x) for x in out] == [0.25, 10.0, 1.0]
+
+
+def test_the_settings_scale_pay(monkeypatch):
     assert (types.EVENT_PAY_X, types.SCOOP_PREMIUM, types.SCOOP_MISS_DEBT_X) == (1, 5, 2)
     assert types.event_price("high") == 12 and types.event_price("none") is None
     debt = types.scoop_debt("merger_acquisition", date(2026, 10, 13), RECEIVED)
