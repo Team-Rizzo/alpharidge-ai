@@ -26,6 +26,7 @@ from alpharidge_ai.validator.profile_client import ProfileClient
 from alpharidge_ai.validator.reverify import Reverifier
 from alpharidge_ai.validator.scan import Scanner
 from alpharidge_ai.validator.selector import Selector
+from alpharidge_ai.validator.settings_check import pay_line
 from alpharidge_ai.validator.watchdog import stall
 from alpharidge_ai.verify import parse_pool
 
@@ -52,6 +53,8 @@ class Validator(BaseValidatorNeuron):
         self._api = AlpharidgeAPIClient(base_url=config.MINER_API_URL, wallet=self.wallet,
                                         timeout=config.BATCH_HTTP_TIMEOUT)
 
+        # The API's pay settings are compared with these on each config read.
+        bt.logging.info(pay_line())
         config.set_wallet(self.wallet)
         config.refresh_remote_config(force=True)
 

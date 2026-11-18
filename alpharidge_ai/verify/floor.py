@@ -140,13 +140,17 @@ class ParsedNumber:
     step: bool = False
 
 
-def _magnitude_after(text: str, end: int) -> Tuple[float, int]:
+def _magnitude_after(text: str, end: int, scale_next: bool = False) -> Tuple[float, int]:
     """Magnitude word within the next two tokens on the same line, and where it ends. A
-    one-letter scale counts only as the first token, so "8 a.m." is not 8 million."""
+    one-letter scale counts only as the first token, so "8 a.m." is not 8 million. With
+    `scale_next`, only a word right after the figure (spaces or a hyphen between) counts, so
+    "0.3% m/m" has no scale."""
     tail = text[end:end + 32].split("\n", 1)[0]
     tokens = list(_WORD_RE.finditer(tail))[:2]
     for i, tok in enumerate(tokens):
         word = tok.group(0)
+        if scale_next and tail[:tok.start()].strip(" -"):
+            break
         if len(word) == 1 and i:
             continue
         if word in _MAGNITUDES:
@@ -330,14 +334,18 @@ def _scale_regions(text: str) -> List[Tuple[int, int, float, Optional[str]]]:
     return out
 
 
-def parse_numbers(normalized_text: str) -> List[ParsedNumber]:
-    """Every numeric token in the text, with its magnitude, unit class and offset."""
+def parse_numbers(normalized_text: str, scale_next: bool = False) -> List[ParsedNumber]:
+    """Every numeric token in the text, with its magnitude, unit class and offset.
+
+    `scale_next` (for the scan's own marks) reads a scale word only right after the figure.
+    The default reading is the one the API's claim check and validators' re-verify use, and a
+    peer on an older release reads so too, so it stays as it is."""
     found: List[ParsedNumber] = []
     text = normalized_text
     regions = _scale_regions(text)
 
     def emit(value: float, start: int, end: int, literal: bool = True) -> None:
-        mag, mag_end = _magnitude_after(text, end)
+        mag, mag_end = _magnitude_after(text, end, scale_next)
         value *= mag
         step = bool(_PP_AFTER.match(text, mag_end))
         paren = start > 0 and text[start - 1] == "(" and text.startswith(")", end)

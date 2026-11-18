@@ -5,14 +5,15 @@ the total capacity. Points are summed per hotkey and may be negative; for weight
 negative balance is netted against the other hotkeys of its coldkey (the signed coldkey at
 receipt, so a deregistered hotkey's debt still counts), and only then floored at zero. Debt
 never lapses: when the epoch leaving the window would lift a coldkey's negative balance, the
-unpaid part comes back as a carry leaf in the next epoch (see carried).
+unpaid part comes back as a carry leaf in the next epoch (see carried). Once quality scales
+the weights, that balance is valued as they value it (quality.worth).
 
 Pure and shared by the API and validators, so both reach the same numbers from the leaves.
 """
 from __future__ import annotations
 
 import math
-from typing import Dict, Iterable, List, Mapping
+from typing import Callable, Dict, Iterable, List, Mapping, Optional
 
 from alpharidge_ai.ledger.attestation import LEAF_V2
 
@@ -55,35 +56,57 @@ def coldkeys(leaves: Iterable[Mapping]) -> Dict[str, str]:
     return {hk: ck for hk, (_, ck) in latest.items()}
 
 
-def carried(prev: Iterable[Mapping], leaving: Iterable[Mapping]) -> List[dict]:
+def _points(leaf: Mapping) -> float:
+    return float(leaf["points_awarded"])
+
+
+def carried(prev: Iterable[Mapping], leaving: Iterable[Mapping],
+            worth: Optional[Callable[[Mapping], float]] = None) -> List[dict]:
     """Carry entries for the epoch after the window prev, of which leaving is the oldest
-    epoch: for each coldkey (a hotkey without one is its own) whose raw balance over prev
-    is below zero, the part of it that leaving's rows hold, as one negative entry on the
-    hotkey and category whose leaving rows are lowest."""
+    epoch: for each coldkey (a hotkey without one is its own) whose balance over prev is
+    below zero, the part of it that leaving's rows hold, as one negative entry on the
+    hotkey and category whose leaving rows are lowest. Each leaf counts at worth(leaf),
+    its points when worth is None. Worths are summed exactly (math.fsum), so any leaf order
+    gives the same entries; raw points are summed in leaf order, as released."""
+    add = _in_order if worth is None else math.fsum
+    # The released total over a coldkey's hotkeys used the builtin sum (compensated from
+    # Python 3.12), kept for raw points.
+    total = sum if worth is None else math.fsum
+    worth = worth or _points
     prev = list(prev)
     ck = coldkeys(prev)
-    balance: Dict[str, float] = {}
+    parts: Dict[str, List[float]] = {}
     for leaf in prev:
         g = ck.get(str(leaf["miner_hotkey"]), str(leaf["miner_hotkey"]))
-        balance[g] = balance.get(g, 0.0) + float(leaf["points_awarded"])
-    out_hk: Dict[str, Dict[str, float]] = {}
-    out_cat: Dict[str, Dict[str, float]] = {}
+        parts.setdefault(g, []).append(worth(leaf))
+    balance = {g: add(v) for g, v in parts.items()}
+    hk_parts: Dict[str, Dict[str, List[float]]] = {}
+    cat_parts: Dict[str, Dict[str, List[float]]] = {}
     for leaf in leaving:
         hk = str(leaf["miner_hotkey"])
-        g, cat, pts = ck.get(hk, hk), category_of(leaf), float(leaf["points_awarded"])
-        by_hk, by_cat = out_hk.setdefault(g, {}), out_cat.setdefault(g, {})
-        by_hk[hk] = by_hk.get(hk, 0.0) + pts
-        by_cat[cat] = by_cat.get(cat, 0.0) + pts
+        g, cat, pts = ck.get(hk, hk), category_of(leaf), worth(leaf)
+        hk_parts.setdefault(g, {}).setdefault(hk, []).append(pts)
+        cat_parts.setdefault(g, {}).setdefault(cat, []).append(pts)
     out = []
-    for g in sorted(out_hk):
-        amount = _floor6(min(-balance.get(g, 0.0), -sum(out_hk[g].values())))
+    for g in sorted(hk_parts):
+        by_hk = {hk: add(v) for hk, v in hk_parts[g].items()}
+        by_cat = {cat: add(v) for cat, v in cat_parts[g].items()}
+        amount = _floor6(min(-balance.get(g, 0.0), -total(by_hk.values())))
         if amount <= 0:
             continue
-        hk = min(out_hk[g], key=lambda h: (out_hk[g][h], h))
-        cat = min(out_cat[g], key=lambda c: (out_cat[g][c], c))
+        hk = min(by_hk, key=lambda h: (by_hk[h], h))
+        cat = min(by_cat, key=lambda c: (by_cat[c], c))
         out.append({"miner_hotkey": hk, "coldkey": ck.get(hk), "category": cat,
                     "points_awarded": -amount})
     return out
+
+
+def _in_order(values: Iterable[float]) -> float:
+    """A sum in the given order, from 0.0."""
+    total = 0.0
+    for v in values:
+        total += v
+    return total
 
 
 def net_by_coldkey(points: Mapping[str, float],

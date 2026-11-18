@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+import bittensor as bt
 import httpx
 import pytest
 from bittensor_wallet import Keypair
@@ -46,14 +47,15 @@ LEAVES = {7: [{"resource_type": "ledger", "resource_id": "1", "miner_hotkey": "h
 PAGE = (Path(__file__).parent / "fixtures" / "pages" / "acme_deal.html").read_text()
 
 
-def signed_points(key=API_KEY, capacity=10.0):
-    leaves = [x for e in sorted(LEAVES) for x in LEAVES[e]]
+def signed_points(key=API_KEY, capacity=10.0, epoch=7):
+    leaves = [x for e in sorted(LEAVES) if epoch - 2 <= e <= epoch for x in LEAVES[e]]
     per = window_points(leaves)
     total, root = sum(per.values()), ac.merkle_root(leaves)
-    sig = key.sign(ac.attestation_message("event-ledger", 7, per, total, root).encode()).hex()
-    return {"epoch": 7, "attestation": {"validatorHotkey": "event-ledger", "epoch": 7,
-                                        "perMinerPoints": per, "totalPoints": total,
-                                        "merkleRoot": root},
+    sig = key.sign(ac.attestation_message("event-ledger", epoch, per, total,
+                                          root).encode()).hex()
+    return {"epoch": epoch, "attestation": {"validatorHotkey": "event-ledger", "epoch": epoch,
+                                            "perMinerPoints": per, "totalPoints": total,
+                                            "merkleRoot": root},
             "signature": sig, "capacity": capacity}
 
 
@@ -63,7 +65,8 @@ def api(points, sample=(), posted=None, down=False, quality=None):
         if down:
             raise httpx.ConnectError("unreachable")
         if path == "/ledger/points":
-            return httpx.Response(200, json=points)
+            return httpx.Response(200, json=points(int(q["epoch"])) if callable(points)
+                                  else points)
         if path == "/ledger/leaves":
             return httpx.Response(200, json={"leaves": LEAVES.get(int(q["epoch"]), []),
                                              "next_cursor": None})
@@ -72,7 +75,8 @@ def api(points, sample=(), posted=None, down=False, quality=None):
             return httpx.Response(200, json={"items": list(sample), "next_cursor": None})
         if path == "/ledger/quality" and quality is not None:
             assert int(q["epoch"]) >= 0 and "from_ms" in q
-            return httpx.Response(200, json=quality)
+            got = quality(int(q["epoch"])) if callable(quality) else quality
+            return got if isinstance(got, httpx.Response) else httpx.Response(200, json=got)
         if path == "/ledger/reverify":
             posted.append(json.loads(request.content))
             return httpx.Response(200, json={"accepted": 1})
@@ -109,22 +113,104 @@ def test_negative_balance_nets_against_its_coldkey(monkeypatch):
 
 
 def test_quality_scales_the_weights_only_from_its_start(monkeypatch):
-    from datetime import datetime, timedelta, timezone
     from alpharidge_ai.mechanism import quality
+    from alpharidge_ai.validator import loop as loop_module
     # hk1's claim 1 comes after a run of junk; hk2's claim 2 after a clean run.
-    served = {"owners": ["hk1", "hk2"],
+    start = datetime(2026, 12, 1, tzinfo=timezone.utc)
+    t = int(start.timestamp() * 1000)
+    served = {"owners": ["hk1", "hk2"], "until_ms": t,
               "outcomes": [[0, 0, 100 + i] for i in range(120)] + [[0, 1, "1"]]
               + [[1, 1, 200 + i] for i in range(200)] + [[1, 1, "2"]]}
     before = asyncio.run(loop(api(signed_points(), quality=served)).tick())
     assert before.tolist() == pytest.approx([0.0, 0.3, 0.1, 0.6])
-    monkeypatch.setattr(quality, "QUALITY_FROM", datetime.now(timezone.utc) + timedelta(days=1))
-    assert asyncio.run(loop(api(signed_points(), quality=served)).tick()).tolist() == \
+    monkeypatch.setattr(quality, "QUALITY_FROM", start)
+    # Clearly before the start the API is not asked (it would answer 404 here).
+    monkeypatch.setattr(loop_module, "_now", lambda: start - timedelta(days=2))
+    assert asyncio.run(loop(api(signed_points())).tick()).tolist() == \
         pytest.approx(before.tolist())
-    monkeypatch.setattr(quality, "QUALITY_FROM", datetime.now(timezone.utc) - timedelta(days=1))
-    after = asyncio.run(loop(api(signed_points(), quality=served)).tick())
-    assert after.tolist() == pytest.approx([0.0, 0.0, 0.1, 0.9])
-    # Without the outcomes the step keeps the last weights.
+    # Near the start, the epoch's signing time decides, whatever each validator's clock says.
+    for now in (start - timedelta(minutes=5), start + timedelta(minutes=5)):
+        monkeypatch.setattr(loop_module, "_now", lambda: now)
+        after = asyncio.run(loop(api(signed_points(), quality=served)).tick())
+        assert after.tolist() == pytest.approx([0.0, 0.0, 0.1, 0.9])
+        early = asyncio.run(loop(api(signed_points(),
+                                     quality={**served, "until_ms": t - 1})).tick())
+        assert early.tolist() == pytest.approx(before.tolist())
+    # Without the outcomes, or without the signing time, the step keeps the last weights.
     assert asyncio.run(loop(api(signed_points())).tick()) is None
+    assert asyncio.run(loop(api(signed_points(),
+                                quality={**served, "until_ms": None})).tick()) is None
+
+
+def test_an_unlocked_paid_claim_from_the_start_raises_an_alarm(monkeypatch):
+    from alpharidge_ai.mechanism import quality
+    from alpharidge_ai.validator import loop as loop_module
+    start = datetime(2026, 12, 1, tzinfo=timezone.utc)
+    t = int(start.timestamp() * 1000)
+    monkeypatch.setattr(quality, "QUALITY_FROM", start)
+    monkeypatch.setattr(loop_module, "_now", lambda: start + timedelta(hours=1))
+    monkeypatch.setitem(LEAVES, 7, [{**LEAVES[7][0], "received_ms": t + 1}])
+    errors = []
+    monkeypatch.setattr(loop_module.bt.logging, "error", errors.append)
+    served = {"owners": [], "until_ms": t + 10, "outcomes": []}
+    weights = asyncio.run(loop(api(signed_points(), quality=served)).tick())
+    assert weights.tolist() == pytest.approx([0.0, 0.3, 0.1, 0.6])
+    assert [e for e in errors if "ALARM" in e and "1 paid claims" in e]
+
+
+def test_once_scaled_the_carry_is_valued_with_the_epoch_befores_locks(monkeypatch):
+    from alpharidge_ai.mechanism import quality
+    from alpharidge_ai.validator import loop as loop_module
+    start = datetime(2026, 12, 1, tzinfo=timezone.utc)
+    t = int(start.timestamp() * 1000)
+    # hk1 misses a scoop in epoch 4 (-10), then is paid 20 at lock 0 after a run of junk.
+    # Epoch 4 leaves the window at 7: valued as the weights value it, its debt carries.
+    debt = {"resource_type": "ledger", "resource_id": "9", "miner_hotkey": "hk1",
+            "validator_verdict": "debt", "categorical_key": "finance|scoop",
+            "points_awarded": -10.0, "claim_id": "9"}
+    paid = {**debt, "resource_id": "5", "validator_verdict": "provisional",
+            "categorical_key": "finance|event", "points_awarded": 20.0, "claim_id": "5"}
+    carry = {"resource_type": "ledger", "resource_id": "10", "miner_hotkey": "hk1",
+             "validator_verdict": "carry", "categorical_key": "finance|carry",
+             "points_awarded": -10.0, "claim_id": None}
+    monkeypatch.setitem(LEAVES, 4, [debt])
+    monkeypatch.setitem(LEAVES, 5, [paid])
+    asked = []
+
+    def served(until):
+        def answer(epoch):
+            asked.append(epoch)
+            return {"owners": ["hk1"], "until_ms": until + epoch,
+                    "outcomes": [[0, 0, 100 + i] for i in range(120)] + [[0, 1, "5"]]}
+        return answer
+
+    own = list(LEAVES[7])
+
+    def tick(carried, quality=None):
+        monkeypatch.setitem(LEAVES, 7, own + ([carry] if carried else []))
+        points = lambda e: signed_points(epoch=e)
+        return asyncio.run(loop(api(points, quality=quality)).tick())
+
+    # Off, the carry is raw: hk1's window is +10, so nothing carries.
+    assert tick(False).tolist() == pytest.approx([0.0, 23 / 24, 1 / 24, 0.0])
+    assert tick(True) is None
+    monkeypatch.setattr(quality, "QUALITY_FROM", start)
+    monkeypatch.setattr(loop_module, "_now", lambda: start + timedelta(hours=1))
+    # On, a raw carry is rejected and the scaled one leaves hk1 at -7: no weight.
+    assert tick(False, served(t)) is None
+    assert tick(True, served(t)).tolist() == pytest.approx([0.0, 0.0, 0.1, 0.9])
+    assert 6 in asked
+    # The epoch before was signed before the start, or never: the carry into 7 is raw,
+    # though 7 itself is scaled.
+    unsigned = lambda e: (httpx.Response(409, json={"detail": "epoch_unsigned"}) if e == 6
+                          else served(t)(e))
+    for early in (served(t - 7), unsigned):
+        assert tick(True, early) is None
+        assert tick(False, early).tolist() == pytest.approx([0.0, 0.3, 0.1, 0.6])
+    # Without the epoch before's answer the step keeps the last weights.
+    failing = lambda e: (httpx.Response(503, json={"detail": "down"}) if e == 6
+                         else served(t)(e))
+    assert tick(True, failing) is None
 
 
 def test_bad_signature_keeps_the_last_weights():
@@ -970,3 +1056,43 @@ def test_scan_matching_keeps_to_its_budget_and_never_blocks_the_loop(monkeypatch
         task.cancel()
         return ticks
     assert asyncio.run(both()) > 10
+
+
+def _price_run(monkeypatch, differs, items):
+    from alpharidge_ai.validator import settings_check
+    monkeypatch.setattr(settings_check, "_differs", differs)
+    logged = []
+    monkeypatch.setattr(bt.logging, "error", lambda msg, *a, **kw: logged.append(msg))
+
+    async def run():
+        posted = []
+        client = api(signed_points(), (), posted)
+        fetcher = Fetcher(FetchConfig(public_only=False, domain_rps=1000, retry_delay_s=0),
+                          transport=httpx.MockTransport(_site))
+        rv = Reverifier(client, Selector(b"k"), fetcher, rate=1.0, judges=JUDGES)
+        await rv.run(7, candidates=items)
+        await fetcher.aclose()
+        return posted
+
+    (post,) = asyncio.run(run())
+    return {r["claim_id"]: (r["verdict"], r["observed"].get("reason"))
+            for r in post["results"]}, logged
+
+
+def test_while_pay_settings_differ_a_price_mismatch_is_not_posted_as_disagree(monkeypatch):
+    claim = _deal()
+    items = [_item("1", claim), {**_item("6", claim), "factors": {"base": 3, "T": 0.625}},
+             _item("7", claim, judge={**panel(claim, "7"), "fields": {"deal_value": "unclear"}})]
+    got, logged = _price_run(monkeypatch, "[CONFIG] ALARM pay settings differ", items)
+    # Only the price check stands down; every other check posts as usual.
+    assert got == {"1": (AGREE, None), "6": (UNREACHABLE, "pay_settings_differ"),
+                   "7": (DISAGREE, "judge_inconsistent")}
+    assert [m for m in logged if "ALARM" in m and "pay settings" in m]
+
+
+def test_with_matching_pay_settings_a_price_mismatch_is_a_disagree(monkeypatch):
+    claim = _deal()
+    items = [_item("1", claim), {**_item("6", claim), "factors": {"base": 3, "T": 0.625}}]
+    got, logged = _price_run(monkeypatch, None, items)
+    assert got == {"1": (AGREE, None), "6": (DISAGREE, "points_mismatch")}
+    assert not [m for m in logged if "pay settings" in m]

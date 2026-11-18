@@ -1,5 +1,6 @@
 """A coldkey's quality: a running score over its decided claims, in the order they were
-decided.
+decided: when each was paid or rejected (a scoop held for its window is decided when it is
+confirmed or closed, a claim waiting in its line when it is placed).
 
     q <- DECAY * q + (1 - DECAY) * x,   x = 1 for a paid claim, 0 for a junk reject
 
@@ -13,7 +14,8 @@ linear between. The check budget scales by q now: none at ZERO, full at FULL.
 """
 from __future__ import annotations
 
-from datetime import datetime
+import math
+from datetime import datetime, timedelta
 from typing import Dict, Iterable, Mapping, Optional, Sequence
 
 HALF_LIFE = 20
@@ -21,8 +23,13 @@ DECAY = 0.5 ** (1 / HALF_LIFE)
 START = 0.50
 ZERO, FULL = 0.15, 0.25
 PAY_ZERO, PAY_FULL = 0.10, 0.60
-# Weights are scaled from this time on, by claims judged from it; set at release.
+# Weights are scaled for each epoch whose points were signed from this time on, by claims
+# decided from it; set at release.
 QUALITY_FROM: Optional[datetime] = None
+# An epoch is signed before a validator reads it, so one read this long before QUALITY_FROM
+# by the validator's clock cannot be scaled, and the API is not asked. The margin covers clock
+# differences.
+ASK_BEFORE = timedelta(days=1)
 # Rejects that say the claim does not match its page, and an old story sent as a scoop. A
 # judge_unclear whose judge found none of the types for the claim counts as junk too (the API
 # serves it so).
@@ -52,8 +59,16 @@ def locked(outcomes: Iterable[Sequence]) -> Dict[str, float]:
     return out
 
 
-def active(now: datetime) -> bool:
-    return QUALITY_FROM is not None and now >= QUALITY_FROM
+def may_be_active(now: datetime) -> bool:
+    """Whether an epoch read at `now` can have been signed from QUALITY_FROM."""
+    return QUALITY_FROM is not None and now >= QUALITY_FROM - ASK_BEFORE
+
+
+def active(until_ms: Optional[int]) -> bool:
+    """Whether an epoch is scaled: its points were signed (the until_ms the API serves with
+    its outcomes) at or after QUALITY_FROM. Every validator reads the same signing time, so
+    all turn quality on at the same epoch."""
+    return QUALITY_FROM is not None and until_ms is not None and int(until_ms) >= from_ms()
 
 
 def from_ms() -> int:
@@ -69,15 +84,35 @@ def pay_multiplier(q: float) -> float:
     return min(1.0, max(0.0, (q - PAY_ZERO) / (PAY_FULL - PAY_ZERO)))
 
 
-def scaled(leaves: Iterable[Mapping], locks: Mapping[str, float]) -> Dict[str, float]:
-    """Per-hotkey window points with each paid claim's rows times its locked multiplier.
+def worth(leaf: Mapping, locks: Mapping[str, float]) -> float:
+    """A leaf's points, times its claim's locked multiplier when it is a paid claim's row.
     Rows of a claim decided before the start, debt, penalties and carry are not scaled."""
-    out: Dict[str, float] = {}
+    v = float(leaf["points_awarded"])
+    cid = leaf.get("claim_id")
+    if leaf.get("validator_verdict") in LOCKED_KINDS and cid is not None:
+        v *= locks.get(str(cid), 1.0)
+    return v
+
+
+def scaled(leaves: Iterable[Mapping], locks: Mapping[str, float]) -> Dict[str, float]:
+    """Per-hotkey window points, each leaf at its worth, summed exactly (math.fsum) so that
+    any leaf order gives the same values."""
+    parts: Dict[str, list] = {}
     for leaf in leaves:
-        v = float(leaf["points_awarded"])
-        cid = leaf.get("claim_id")
-        if leaf.get("validator_verdict") in LOCKED_KINDS and cid is not None:
-            v *= locks.get(str(cid), 1.0)
-        hk = str(leaf["miner_hotkey"])
-        out[hk] = out.get(hk, 0.0) + v
+        parts.setdefault(str(leaf["miner_hotkey"]), []).append(worth(leaf, locks))
+    out = {hk: math.fsum(v) for hk, v in parts.items()}
     return {hk: v for hk, v in out.items() if v != 0}
+
+
+def unlocked(leaves: Iterable[Mapping], locks: Mapping[str, float]) -> int:
+    """Paid claims received from QUALITY_FROM whose rows have no lock. Such a claim was decided
+    after its receipt, so from the start, and should have one; scaled() pays it 1."""
+    start = from_ms()
+    out = set()
+    for leaf in leaves:
+        cid = leaf.get("claim_id")
+        if (leaf.get("validator_verdict") in LOCKED_KINDS and cid is not None
+                and str(cid) not in locks and leaf.get("received_ms") is not None
+                and int(leaf["received_ms"]) >= start):
+            out.add(str(cid))
+    return len(out)

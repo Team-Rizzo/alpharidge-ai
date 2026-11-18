@@ -33,6 +33,7 @@ from alpharidge_ai.schema import (
     TYPE_SPEC, Claim, category_of, judged, kind_key, text_problem,
 )
 from alpharidge_ai.schema.types import TIER_PRICE, age_factor, event_price, scoop_multiple
+from alpharidge_ai.validator import settings_check
 from alpharidge_ai.validator.selector import Selector
 from alpharidge_ai.verify.check import PIVOT_SLOTS, check_claim, verdict_hash
 from alpharidge_ai.verify.dates import parse_datetime
@@ -40,6 +41,8 @@ from alpharidge_ai.verify.fetch import BLOCKED, FETCH_FAILED, FetchConfig, Fetch
 from alpharidge_ai.verify.filing import confirms, filing_row, submissions_url
 
 AGREE, DISAGREE, UNREACHABLE = "agree", "disagree", "unreachable"
+# A price check that failed while this validator's pay settings differ from the API's.
+PAY_DIFFERS = "pay_settings_differ"
 DOMAIN = "reverify"
 POST_MAX = 5000
 DISAGREE_ALARM = 0.05
@@ -266,6 +269,9 @@ async def reverify(item: dict, fetcher: Fetcher, judges=()) -> dict:
     if claim is None or not (held or consistent(record, claim)):
         return _result(item, DISAGREE, verdict="rejected", reason="judge_inconsistent")
     if not paid_right(item, claim, received):
+        # Priced under other pay settings than the API's, an honest claim fails here too.
+        if settings_check.pay_differs():
+            return _result(item, UNREACHABLE, reason=PAY_DIFFERS)
         return _result(item, DISAGREE, verdict="rejected", reason="points_mismatch")
     if not judges:
         return _result(item, UNREACHABLE, reason="no_judge_list")
@@ -380,4 +386,9 @@ class Reverifier:
             bt.logging.error(
                 f"[REVERIFY] ALARM epoch={epoch} disagreement {share:.1%} of {checked} "
                 f"checked claims")
+        unpriced = sum(r["observed"].get("reason") == PAY_DIFFERS for r in results)
+        if unpriced:
+            bt.logging.error(
+                f"[REVERIFY] ALARM epoch={epoch} {unpriced} claims' prices not checked: this "
+                f"validator's pay settings differ from the API's; posted as unreachable")
         return dict(counts)

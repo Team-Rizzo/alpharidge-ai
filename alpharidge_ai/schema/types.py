@@ -5,6 +5,7 @@ The rules live in `data/types.json` so miners can read them without importing th
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
@@ -19,24 +20,63 @@ PLACE_LEVELS = ("none", "country", "admin1")
 TIERS = ("low", "high")
 # Points per tier, before trust; the API and validators must agree.
 TIER_PRICE = {"low": 3, "high": 12}
-# Pay settings, today's values by default; the API and validators must agree.
+# Pay settings, today's values by default; the API and validators must agree (validators
+# compare theirs with the API's on /config/subnet). Each is EL_<KEY> from the environment, read
+# when used rather than when this module is imported, so env files loaded later still apply.
 # Event route points are the tier price × EVENT_PAY_X. A confirmed scoop pays SCOOP_PREMIUM × the
 # tier price when no trusted page about it was out before its receipt, else the event rate.
-EVENT_PAY_X = float(os.getenv("EL_EVENT_PAY_X", "0.25"))
-SCOOP_PREMIUM = float(os.getenv("EL_SCOOP_PREMIUM", "10"))
-# A scoop that closes unconfirmed or that a trusted page contradicts costs this multiple of
-# its 1x pay, at SCOOP_DEBT_TRUST: the highest trust the scoop route pays at.
-SCOOP_MISS_DEBT_X = float(os.getenv("EL_SCOOP_MISS_DEBT_X", "1"))
+# A scoop that closes unconfirmed or that a trusted page contradicts costs SCOOP_MISS_DEBT_X × its
+# 1x pay, at SCOOP_DEBT_TRUST: the highest trust the scoop route pays at.
+PAY_DEFAULTS = {"EVENT_PAY_X": 1.0, "SCOOP_PREMIUM": 5.0, "SCOOP_MISS_DEBT_X": 2.0}
 SCOOP_DEBT_TRUST = 1.0
 # An operator-confirmed misconduct penalty, in multiples of the claim's full value (or of a
 # missed scoop's debt).
 MISCONDUCT_PENALTY_X = 5
 
 
+class PaySettingError(ValueError):
+    """A pay setting in the environment that cannot be used; the message names the variable."""
+
+
+def _pay(key: str) -> float:
+    """EL_<key> from the environment, or its default when unset. It must be a finite number of
+    0 or more."""
+    var = f"EL_{key}"
+    raw = os.getenv(var)
+    if raw is None:
+        return PAY_DEFAULTS[key]
+    try:
+        value = float(raw)
+    except ValueError:
+        value = math.nan
+    if not math.isfinite(value) or value < 0:
+        raise PaySettingError(f"{var}={raw!r} is not a pay setting: set a finite number of 0 or "
+                              f"more, or unset it for the default {PAY_DEFAULTS[key]:g}")
+    return value
+
+
+def pay_settings() -> Dict[str, float]:
+    """The pay settings in force now, as the API serves them on /config/subnet. A scoop premium
+    below the event rate is refused: a confirmed scoop would pay less than an event."""
+    out = {k: _pay(k) for k in PAY_DEFAULTS}
+    if out["SCOOP_PREMIUM"] < out["EVENT_PAY_X"]:
+        raise PaySettingError(
+            f"EL_SCOOP_PREMIUM={out['SCOOP_PREMIUM']:g} is below EL_EVENT_PAY_X="
+            f"{out['EVENT_PAY_X']:g}: a confirmed scoop would pay less than an event")
+    return {**out, "SCOOP_DEBT_TRUST": SCOOP_DEBT_TRUST}
+
+
+def __getattr__(name: str):
+    # types.EVENT_PAY_X, types.SCOOP_PREMIUM and types.SCOOP_MISS_DEBT_X, read when asked for.
+    if name in PAY_DEFAULTS:
+        return _pay(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 def event_price(tier: str) -> Optional[float]:
     """The event route's base points for a tier, None for an unknown tier."""
     price = TIER_PRICE.get(tier)
-    return None if price is None else price * EVENT_PAY_X
+    return None if price is None else price * _pay("EVENT_PAY_X")
 
 
 def scoop_multiple(published: Optional[datetime], received: Optional[datetime],
@@ -47,8 +87,8 @@ def scoop_multiple(published: Optional[datetime], received: Optional[datetime],
     another scoop named a conflicting outcome."""
     out = min((d for d in (published, first_seen) if d is not None), default=None)
     if contested or not (out and received and out > received):
-        return EVENT_PAY_X
-    return SCOOP_PREMIUM
+        return _pay("EVENT_PAY_X")
+    return _pay("SCOOP_PREMIUM")
 
 
 def reverify_rate() -> float:
@@ -80,7 +120,7 @@ def scoop_debt(event_type, event_date: date, received: datetime,
     """A missed scoop's debt, as negative points: SCOOP_MISS_DEBT_X times the type's tier price
     x SCOOP_DEBT_TRUST x the age factor, rounded to 6 dp."""
     price = TIER_PRICE.get(getattr(TYPE_SPEC.get(EventType(event_type)), "tier", ""), 0)
-    pts = SCOOP_MISS_DEBT_X * price * SCOOP_DEBT_TRUST * age_factor(event_date, received,
+    pts = _pay("SCOOP_MISS_DEBT_X") * price * SCOOP_DEBT_TRUST * age_factor(event_date, received,
                                                                     published)
     return -round(pts, 6) if pts else 0.0
 

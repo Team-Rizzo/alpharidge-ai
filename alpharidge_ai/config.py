@@ -18,21 +18,37 @@ _SUBNET_ROOT = Path(__file__).resolve().parent.parent
 _MINER_ENV_PATH = _SUBNET_ROOT / ".miner_env"
 _VALI_ENV_PATH = _SUBNET_ROOT / ".vali_env"
 
-# Load environment files (validator vars override miner vars if both exist)
-try:
-    from dotenv import load_dotenv
+# Set (1, true, yes or on) by a process that only imports parts of the subnet, such as the
+# API's tests, so a checkout's env files do not reach it. The neurons leave it unset.
+SKIP_ENV_FILES = "ALPHARIDGE_SKIP_ENV_FILES"
 
-    found = [p for p in (_MINER_ENV_PATH, _VALI_ENV_PATH) if p.exists()]
+
+def load_env_files(paths=(_MINER_ENV_PATH, _VALI_ENV_PATH)) -> list:
+    """Load the env files that exist, each over the environment and the validator's last, and
+    return them; none when SKIP_ENV_FILES is set, which it logs."""
+    if os.getenv(SKIP_ENV_FILES, "").strip().lower() in ("1", "true", "yes", "on"):
+        print(f"[CONFIG] {SKIP_ENV_FILES} is set: not loading "
+              f"{', '.join(str(p) for p in paths)}")
+        return []
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        print("[CONFIG] Warning: python-dotenv not installed, "
+              "using system environment variables only")
+        return []
+    found = [p for p in paths if p.exists()]
     for path in found:
         load_dotenv(str(path), override=True)
         print(f"[CONFIG] Loaded {path}")
     if not found:
-        print(f"[CONFIG] Warning: neither {_MINER_ENV_PATH} nor {_VALI_ENV_PATH} found")
+        print(f"[CONFIG] Warning: neither {paths[0]} nor {paths[-1]} found")
+    return found
 
-except ImportError:
-    print("[CONFIG] Warning: python-dotenv not installed, using system environment variables only")
 
-# Imported after the env files load: these modules read settings (pay values) when imported.
+load_env_files()
+
+# Imported after the env files load. The pay settings (schema.types) are read when used, so a
+# module that imported the schema before this one still prices with the values loaded here.
 from alpharidge_ai.ledger.attestation import BLOCK_LENGTH  # noqa: E402,F401
 from alpharidge_ai.schema.types import reverify_rate  # noqa: E402
 
@@ -217,6 +233,10 @@ def refresh_remote_config(force: bool = False) -> dict:
                 globals()[attr] = value
                 shown = value if key not in ("EL_JUDGE_URL", "EL_JUDGE_MODEL") else "set"
                 bt.logging.info(f"[REMOTE_CONFIG] {key} = {shown} ({source})")
+
+        # Pay settings are compared, never applied: a difference is the operator's to fix.
+        from alpharidge_ai.validator.settings_check import check_pay
+        check_pay(data.get("pay"))
 
         try:
             from alpharidge_ai import __version__
