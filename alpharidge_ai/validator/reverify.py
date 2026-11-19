@@ -110,7 +110,7 @@ def paid_right(item: dict, claim: Claim, received) -> bool:
     tier = getattr(TYPE_SPEC.get(claim.event_type), "tier", "")
     route = item.get("route")
     if route in ("event", "scoop"):
-        price = event_price(tier) if route == "event" else TIER_PRICE.get(tier)
+        price = event_price(tier, received) if route == "event" else TIER_PRICE.get(tier)
         if route == "scoop" and price is not None:
             confirm = record.get("confirm") or {}
             if not isinstance(confirm, dict):

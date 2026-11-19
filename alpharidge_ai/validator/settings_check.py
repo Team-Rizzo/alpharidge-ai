@@ -6,13 +6,16 @@ come from the signed leaves. When they differ from this validator's, re-verify's
 the debt check (`unbound_debt`) and keeps the last weights. So each config read compares them,
 logs an alarm and records the difference (`pay_differs`): while it stands, re-verify posts a
 price mismatch as unreachable, never as a disagreement that would hold an honest claim.
+
+The API also serves the pay table switch (which of this code's tables applies from when). That
+is applied, not compared: it names a table, never values.
 """
 from __future__ import annotations
 
 import math
 from typing import Dict, Optional
 
-from alpharidge_ai.schema.types import pay_settings
+from alpharidge_ai.schema.types import PaySettingError, pay_settings, pay_switch, set_pay_switch
 
 _MATCH = "the API and every validator must use the same values"
 # The alarm line while the API's last served pay settings differ from this validator's.
@@ -57,6 +60,23 @@ def pay_alarm(served: dict, own: Optional[Dict[str, float]] = None) -> Optional[
             "epoch with scoop debt in its window fails the debt check (unbound_debt) and keeps "
             f"the last weights; {_MATCH} (EL_EVENT_PAY_X, EL_SCOOP_PREMIUM, EL_SCOOP_MISS_DEBT_X "
             "in .vali_env and the API's .env)")
+
+
+def apply_switch(served) -> Optional[tuple]:
+    """Apply the served pay table switch; a bad one is logged and the last known one stays.
+    Returns the switch in force."""
+    import bittensor as bt
+
+    before = pay_switch()
+    try:
+        now = set_pay_switch(served)
+    except PaySettingError as e:
+        bt.logging.error(f"[CONFIG] ALARM the API serves a pay switch this validator refuses ({e}); "
+                         f"keeping {before}")
+        return before
+    if now != before:
+        bt.logging.info(f"[CONFIG] pay table switch: {now} (from API)")
+    return now
 
 
 def check_pay(served) -> Optional[bool]:

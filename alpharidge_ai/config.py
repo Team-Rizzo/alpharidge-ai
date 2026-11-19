@@ -234,8 +234,10 @@ def refresh_remote_config(force: bool = False) -> dict:
                 shown = value if key not in ("EL_JUDGE_URL", "EL_JUDGE_MODEL") else "set"
                 bt.logging.info(f"[REMOTE_CONFIG] {key} = {shown} ({source})")
 
-        # Pay settings are compared, never applied: a difference is the operator's to fix.
-        from alpharidge_ai.validator.settings_check import check_pay
+        # The pay table switch is applied (its tables are this code's); the values are compared,
+        # never applied: a difference is the operator's to fix.
+        from alpharidge_ai.validator.settings_check import apply_switch, check_pay
+        apply_switch(data.get("pay_switch"))
         check_pay(data.get("pay"))
 
         try:
