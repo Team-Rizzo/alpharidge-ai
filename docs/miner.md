@@ -171,7 +171,7 @@ Pages from trusted sources win an event directly: official sites (central banks,
   - **Check budget.** Your check budget above 20 checks is scaled by `q` too: 1 at 0.25 or more, 0 at 0.15 or less, in a straight line between (a new coldkey has its full budget), so a run of junk slows your checks at once, and a coldkey at 0 still gets 20 checks a day to recover.
   - **What to do.** Send only claims you expect to pass: holding back a doubtful claim costs nothing, sending junk costs pay. Use the pre-checks (`check_claim` and the judge's questions) before you send.
   - **Where you stand.** `GET /dashboard/quality?coldkey=<ss58>` on the coordination API gives your coldkey's `q`, the pay multiplier your next paid claim gets (`pay_multiplier`), the check budget multiplier (`multiplier`) and counted paid and junk claims; without `coldkey` it lists every scored coldkey.
-  - **Start date.** Weights are scaled from `QUALITY_FROM` in `quality.py`: for each epoch whose points the API signed at or after it, counting only claims decided from then on. It is unset until it is announced; until then the dashboard scores the claims decided in the last 30 days.
+  - **Start date.** Weights are scaled from a start the API serves on `/config/subnet` (`quality_switch`), applied by every validator: for each epoch whose points the API signed at or after it, counting only claims decided from then on. It is unset until it is announced; until then the dashboard scores the claims decided in the last 30 days.
 
 ## 7. Outcomes
 

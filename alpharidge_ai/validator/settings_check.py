@@ -79,6 +79,25 @@ def apply_switch(served) -> Optional[tuple]:
     return now
 
 
+def apply_quality_switch(served) -> Optional[int]:
+    """Apply the served quality start (the rules are this code's); a bad one is logged and the
+    last known one stays. Returns the start in force."""
+    import bittensor as bt
+
+    from alpharidge_ai.mechanism import quality
+
+    before = quality.start_ms()
+    try:
+        now = quality.set_quality_switch(served)
+    except quality.QualitySettingError as e:
+        bt.logging.error(f"[CONFIG] ALARM the API serves a quality start this validator refuses "
+                         f"({e}); keeping {before}")
+        return before
+    if now != before:
+        bt.logging.info(f"[CONFIG] quality start: {now} (from API)")
+    return now
+
+
 def check_pay(served) -> Optional[bool]:
     """Log an alarm and record it (`pay_differs`) when the served pay settings differ from
     this validator's. True when they match, False when they differ, None when the API serves

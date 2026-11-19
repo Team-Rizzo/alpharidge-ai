@@ -15,7 +15,8 @@ linear between. The check budget scales by q now: none at ZERO, full at FULL.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, Mapping, Optional, Sequence
 
 HALF_LIFE = 20
@@ -23,9 +24,13 @@ DECAY = 0.5 ** (1 / HALF_LIFE)
 START = 0.50
 ZERO, FULL = 0.15, 0.25
 PAY_ZERO, PAY_FULL = 0.10, 0.60
-# Weights are scaled for each epoch whose points were signed from this time on, by claims
-# decided from it; set at release.
+# Weights are scaled for each epoch whose points were signed from the start on, by claims
+# decided from it. The start is EL_QUALITY_FROM_MS in the environment when set (the API's own
+# setting, or a local override), else the one the API serves on /config/subnet
+# (`set_quality_switch`), else QUALITY_FROM here. None of them set: quality is off.
 QUALITY_FROM: Optional[datetime] = None
+# The start the API last served, in ms; None until one is served.
+_served_ms: Optional[int] = None
 # An epoch is signed before a validator reads it, so one read this long before QUALITY_FROM
 # by the validator's clock cannot be scaled, and the API is not asked. The margin covers clock
 # differences.
@@ -59,20 +64,74 @@ def locked(outcomes: Iterable[Sequence]) -> Dict[str, float]:
     return out
 
 
+class QualitySettingError(ValueError):
+    """A quality start that is not a time in ms."""
+
+
+def _as_ms(raw) -> int:
+    if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
+        raise QualitySettingError(f"quality start {raw!r} is not a time in ms")
+    try:
+        value = float(raw)
+    except ValueError:
+        raise QualitySettingError(f"quality start {raw!r} is not a time in ms")
+    if value != int(value) or value <= 0:
+        raise QualitySettingError(f"quality start {raw!r} is not a time in ms")
+    return int(value)
+
+
+def _env_ms() -> Optional[int]:
+    raw = os.getenv("EL_QUALITY_FROM_MS", "").strip()
+    return None if raw in ("", "0") else _as_ms(raw)
+
+
+def start_ms() -> Optional[int]:
+    """The start in force, in ms, or None when quality is off."""
+    env = _env_ms()
+    if env is not None:
+        return env
+    if _served_ms is not None:
+        return _served_ms
+    return int(QUALITY_FROM.timestamp() * 1000) if QUALITY_FROM is not None else None
+
+
+def parse_quality_switch(raw) -> Optional[int]:
+    """{"from_ms": start} as start; None for no switch. A start that is not a positive whole
+    number of ms raises QualitySettingError."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise QualitySettingError(f"quality switch {raw!r} is not an object")
+    return _as_ms(raw.get("from_ms"))
+
+
+def set_quality_switch(raw) -> Optional[int]:
+    """Apply a served quality switch (None clears it). A bad one raises QualitySettingError and
+    the last known one stays. Returns the start now in force."""
+    global _served_ms
+    _served_ms = parse_quality_switch(raw)
+    return start_ms()
+
+
 def may_be_active(now: datetime) -> bool:
-    """Whether an epoch read at `now` can have been signed from QUALITY_FROM."""
-    return QUALITY_FROM is not None and now >= QUALITY_FROM - ASK_BEFORE
+    """Whether an epoch read at `now` can have been signed from the start."""
+    start = start_ms()
+    if start is None:
+        return False
+    return now >= datetime.fromtimestamp(start / 1000, tz=timezone.utc) - ASK_BEFORE
 
 
 def active(until_ms: Optional[int]) -> bool:
     """Whether an epoch is scaled: its points were signed (the until_ms the API serves with
-    its outcomes) at or after QUALITY_FROM. Every validator reads the same signing time, so
+    its outcomes) at or after the start. Every validator reads the same signing time, so
     all turn quality on at the same epoch."""
-    return QUALITY_FROM is not None and until_ms is not None and int(until_ms) >= from_ms()
+    start = start_ms()
+    return start is not None and until_ms is not None and int(until_ms) >= start
 
 
 def from_ms() -> int:
-    return int(QUALITY_FROM.timestamp() * 1000) if QUALITY_FROM is not None else 0
+    start = start_ms()
+    return 0 if start is None else start
 
 
 def multiplier(q: float) -> float:
