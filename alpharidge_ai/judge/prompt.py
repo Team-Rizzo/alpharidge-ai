@@ -11,7 +11,7 @@ from alpharidge_ai.schema import OPEN_TYPES, TYPE_SPEC, EventType, kinds
 from alpharidge_ai.verify.check import quote_span
 from alpharidge_ai.verify.filing import confirms
 
-JUDGE_PROMPT_VERSION = "v17"
+JUDGE_PROMPT_VERSION = "v18"
 PAGE_MAX_CHARS = 24_000
 # Pass when every score is at least JUDGE_YES; reject when any score is below JUDGE_NO;
 # otherwise unclear.
