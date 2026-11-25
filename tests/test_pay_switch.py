@@ -73,7 +73,7 @@ def test_a_bad_switch_is_refused_and_the_last_one_stays(bad):
     types.set_pay_switch(SWITCH)
     with pytest.raises(types.PaySettingError):
         types.set_pay_switch(bad)
-    assert types.pay_switch() == ("new", START_MS)
+    assert types.pay_switch() == (("new", START_MS),)
 
 
 def test_a_local_setting_wins(monkeypatch):
@@ -105,13 +105,13 @@ def _serve(monkeypatch, payload=None, fail=False):
 def test_a_config_read_applies_the_served_switch_and_a_failed_read_keeps_it(monkeypatch):
     _serve(monkeypatch, {"config": {}, "pay_switch": SWITCH})
     config.refresh_remote_config(force=True)
-    assert types.pay_switch() == ("new", START_MS)
+    assert types.pay_switch() == (("new", START_MS),)
     _serve(monkeypatch, fail=True)
     config.refresh_remote_config(force=True)
-    assert types.pay_switch() == ("new", START_MS)
+    assert types.pay_switch() == (("new", START_MS),)
     _serve(monkeypatch, {"config": {}, "pay_switch": {"pay_table": "x", "from_ms": 1}})
     config.refresh_remote_config(force=True)
-    assert types.pay_switch() == ("new", START_MS)
+    assert types.pay_switch() == (("new", START_MS),)
     _serve(monkeypatch, {"config": {}})
     config.refresh_remote_config(force=True)
     assert types.pay_switch() is None
