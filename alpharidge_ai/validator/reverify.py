@@ -117,7 +117,8 @@ def paid_right(item: dict, claim: Claim, received) -> bool:
                 return False
             price = price * scoop_multiple(parse_datetime(confirm.get("published_at")), received,
                                            bool(confirm.get("contested")),
-                                           parse_datetime(confirm.get("first_seen")))
+                                           parse_datetime(confirm.get("first_seen")),
+                                           claim.source_url)
         if price is None or not math.isclose(base, price):
             return False
     return math.isclose(points, PROVISIONAL_SHARE * base * t * a, rel_tol=1e-5, abs_tol=1e-6)
