@@ -353,9 +353,15 @@ def _spec(raw: dict) -> TypeSpec:
     )
 
 
-def load_types(path: Path = TYPES_PATH) -> Dict[EventType, TypeSpec]:
+def load_types(path: Path = TYPES_PATH, overlay: Optional[Path] = None
+               ) -> Dict[EventType, TypeSpec]:
+    """`overlay` replaces keys of some types (a judge wording tried in shadow)."""
     with open(path, encoding="utf-8") as f:
         raw = json.load(f)
+    if overlay is not None:
+        with open(overlay, encoding="utf-8") as f:
+            for t, keys in json.load(f).items():
+                raw[t] = {**raw[t], **keys}
     return {EventType(t): _spec(v) for t, v in raw.items()}
 
 
@@ -395,10 +401,12 @@ def parse_kind(key: str) -> Optional[Tuple[EventType, Optional[Stage]]]:
     return EventType(t), stage
 
 
-def kinds(types: Iterable = OPEN_TYPES) -> Dict[str, str]:
+def kinds(types: Iterable = OPEN_TYPES, table: Optional[Dict[EventType, TypeSpec]] = None
+          ) -> Dict[str, str]:
     """The page-judge choices for the given types: key -> text."""
+    table = TYPE_SPEC if table is None else table
     return {kind_key(t, s or None): text for t in types
-            for s, text in TYPE_SPEC[EventType(t)].about.items()}
+            for s, text in table[EventType(t)].about.items()}
 
 
 def filled(claim) -> set:

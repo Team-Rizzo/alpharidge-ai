@@ -75,7 +75,7 @@ def test_model_judge_passes_only_when_every_score_is_yes_never_on_failure(monkey
     assert sent[0]["state"][1].count("[[") == 1 and sent[0]["state"][1].startswith(
         "[[" + QUOTE.replace("Tuesday", "Tuesday [2026-10-13]") + "]]")
     assert sent[0]["model"] == "test/judge-model" and j.last_cost == 0.0001
-    assert rec["outcome"] == "pass" and rec["prompt_version"] == "v18"
+    assert rec["outcome"] == "pass" and rec["prompt_version"] == "v17"
     assert "model" not in rec and rec["scores"]["q0"] == 0.7
     assert "quote" not in rec and "quote_ok" not in rec
     assert ask(model_answers(q0=pick("same", same=0.5)))["outcome"] == "unclear"
@@ -209,22 +209,6 @@ def test_the_kind_question_offers_the_types_the_api_serves():
     assert prompt.judge_body(c, TEXT, None, "m", served) == prompt.judge_body(c, TEXT, None, "m")
     kinds = prompt.judge_questions(c, None, ["earnings"])[0]["kind"]["criteria"]
     assert set(kinds) == {"earnings", "none"}
-
-
-@pytest.mark.parametrize("event_type,actor,facts", [
-    ("award", {"role": "recipient", "name": "Ana Lee"}, [{"field": "award", "value": "MVP"}]),
-    ("injury", {"role": "player", "name": "Ana Lee"}, []),
-    ("match_result", {"role": "team", "name": "Reds"}, [{"field": "score", "value": "2-1"}]),
-    ("transfer", {"role": "player", "name": "Ana Lee"}, [{"field": "to_team", "value": "Reds"}]),
-])
-def test_a_sports_type_holds_only_for_sport(event_type, actor, facts):
-    """An award, injury, result or move outside sport is another kind of event, in the event
-    question and in the kind question every claim is asked."""
-    c = claim(event_type=event_type, category="sports",
-              actors=[{"id_scheme": "other", "id": actor["name"], **actor}], facts=facts)
-    q = prompt.judge_questions(c)[0]
-    assert "other_kind" in q["event"]["criteria"]["yes"]
-    assert "sport" in q["kind"]["criteria"][event_type]
 
 
 def test_a_validator_judge_comes_from_its_env(tmp_path):

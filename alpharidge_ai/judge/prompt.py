@@ -4,6 +4,8 @@ miner's quote marked, and only picks among the options it is given."""
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, timedelta
 from typing import Optional
 
@@ -11,7 +13,7 @@ from alpharidge_ai.schema import OPEN_TYPES, TYPE_SPEC, EventType, kinds
 from alpharidge_ai.verify.check import quote_span
 from alpharidge_ai.verify.filing import confirms
 
-JUDGE_PROMPT_VERSION = "v18"
+JUDGE_PROMPT_VERSION = "v17"
 PAGE_MAX_CHARS = 24_000
 # Pass when every score is at least JUDGE_YES; reject when any score is below JUDGE_NO;
 # otherwise unclear.
@@ -100,8 +102,27 @@ def place(claim) -> str:
     return ", ".join(_clean(x) for x in (_g(p, "admin1"), _g(p, "iso2")) if x) if p else ""
 
 
+# The type texts the questions are built from: types.json, or a wording tried in shadow.
+_TABLE: ContextVar[Optional[dict]] = ContextVar("judge_types", default=None)
+
+
+@contextmanager
+def wording(table: dict):
+    """Build questions (and read answers) from `table` instead of types.json, in this context
+    only: a live judge call in another thread or task keeps types.json."""
+    token = _TABLE.set(table)
+    try:
+        yield
+    finally:
+        _TABLE.reset(token)
+
+
+def _table() -> dict:
+    return _TABLE.get() or TYPE_SPEC
+
+
 def _spec(claim):
-    return TYPE_SPEC.get(EventType(str(_g(claim, "event_type"))))
+    return _table().get(EventType(str(_g(claim, "event_type"))))
 
 
 def render(template: str, values: dict) -> str:
@@ -236,7 +257,7 @@ def judge_questions(claim, published: Optional[str] = None,
     q["kind"] = _choice(
         f"Which of these does the page report about {val['subject']} around the marked "
         f"passage, as its news?", {
-            **kinds(OPEN_TYPES if types is None else types),
+            **kinds(OPEN_TYPES if types is None else types, _table()),
             "none": "None of these: other news about them, or no news about them there."})
     want = {"event": "yes", "status": "fact", "timing": "on_date"}
     acts = actors(claim)

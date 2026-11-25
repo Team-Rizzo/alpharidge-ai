@@ -344,8 +344,8 @@
   "match_result": {
     "tier": "low", "category": "sports", "group": "match_result", "label": "result", "window_days": 1, "place_level": "none", "max_subjects": 2,
     "definition": "the match between {subject} ending {score}[ in {competition}]",
-    "about": "a sports match or game finishing, with its final result (not a market or index move, an election, a vote, a court case or a show's contest)",
-    "notes": {"event": " The match must be over: a half-time or live score, a preview or a schedule is not this. It is a sporting contest between athletes or teams; a market or index close, an election, a vote, a court case or a TV show's contest is other_kind."},
+    "about": "a match or game finishing, with its final result",
+    "notes": {"event": " The match must be over: a half-time or live score, a preview or a schedule is not this."},
     "fields": {
       "score": {"kind": "text", "ask": "Does the page give {v} as the final score of this match itself (not a series, aggregate, half-time or live score)?"},
       "scorers": {"kind": "text", "ask": "Does the page say {v} scored in this match?"},
@@ -359,9 +359,9 @@
   "transfer": {
     "tier": "high", "category": "sports", "group": "transfer", "label": "transfer", "window_days": 7, "place_level": "none", "max_subjects": 1,
     "definition": "{player} moving to {to_team}[ from {from_team}]",
-    "about": "an athlete signing for, joining, being traded to or loaned to another sports team (not a politician changing party, a staff posting, or a company or asset changing hands)",
+    "about": "a player signing for, joining, being traded to or loaned to another team",
     "subject_slot": "player", "name_slots": ["to_team"],
-    "notes": {"status": " A move a club, the league or the player confirms is fact; agreed personal terms, a player close to or in talks over a move, or a reporter's word that a deal is done are not.", "event": " The player is an athlete moving between sports teams or clubs; a politician changing party, an official's posting, or a company, vehicle or asset moving is other_kind."},
+    "notes": {"status": " A move a club, the league or the player confirms is fact; agreed personal terms, a player close to or in talks over a move, or a reporter's word that a deal is done are not."},
     "fields": {
       "fee": {"text": "the transfer fee"},
       "contract_years": {"text": "the length of {player}'s contract in years"}
@@ -373,8 +373,7 @@
   "injury": {
     "tier": "low", "category": "sports", "group": "injury", "label": "injury", "window_days": 3, "place_level": "none", "max_subjects": 1,
     "definition": "{player} being injured or ruled out by an injury[ ({injury})]",
-    "about": "an athlete being injured, ruled out or sidelined from their sport by an injury, or having surgery (not people hurt in accidents, crime, conflict or disasters)",
-    "notes": {"event": " The injured person is an athlete and the injury keeps them from playing or competing; people hurt in a road accident, an attack, a fall, a fire or a disaster are other_kind."},
+    "about": "a player being injured, ruled out or sidelined by an injury, or having surgery",
     "subject_slot": "player",
     "fields": {
       "injury": {"kind": "text", "ask": "Does the page describe the injury as {v} (or the same thing in other words)?"},
@@ -387,8 +386,7 @@
   "award": {
     "tier": "low", "category": "sports", "group": "award", "label": "award", "window_days": 3, "place_level": "none", "max_subjects": 1,
     "definition": "{subject} winning {award}[ for {season}]",
-    "about": "an athlete, coach, team or club being given an individual or season award for sport (not a match result or a title won on the field, and not an award in the arts, entertainment, media, business, science, education or public life)",
-    "notes": {"event": " The award is for sport, to an athlete, coach, team or club; an award in music, film, theatre, TV, books, journalism, business, science, education, charity or public service is other_kind."},
+    "about": "a player, coach or team being given an individual or season award (not a match result or a title won on the field)",
     "name_slots": ["award"],
     "fields": {
       "season": {"kind": "text", "ask": "Is the award for {v}?"}
