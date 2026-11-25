@@ -39,8 +39,9 @@ PAY_TABLES = {
 PAY_DEFAULTS = PAY_TABLES["today"]
 LEAD_TABLES = frozenset({"lead"})
 # Lead below SCOOP_LEAD_MIN_M pays the event rate, from SCOOP_LEAD_FULL_M the full premium, and in
-# between a straight line from one to the other.
-SCOOP_LEAD_MIN_M, SCOOP_LEAD_FULL_M = 10, 60
+# between a straight line from SCOOP_LEAD_START_X to the full premium.
+SCOOP_LEAD_MIN_M, SCOOP_LEAD_FULL_M = 5, 30
+SCOOP_LEAD_START_X = 1.0
 # Release wires and investor-relations pages: official, so a claim citing one is never a scoop.
 WIRE_NAMES = frozenset({"prnewswire", "globenewswire", "businesswire", "stocktitan",
                         "accessnewswire", "accesswire", "newsfile", "newsfilecorp"})
@@ -196,7 +197,8 @@ def lead_multiple(lead_ms: float, received=None) -> float:
     if lead_m >= SCOOP_LEAD_FULL_M:
         return high
     share = (lead_m - SCOOP_LEAD_MIN_M) / (SCOOP_LEAD_FULL_M - SCOOP_LEAD_MIN_M)
-    return round(low + (high - low) * share, 4)
+    start = max(low, min(SCOOP_LEAD_START_X, high))
+    return round(start + (high - start) * share, 4)
 
 
 def scoop_multiple(published: Optional[datetime], received: Optional[datetime],

@@ -29,21 +29,21 @@ def _m(lead_min, received=RECEIVED, url=NEWS, first_seen=None):
 
 
 @pytest.mark.parametrize("lead_min, want", [
-    (-5, 0.25), (0, 0.25), (9.9, 0.25), (10, 0.25), (35, 5.125), (60, 10.0), (61, 10.0),
+    (-5, 0.25), (0, 0.25), (4.9, 0.25), (5, 1.0), (17.5, 5.5), (30, 10.0), (31, 10.0),
     (19 * 60, 10.0)])
 def test_the_premium_follows_the_lead(lead_min, want):
     assert _m(lead_min) == pytest.approx(want, abs=1e-12)
 
 
 def test_the_curve_is_a_straight_line_rounded_to_4_dp():
-    assert _m(12.5) == round(0.25 + 9.75 * 2.5 / 50, 4) == 0.7375
-    assert _m(53.5) == round(0.25 + 9.75 * 43.5 / 50, 4)
-    assert types.lead_multiple(10 * 60_000 + 1) == 0.25
-    assert types.lead_multiple(60 * 60_000 - 1) == 10.0
+    assert _m(12.5) == round(1 + 9 * 7.5 / 25, 4) == 3.7
+    assert _m(9.5) == round(1 + 9 * 4.5 / 25, 4) == 2.62
+    assert types.lead_multiple(5 * 60_000 - 1) == 0.25
+    assert types.lead_multiple(30 * 60_000 - 1) == 10.0
 
 
 def test_the_lead_counts_from_the_first_trusted_sighting():
-    assert _m(120, first_seen=RECEIVED + timedelta(minutes=35)) == 5.125
+    assert _m(120, first_seen=RECEIVED + timedelta(minutes=17.5)) == 5.5
     assert _m(120, first_seen=RECEIVED - timedelta(minutes=2)) == 0.25
     assert _m(120, first_seen=RECEIVED) == 0.25
 
