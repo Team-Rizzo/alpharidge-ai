@@ -5,6 +5,7 @@ The rules live in `data/types.json` so miners can read them without importing th
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
@@ -19,28 +20,144 @@ PLACE_LEVELS = ("none", "country", "admin1")
 TIERS = ("low", "high")
 # Points per tier, before trust; the API and validators must agree.
 TIER_PRICE = {"low": 3, "high": 12}
-# A confirmed scoop pays this multiple of the tier price when the confirming trusted page was
-# published after the scoop's receipt: it gave the event earlier.
-SCOOP_PREMIUM = 5.0
-
-
-# A scoop that closes unconfirmed or that a trusted page contradicts costs this multiple of
-# its 1x pay, at SCOOP_DEBT_TRUST: the highest trust the scoop route pays at.
-SCOOP_MISS_DEBT_X = 2.0
+# Pay settings; the API and validators must agree. Both tables live here: "today" applies until
+# the API serves a switch to "new" with its start (`set_pay_switch`), and each claim is priced
+# by the table in force at its receipt, so every side prices an epoch that straddles the start
+# alike. A local EL_<KEY> in the environment still wins, read when used rather than when this
+# module is imported, so env files loaded later still apply.
+# Event route points are the tier price × EVENT_PAY_X. A confirmed scoop pays SCOOP_PREMIUM × the
+# tier price when no trusted page about it was out before its receipt, else the event rate.
+# A scoop that closes unconfirmed or that a trusted page contradicts costs SCOOP_MISS_DEBT_X × its
+# 1x pay, at SCOOP_DEBT_TRUST: the highest trust the scoop route pays at.
+PAY_TABLES = {
+    "today": {"EVENT_PAY_X": 1.0, "SCOOP_PREMIUM": 5.0, "SCOOP_MISS_DEBT_X": 2.0},
+    "new": {"EVENT_PAY_X": 0.25, "SCOOP_PREMIUM": 10.0, "SCOOP_MISS_DEBT_X": 1.0},
+}
+PAY_DEFAULTS = PAY_TABLES["today"]
 SCOOP_DEBT_TRUST = 1.0
 # An operator-confirmed misconduct penalty, in multiples of the claim's full value (or of a
 # missed scoop's debt).
 MISCONDUCT_PENALTY_X = 5
 
 
+class PaySettingError(ValueError):
+    """A pay setting in the environment that cannot be used; the message names the variable."""
+
+
+# The served switch to another table: (table, from_ms), None until one is served.
+_switch: Optional[Tuple[str, int]] = None
+
+
+def parse_pay_switch(raw) -> Optional[Tuple[str, int]]:
+    """{"pay_table": name, "from_ms": start} as (name, start); None for no switch. A table this
+    code does not have or a start that is not a positive whole number of ms raises
+    PaySettingError."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise PaySettingError(f"pay switch {raw!r} is not an object")
+    name, start = raw.get("pay_table"), raw.get("from_ms")
+    if name not in PAY_TABLES:
+        raise PaySettingError(f"pay switch table {name!r} is not one of {sorted(PAY_TABLES)}")
+    if isinstance(start, bool) or not isinstance(start, (int, float)) or start != int(start) \
+            or start <= 0:
+        raise PaySettingError(f"pay switch from_ms {start!r} is not a time in ms")
+    return name, int(start)
+
+
+def _env_switch() -> Optional[Tuple[str, int]]:
+    name = os.getenv("EL_PAY_TABLE")
+    if name is None:
+        return None
+    try:
+        start = int(os.getenv("EL_PAY_TABLE_FROM_MS", ""))
+    except ValueError:
+        raise PaySettingError("EL_PAY_TABLE is set but EL_PAY_TABLE_FROM_MS is not a time in ms")
+    return parse_pay_switch({"pay_table": name, "from_ms": start})
+
+
+def set_pay_switch(raw) -> Optional[Tuple[str, int]]:
+    """Apply a served switch (None clears it). A bad one raises PaySettingError and the last
+    known switch stays. Returns the switch now in force."""
+    global _switch
+    _switch = parse_pay_switch(raw)
+    return pay_switch()
+
+
+def pay_switch() -> Optional[Tuple[str, int]]:
+    """The switch in force: EL_PAY_TABLE / EL_PAY_TABLE_FROM_MS when set locally, else the
+    served one."""
+    return _env_switch() or _switch
+
+
+def pay_table(at_ms: Optional[int] = None) -> str:
+    """The table in force at at_ms (now when None)."""
+    switch = pay_switch()
+    if switch is None:
+        return "today"
+    at = int(datetime.now(timezone.utc).timestamp() * 1000) if at_ms is None else at_ms
+    return switch[0] if at >= switch[1] else "today"
+
+
+def _ms(at) -> Optional[int]:
+    if isinstance(at, datetime):
+        return int(at.timestamp() * 1000)
+    return None if at is None else int(at)
+
+
+def _pay(key: str, at=None) -> float:
+    """EL_<key> from the environment when set, else the value of the table in force at `at`
+    (a datetime or ms; now when None). EL_<key> must be a finite number of 0 or more."""
+    var = f"EL_{key}"
+    raw = os.getenv(var)
+    if raw is None:
+        return PAY_TABLES[pay_table(_ms(at))][key]
+    try:
+        value = float(raw)
+    except ValueError:
+        value = math.nan
+    if not math.isfinite(value) or value < 0:
+        raise PaySettingError(f"{var}={raw!r} is not a pay setting: set a finite number of 0 or "
+                              f"more, or unset it for the table's value")
+    return value
+
+
+def pay_settings(at=None) -> Dict[str, float]:
+    """The pay settings in force at `at` (now when None), as the API serves them on
+    /config/subnet. A scoop premium below the event rate is refused: a confirmed scoop would
+    pay less than an event."""
+    out = {k: _pay(k, at) for k in PAY_DEFAULTS}
+    if out["SCOOP_PREMIUM"] < out["EVENT_PAY_X"]:
+        raise PaySettingError(
+            f"EL_SCOOP_PREMIUM={out['SCOOP_PREMIUM']:g} is below EL_EVENT_PAY_X="
+            f"{out['EVENT_PAY_X']:g}: a confirmed scoop would pay less than an event")
+    return {**out, "SCOOP_DEBT_TRUST": SCOOP_DEBT_TRUST}
+
+
+def __getattr__(name: str):
+    # types.EVENT_PAY_X, types.SCOOP_PREMIUM and types.SCOOP_MISS_DEBT_X, read when asked for.
+    if name in PAY_DEFAULTS:
+        return _pay(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def event_price(tier: str, received=None) -> Optional[float]:
+    """The event route's base points for a tier at the claim's receipt, None for an unknown
+    tier."""
+    price = TIER_PRICE.get(tier)
+    return None if price is None else price * _pay("EVENT_PAY_X", received)
+
+
 def scoop_multiple(published: Optional[datetime], received: Optional[datetime],
-                   contested: bool = False) -> float:
+                   contested: bool = False, first_seen: Optional[datetime] = None) -> float:
     """The tier price multiple of a confirmed scoop: SCOOP_PREMIUM when the confirming page was
-    published after the scoop's receipt, else 1 (it was first in, not first out); 1 when
+    published after the scoop's receipt and no trusted page about it was seen before
+    (`first_seen`), else the event rate (it was first in, not first out); the event rate when
     another scoop named a conflicting outcome."""
-    if contested:
-        return 1.0
-    return SCOOP_PREMIUM if published and received and published > received else 1.0
+    out = min((d for d in (published, first_seen) if d is not None), default=None)
+    if contested or not (out and received and out > received):
+        return _pay("EVENT_PAY_X", received)
+    return _pay("SCOOP_PREMIUM", received)
 
 
 def reverify_rate() -> float:
@@ -72,8 +189,8 @@ def scoop_debt(event_type, event_date: date, received: datetime,
     """A missed scoop's debt, as negative points: SCOOP_MISS_DEBT_X times the type's tier price
     x SCOOP_DEBT_TRUST x the age factor, rounded to 6 dp."""
     price = TIER_PRICE.get(getattr(TYPE_SPEC.get(EventType(event_type)), "tier", ""), 0)
-    pts = SCOOP_MISS_DEBT_X * price * SCOOP_DEBT_TRUST * age_factor(event_date, received,
-                                                                    published)
+    pts = (_pay("SCOOP_MISS_DEBT_X", received) * price * SCOOP_DEBT_TRUST
+           * age_factor(event_date, received, published))
     return -round(pts, 6) if pts else 0.0
 
 

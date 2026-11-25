@@ -11,14 +11,17 @@ from __future__ import annotations
 
 import asyncio
 import math
+from datetime import datetime, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 import bittensor as bt
 import numpy as np
 
 from alpharidge_ai import config
+from alpharidge_ai.ledger.api_client import AlpharidgeAPIError
 from alpharidge_ai.ledger.attestation import BLOCK_LENGTH, CLOSE_GRACE_BLOCKS
-from alpharidge_ai.ledger.pull import LedgerPoints, LedgerPull, unbound
+from alpharidge_ai.ledger.pull import LedgerPoints, LedgerPull, QualityUnavailable, unbound
+from alpharidge_ai.mechanism import quality
 from alpharidge_ai.mechanism.pools import CAPACITY, net_by_coldkey
 from alpharidge_ai.mechanism.profile import SECONDS_PER_BLOCK
 from alpharidge_ai.mechanism.settlement import settle, weight_vector
@@ -31,9 +34,16 @@ STALE_WARN_EPOCHS = 3
 # Unchecked epochs are caught up while inside the API's re-verify deadline, a few per tick.
 REVERIFY_DEADLINE_H = 24
 REVERIFY_EPOCHS_PER_TICK = 3
+# Longest one epoch's pull and weights may take; past it the last weights are kept and the
+# epoch is tried again on the next step.
+WEIGHTS_STEP_S = 240
 # Claims whose page was held back are re-verified once they settle, inside the same span.
 # A signed profile's ledger.settle_delay_h overrides it.
 SETTLE_DELAY_H = 72
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class LedgerLoop:
@@ -69,6 +79,8 @@ class LedgerLoop:
         # Epochs whose re-verify was posted, kept across restarts.
         self.reverified: Set[int] = {int(e) for e in reverified}
         self._task: Optional[asyncio.Task] = None
+        # The last quality answer: (epoch, (scaled, locks)).
+        self._served: Tuple[Optional[int], Tuple[bool, Dict[str, float]]] = (None, (False, {}))
 
     def burn_ok(self, epoch: int) -> bool:
         """The burn UID is held by the subnet owner's hotkey, looked up once an epoch."""
@@ -125,7 +137,13 @@ class LedgerLoop:
         profile = self._profile()
         capacity, window = self.params(profile)
         pulled, reason = await self.pull.pull(epoch, {hk: uid for uid, hk in enumerate(hotkeys)},
-                                              window=window)
+                                              window=window, carry_locks=self.carry_locks,
+                                              before_retry=self.forget_quality)
+        if reason == "quality_unavailable":
+            # Tried again on the next tick, as a failed pull is.
+            bt.logging.error(f"[LEDGER] ALARM epoch={epoch} carry quality unavailable; "
+                             f"keeping the last weights")
+            raise QualityUnavailable(f"epoch {epoch}")
         if pulled is not None and self.bind:
             candidates, settles = await sample_pages(self.client, epoch)
             reason = (unbound(await self.pull.leaves(epoch), candidates, miner_signed)
@@ -145,13 +163,68 @@ class LedgerLoop:
         self._check_capacity(capacity, pulled, profile)
         coldkeys = {**dict(zip(hotkeys, getattr(self.metagraph, "coldkeys", None) or hotkeys)),
                     **pulled.coldkeys}
-        result = settle(net_by_coldkey(pulled.points, coldkeys), capacity)
+        points = pulled.points
+        # Quality scales the epoch when its points were signed from QUALITY_FROM, by the
+        # signing time the API serves; well before the start it is off without asking.
+        if quality.may_be_active(_now()):
+            try:
+                on, locks = await self._quality(epoch)
+            except Exception as e:
+                bt.logging.error(f"[LEDGER] ALARM epoch={epoch} quality unavailable ({e!r}); "
+                                 f"keeping the last weights")
+                raise
+            if on:
+                leaves = []
+                for ep in range(epoch - window + 1, epoch + 1):
+                    leaves.extend(await self.pull.leaves(ep))
+                points = quality.scaled(leaves, locks)
+                cut = sum(1 for m in locks.values() if m < 1)
+                bt.logging.info(f"[QUALITY] epoch={epoch} paid={len(locks)} cut={cut}")
+                missing = quality.unlocked(leaves, locks)
+                if missing:
+                    bt.logging.error(f"[QUALITY] ALARM epoch={epoch} {missing} paid claims "
+                                     f"received from the start have no lock; paid at 1")
+        net = net_by_coldkey(points, coldkeys)
+        result = settle(net, capacity)
         size = int(getattr(self.metagraph, "n", len(hotkeys)))
         vector = weight_vector(result.shares, hotkeys, self.burn_uid, size)
         bt.logging.info(
             f"[LEDGER] epoch={epoch} leaves={pulled.leaf_count} W={result.work:.2f} "
             f"C={result.capacity:.2f} burn={result.burn:.4f} paid={result.paid:.4f}")
         return np.asarray(vector, dtype=np.float32)
+
+    async def _quality(self, epoch: int) -> Tuple[bool, Dict[str, float]]:
+        """Whether the epoch is scaled, and the locks served for it. The last answer is kept
+        for the next epoch's carry."""
+        if self._served[0] == epoch:
+            return self._served[1]
+        served = await self.client.ledger_quality(quality.from_ms(), epoch)
+        if served.get("until_ms") is None:
+            raise ValueError("no signing time")
+        owners = served["owners"]
+        got = (quality.active(served["until_ms"]),
+               quality.locked((owners[int(i)], bool(p), c) for i, p, c in served["outcomes"]))
+        self._served = (epoch, got)
+        return got
+
+    def forget_quality(self) -> None:
+        """Drops the kept quality answer, so the next read asks again."""
+        self._served = (None, (False, {}))
+
+    async def carry_locks(self, epoch: int) -> Optional[Dict[str, float]]:
+        """The locks the carry into the epoch is valued with: those of the epoch before it
+        when that one was scaled, else None (raw points). The API values it the same way,
+        since an epoch's own locks are known only once it is signed. An epoch before it that
+        was never signed (the first the API signed) leaves the carry raw."""
+        if epoch < 1 or not quality.may_be_active(_now()):
+            return None
+        try:
+            on, locks = await self._quality(epoch - 1)
+        except AlpharidgeAPIError as e:
+            if e.status_code == 409 and e.detail == "epoch_unsigned":
+                return None
+            raise
+        return locks if on else None
 
     def reverify_due(self, epoch: int) -> List[int]:
         """Unchecked epochs still inside the deadline, newest first, at most a tick's worth."""
@@ -253,7 +326,7 @@ class LedgerLoop:
         weights = None
         if epoch != self._weights_epoch:
             try:
-                weights = await self.weights(epoch)
+                weights = await asyncio.wait_for(self.weights(epoch), WEIGHTS_STEP_S)
             except Exception as e:
                 bt.logging.warning(f"[LEDGER] epoch={epoch} pull failed: {e!r}")
                 return self._stale(epoch)

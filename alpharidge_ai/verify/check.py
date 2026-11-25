@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -57,7 +58,7 @@ def _fail(reason: str, **kw) -> CheckResult:
 
 # Claims received from this time on: a breakthrough's subject is an organisation, never a
 # paper's author list, and its kind is one the type lists.
-BREAKTHROUGH_RULES_FROM = datetime(2099, 1, 1, tzinfo=timezone.utc)
+BREAKTHROUGH_RULES_FROM = datetime(2026, 11, 12, 21, 58, tzinfo=timezone.utc)
 _ET_AL = re.compile(r"\bet\s+al\b", re.I)
 _AUTHOR = re.compile(r"\b[A-Z][\w'’-]+,\s*(?:[A-Z]{1,2}\.\s*-?\s*)+")
 
@@ -107,12 +108,17 @@ def find(text: str, phrase: str) -> List[Tuple[int, int]]:
 
 def name_forms(name: str) -> List[str]:
     """A name normalised, with and without its company suffix."""
+    return list(_name_forms(name))
+
+
+@lru_cache(maxsize=8192)
+def _name_forms(name: str) -> Tuple[str, ...]:
     full = floor.normalize(name).text
     words = full.replace(",", " ").split()
     while len(words) > 1 and words[-1].strip(".") in _SUFFIXES:
         words.pop()
     short = " ".join(words).rstrip(".,")
-    return [f for f in dict.fromkeys((full, short)) if f]
+    return tuple(f for f in dict.fromkeys((full, short)) if f)
 
 
 def names_of(claim) -> List[str]:
@@ -141,8 +147,14 @@ def exchange_names(value: str) -> List[str]:
 
 def ticker_on(ticker: str, text: str) -> bool:
     """The ticker exactly as written, as a whole token."""
+    pattern = ticker_pattern(ticker)
+    return pattern is not None and pattern.search(text) is not None
+
+
+@lru_cache(maxsize=8192)
+def ticker_pattern(ticker: str) -> Optional[re.Pattern]:
     t = r"\s+".join(map(re.escape, str(ticker).split()))
-    return bool(t) and re.search(r"(?<![A-Za-z0-9])" + t + r"(?![A-Za-z0-9])", text) is not None
+    return re.compile(r"(?<![A-Za-z0-9])" + t + r"(?![A-Za-z0-9])") if t else None
 
 
 def listing_missing(claim, text: str, norm: Optional[str] = None) -> List[str]:

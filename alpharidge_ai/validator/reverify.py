@@ -19,6 +19,7 @@ import asyncio
 import json
 import math
 from collections import Counter
+from dataclasses import replace
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import bittensor as bt
@@ -31,7 +32,8 @@ from alpharidge_ai.mechanism.pools import PROVISIONAL_SHARE
 from alpharidge_ai.schema import (
     TYPE_SPEC, Claim, category_of, judged, kind_key, text_problem,
 )
-from alpharidge_ai.schema.types import TIER_PRICE, age_factor, scoop_multiple
+from alpharidge_ai.schema.types import TIER_PRICE, age_factor, event_price, scoop_multiple
+from alpharidge_ai.validator import settings_check
 from alpharidge_ai.validator.selector import Selector
 from alpharidge_ai.verify.check import PIVOT_SLOTS, check_claim, verdict_hash
 from alpharidge_ai.verify.dates import parse_datetime
@@ -39,6 +41,8 @@ from alpharidge_ai.verify.fetch import BLOCKED, FETCH_FAILED, FetchConfig, Fetch
 from alpharidge_ai.verify.filing import confirms, filing_row, submissions_url
 
 AGREE, DISAGREE, UNREACHABLE = "agree", "disagree", "unreachable"
+# A price check that failed while this validator's pay settings differ from the API's.
+PAY_DIFFERS = "pay_settings_differ"
 DOMAIN = "reverify"
 POST_MAX = 5000
 DISAGREE_ALARM = 0.05
@@ -89,8 +93,9 @@ def unread(record: dict) -> bool:
 def paid_right(item: dict, claim: Claim, received) -> bool:
     """The paid points are the paid share of base × T × A, with T in [0, 1], A the age factor
     at receipt of the event date or the page's publish date, the earlier, and base the type's
-    tier price on the event route and that price × `scoop_multiple` of the confirming page's
-    publish time on the scoop route (1 when the record marks it contested)."""
+    event price on the event route and the tier price × `scoop_multiple` of the confirming
+    page's publish time and first trusted sighting on the scoop route (the event rate when the
+    record marks it contested)."""
     f = item.get("factors") or {}
     try:
         base, t, points = float(f["base"]), float(f["T"]), float(item["points"])
@@ -105,13 +110,14 @@ def paid_right(item: dict, claim: Claim, received) -> bool:
     tier = getattr(TYPE_SPEC.get(claim.event_type), "tier", "")
     route = item.get("route")
     if route in ("event", "scoop"):
-        price = TIER_PRICE.get(tier)
+        price = event_price(tier, received) if route == "event" else TIER_PRICE.get(tier)
         if route == "scoop" and price is not None:
             confirm = record.get("confirm") or {}
             if not isinstance(confirm, dict):
                 return False
             price = price * scoop_multiple(parse_datetime(confirm.get("published_at")), received,
-                                           bool(confirm.get("contested")))
+                                           bool(confirm.get("contested")),
+                                           parse_datetime(confirm.get("first_seen")))
         if price is None or not math.isclose(base, price):
             return False
     return math.isclose(points, PROVISIONAL_SHARE * base * t * a, rel_tol=1e-5, abs_tol=1e-6)
@@ -263,6 +269,9 @@ async def reverify(item: dict, fetcher: Fetcher, judges=()) -> dict:
     if claim is None or not (held or consistent(record, claim)):
         return _result(item, DISAGREE, verdict="rejected", reason="judge_inconsistent")
     if not paid_right(item, claim, received):
+        # Priced under other pay settings than the API's, an honest claim fails here too.
+        if settings_check.pay_differs():
+            return _result(item, UNREACHABLE, reason=PAY_DIFFERS)
         return _result(item, DISAGREE, verdict="rejected", reason="points_mismatch")
     if not judges:
         return _result(item, UNREACHABLE, reason="no_judge_list")
@@ -289,6 +298,10 @@ async def reverify(item: dict, fetcher: Fetcher, judges=()) -> dict:
     page = await fetcher.fetch(item.get("final_url") or claim.source_url)
     if page.reason in (FETCH_FAILED, BLOCKED):
         return _result(item, UNREACHABLE, reason=page.reason, status=page.status)
+    # A page restamped since the API read it (an update) is checked at the date the API saw.
+    stored = parse_datetime(item.get("published_at"))
+    if stored is not None and page.published_at is not None and page.published_at > stored:
+        page = replace(page, published_at=stored, date_inferred=False)
     got = check_claim(claim, page, received)
     observed = {"verdict": got.verdict, "reason": got.reason, "content_hash": page.content_hash}
     if not got.passed:
@@ -373,4 +386,9 @@ class Reverifier:
             bt.logging.error(
                 f"[REVERIFY] ALARM epoch={epoch} disagreement {share:.1%} of {checked} "
                 f"checked claims")
+        unpriced = sum(r["observed"].get("reason") == PAY_DIFFERS for r in results)
+        if unpriced:
+            bt.logging.error(
+                f"[REVERIFY] ALARM epoch={epoch} {unpriced} claims' prices not checked: this "
+                f"validator's pay settings differ from the API's; posted as unreachable")
         return dict(counts)

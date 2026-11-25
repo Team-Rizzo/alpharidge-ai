@@ -87,14 +87,22 @@ def _starts(words, j: int) -> set:
     return out
 
 
-def named_in(words: Sequence[str], name: str) -> bool:
-    """A run of `words` (a text's `name_words`) names `name`: as written, shorter or longer."""
+@lru_cache(maxsize=8192)
+def _name_parts(name: str):
     mine = name_words(name)
     core = [w for w in mine if w not in _FILLER]
     if not core:
+        return None
+    return mine, core[0], frozenset(_starts(mine, 0)), sum(map(len, core)) + len(mine)
+
+
+def named_in(words: Sequence[str], name: str) -> bool:
+    """A run of `words` (a text's `name_words`) names `name`: as written, shorter or longer."""
+    parts = _name_parts(name)
+    if parts is None:
         return False
-    words, first, heads = tuple(words), core[0], _starts(mine, 0)
-    reach = sum(map(len, core)) + len(mine)
+    mine, first, heads, reach = parts
+    words = tuple(words)
     for s, w in enumerate(words):
         if w[0] != first[0]:
             continue

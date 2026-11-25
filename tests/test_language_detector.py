@@ -42,3 +42,18 @@ def test_result_is_indexable_tuple():
     r = detect_language("Hello world, this is a test of the language detector.")
     code, conf = r
     assert code == "en"
+
+
+def test_detections_in_threads_at_first_use_agree():
+    import importlib
+    from concurrent.futures import ThreadPoolExecutor
+    from langdetect import detector_factory
+    from alpharidge_ai.verify import language_detector as ld
+    text = ("The company said on Tuesday it had agreed to buy its rival for $1.2 billion in cash, "
+            "a deal its board approved unanimously after months of talks. ") * 5
+    for _ in range(5):
+        detector_factory._factory = None
+        importlib.reload(ld)
+        with ThreadPoolExecutor(8) as pool:
+            codes = set(pool.map(lambda _: ld.detect_language(text).code, range(16)))
+        assert codes == {"en"}

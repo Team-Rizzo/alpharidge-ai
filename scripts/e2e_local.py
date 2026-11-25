@@ -41,7 +41,7 @@ os.environ.setdefault("BT_NO_PARSE_CLI_ARGS", "0")
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from alpharidge_ai.schema.types import SCOOP_PREMIUM  # noqa: E402
+from alpharidge_ai.schema import types as pay_rules  # noqa: E402
 from e2e_fixtures import ATTACH, PAGE, PAGES, RAW, SITE_PORT, Page, site  # noqa: E402
 
 E2E_DIR = Path(os.getenv("E2E_DIR", REPO / ".e2e"))
@@ -694,9 +694,10 @@ def cmd_check(_args) -> None:
     scoop2, early = of("scoop2"), of("early")
     expect(len(scoop2) == 1 and len(scoop) == 1 and scoop2[0]["status"] == "settled"
            and scoop2[0]["route"] == "scoop" and paid(scoop2[0]) > 0
-           and abs(SCOOP_PREMIUM * paid(scoop2[0]) - paid(scoop[0])) < 1e-6,
+           and abs(pay_rules.SCOOP_PREMIUM / pay_rules.EVENT_PAY_X * paid(scoop2[0])
+                   - paid(scoop[0])) < 1e-6,
            f"a scoop confirmed by a trusted page published before its receipt is paid the "
-           f"tier price, a fifth of the later-confirmed scoop "
+           f"event rate, EVENT_PAY_X/SCOOP_PREMIUM of the later-confirmed scoop "
            f"({scoop2[0]['status'] + '/' + str(paid(scoop2[0])) if scoop2 else 'missing'})")
     expect(len(early) == 1 and early[0]["status"] == "rejected"
            and early[0]["reason"] == "known_event" and paid(early[0]) == 0,

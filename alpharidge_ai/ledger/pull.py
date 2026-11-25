@@ -1,8 +1,9 @@
 """Pull signed points from the event ledger and check them against the leaves.
 
 The signature is checked against the pinned API key, the window's Merkle root is rebuilt
-from the leaves, the epoch's carry leaves are recomputed from the window before it, and the
-points are recomputed locally. Any mismatch fails.
+from the leaves, the epoch's carry leaves are recomputed from the window before it (valued
+with the locks the caller gives, once quality scales the weights), and the points are
+recomputed locally. Any mismatch fails.
 Closed epochs never change, so leaves are cached per epoch; a mismatch drops the cached
 window and pulls it once more.
 """
@@ -11,11 +12,13 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable, Dict, Iterable, List, Mapping, Optional, Protocol, Tuple
+from typing import (Awaitable, Callable, Dict, Iterable, List, Mapping, Optional, Protocol,
+                    Tuple)
 
 from alpharidge_ai import config
 from alpharidge_ai.ledger import attestation as ac
 from alpharidge_ai.ledger.verifier import MAX_POINTS_PER_UID, verify_points
+from alpharidge_ai.mechanism import quality
 from alpharidge_ai.mechanism.pools import (WINDOW_EPOCHS, carried, category_of, coldkeys,
                                            window_points)
 from alpharidge_ai.schema import Claim, canonical_json, judged, sha256_hex
@@ -28,6 +31,12 @@ RETRY = ("root_mismatch", "points_mismatch", "malformed_leaf", "carry_mismatch")
 # A missed scoop's debt leaf, and the closing reasons that write one.
 DEBT = "debt"
 SCOOP_MISSES = ("scoop_unconfirmed", "scoop_mismatch")
+# The locks the carry into an epoch is valued with, or None for raw points.
+CarryLocks = Callable[[int], Awaitable[Optional[Mapping[str, float]]]]
+
+
+class QualityUnavailable(Exception):
+    """The locks a carry is valued with could not be read."""
 
 
 class LedgerSource(Protocol):
@@ -85,19 +94,24 @@ class LedgerPull:
             self._checked.discard(e)
 
     async def pull(self, epoch: int, hotkey_to_uid: Mapping[str, int],
-                   window: Optional[int] = None
+                   window: Optional[int] = None, carry_locks: Optional[CarryLocks] = None,
+                   before_retry: Optional[Callable[[], None]] = None
                    ) -> Tuple[Optional[LedgerPoints], str]:
         """(points, "accepted") or (None, reason). The window is the signed profile's when
-        given, else this pull's default."""
+        given, else this pull's default. carry_locks gives the locks the epoch's carry is
+        valued with; without it the carry is raw. before_retry runs before a fresh copy is
+        pulled, to drop what the caller kept for carry_locks."""
         window = int(self.window if window is None else window)
-        args = (epoch, hotkey_to_uid, window)
+        args = (epoch, hotkey_to_uid, window, carry_locks)
         got, reason = await self._pull(*args)
         if reason in RETRY:
             self.drop(epoch, window)
+            if before_retry is not None:
+                before_retry()
             got, reason = await self._pull(*args)
         return got, reason
 
-    async def _pull(self, epoch, hotkey_to_uid, window):
+    async def _pull(self, epoch, hotkey_to_uid, window, carry_locks=None):
         body = await self.client.ledger_points(epoch)
         att = body.get("attestation") or {}
         verified, reason = verify_points(
@@ -120,8 +134,10 @@ class LedgerPull:
             return None, "root_mismatch"
         self._checked.update(range(epoch - window + 1, epoch + 1))
         try:
-            if not await self._carry_ok(epoch, window):
+            if not await self._carry_ok(epoch, window, carry_locks):
                 return None, "carry_mismatch"
+        except QualityUnavailable:
+            return None, "quality_unavailable"
         except (KeyError, TypeError, ValueError):
             return None, "malformed_leaf"
         try:
@@ -135,8 +151,10 @@ class LedgerPull:
             return None, "points_bound"
         return LedgerPoints(epoch, points, served, len(leaves), coldkeys(leaves)), "accepted"
 
-    async def _carry_ok(self, epoch: int, window: int) -> bool:
-        """The epoch's carry leaves are exactly those the window before it gives."""
+    async def _carry_ok(self, epoch: int, window: int,
+                        carry_locks: Optional[CarryLocks] = None) -> bool:
+        """The epoch's carry leaves are exactly those the window before it gives, each leaf
+        at its worth under the locks carry_locks gives (raw points when none)."""
         def key(c: Mapping) -> tuple:
             return (str(c["miner_hotkey"]), str(c.get("coldkey") or ""),
                     category_of(c) if "categorical_key" in c else c["category"],
@@ -150,7 +168,14 @@ class LedgerPull:
         leaving = await self.leaves(epoch - window) if epoch - window >= 0 else []
         if leaving and not await self.signed_epoch(epoch - window, epoch, window):
             return False
-        want = sorted(key(c) for c in carried(prev, leaving))
+        locks = None
+        if leaving and carry_locks is not None:
+            try:
+                locks = await carry_locks(epoch)
+            except Exception as e:
+                raise QualityUnavailable(repr(e)) from e
+        worth = None if locks is None else (lambda leaf: quality.worth(leaf, locks))
+        want = sorted(key(c) for c in carried(prev, leaving, worth))
         return got == want
 
     async def signed_epoch(self, paid_epoch: int, epoch: int, window: int) -> bool:

@@ -12,6 +12,7 @@ if __name__ == "__main__":
 import asyncio
 import time
 from pathlib import Path
+from typing import Optional
 
 import bittensor as bt
 from alpharidge_ai import config
@@ -25,12 +26,16 @@ from alpharidge_ai.validator.profile_client import ProfileClient
 from alpharidge_ai.validator.reverify import Reverifier
 from alpharidge_ai.validator.scan import Scanner
 from alpharidge_ai.validator.selector import Selector
+from alpharidge_ai.validator.settings_check import pay_line
 from alpharidge_ai.validator.watchdog import stall
 from alpharidge_ai.verify import parse_pool
 
 
 # Seconds between tries to read the served settings until the first read succeeds.
 CONFIG_RETRY_S = 60
+# Seconds between the scan's and the judge's checks for a due pull, run on their own so a
+# ledger step waiting on the API never holds them up.
+WORKER_TICK_S = 1
 # The day's judge spend, kept across restarts.
 JUDGE_SPEND_PATH = (Path(__file__).resolve().parent.parent / "alpharidge_ai"
                     / ".judge_spend_state.json")
@@ -48,6 +53,8 @@ class Validator(BaseValidatorNeuron):
         self._api = AlpharidgeAPIClient(base_url=config.MINER_API_URL, wallet=self.wallet,
                                         timeout=config.BATCH_HTTP_TIMEOUT)
 
+        # The API's pay settings are compared with these on each config read.
+        bt.logging.info(pay_line())
         config.set_wallet(self.wallet)
         config.refresh_remote_config(force=True)
 
@@ -64,6 +71,7 @@ class Validator(BaseValidatorNeuron):
             bt.logging.info("[JUDGE] no page judge set up; this validator judges no pages")
         self._judge = JudgeWorker(self._api, judge, fetcher=reverifier.fetcher,
                                   spend_path=JUDGE_SPEND_PATH)
+        self._workers: Optional[asyncio.Task] = None
         self._last_step = time.monotonic()
         self._config_retry = time.monotonic()
         self._ledger = LedgerLoop(
@@ -107,6 +115,15 @@ class Validator(BaseValidatorNeuron):
         return stall(time.monotonic(), self._last_step,
                      self._judge.last_pull if judging else None)
 
+    async def _tick_workers(self) -> None:
+        while True:
+            for worker in (self._scan, self._judge):
+                try:
+                    worker.tick()
+                except Exception as e:
+                    bt.logging.warning(f"[WORKER] {type(worker).__name__} tick failed: {e!r}")
+            await asyncio.sleep(WORKER_TICK_S)
+
     async def forward(self):
         self._last_step = time.monotonic()
         block = int(self.block)
@@ -123,8 +140,8 @@ class Validator(BaseValidatorNeuron):
             await asyncio.to_thread(config.refresh_remote_config, True)
         self._refresh_judge()
 
-        self._scan.tick()
-        self._judge.tick()
+        if self._workers is None or self._workers.done():
+            self._workers = asyncio.create_task(self._tick_workers())
         weights = await self._ledger.tick()
         self.reverified = self._ledger.reverified
         if weights is not None:

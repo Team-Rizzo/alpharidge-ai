@@ -28,5 +28,19 @@ VALIDATION_POLL_SECONDS=10
 # Connect to public addresses only; false is refused outside --mock and local chains
 # REVERIFY_FETCH_PUBLIC_ONLY=true
 
+# --- Pay settings: the API and every validator must use the same values ---
+# Points per claim are the tier price x EVENT_PAY_X; a confirmed scoop pays SCOOP_PREMIUM x the
+# tier price; a missed scoop costs SCOOP_MISS_DEBT_X x its 1x pay. The epoch's points come from
+# the signed leaves, not from these. If this validator prices differently from the API,
+# re-verify cannot check paid claims' prices (it posts those as unreachable, not disagree,
+# while the difference stands) and an epoch with scoop debt in its window fails the debt check
+# (unbound_debt) and keeps the last weights. Unset means the defaults below, today's pay. The
+# API serves its values on /config/subnet and the validator logs "[CONFIG] ALARM pay settings
+# differ" when they do not match; set these only when the operator announces a change, to the
+# values announced.
+# EL_EVENT_PAY_X=1
+# EL_SCOOP_PREMIUM=5
+# EL_SCOOP_MISS_DEBT_X=2
+
 # Capacity and the ledger window come from the signed mechanism profile.
 # The open categories need no setting.
