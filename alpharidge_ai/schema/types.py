@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -44,9 +45,13 @@ SCOOP_LEAD_MIN_M, SCOOP_LEAD_FULL_M = 5, 30
 SCOOP_LEAD_START_X = 1.0
 # Release wires and investor-relations pages: official, so a claim citing one is never a scoop.
 WIRE_NAMES = frozenset({"prnewswire", "globenewswire", "businesswire", "stocktitan",
-                        "accessnewswire", "accesswire", "newsfile", "newsfilecorp"})
+                        "accessnewswire", "accesswire", "newsfile", "newsfilecorp", "newswire",
+                        "einpresswire", "prweb", "prlog", "newsdirect", "gcs-web"})
 IR_HOST_LABELS = frozenset({"ir", "investor", "investors"})
-IR_PATH = "/investor-relations"
+RELEASE_PATH_PARTS = frozenset({"investors", "investor", "investor-relations", "press-releases",
+                                "press-release", "pressreleases", "news-releases"})
+# A wire's name as a word in a page's address marks a copied release (".../bizwire-2026-acme").
+SLUG_WIRE_NAMES = (WIRE_NAMES - {"newswire", "newsfile", "gcs-web"}) | {"bizwire"}
 SCOOP_DEBT_TRUST = 1.0
 # An operator-confirmed misconduct penalty, in multiples of the claim's full value (or of a
 # missed scoop's debt).
@@ -184,8 +189,10 @@ def official_release(url: Optional[str]) -> bool:
     """A release wire or investor-relations page."""
     parts = urlsplit(url or "")
     labels = (parts.hostname or "").lower().removeprefix("www.").split(".")
-    return (bool(WIRE_NAMES.intersection(labels)) or labels[0] in IR_HOST_LABELS
-            or IR_PATH in parts.path.lower())
+    path = parts.path.lower()
+    return bool(WIRE_NAMES.intersection(labels) or labels[0] in IR_HOST_LABELS
+                or RELEASE_PATH_PARTS.intersection(path.split("/"))
+                or SLUG_WIRE_NAMES.intersection(re.split(r"[-._/]", path)))
 
 
 def lead_multiple(lead_ms: float, received=None) -> float:
