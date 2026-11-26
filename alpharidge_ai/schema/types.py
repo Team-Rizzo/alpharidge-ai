@@ -36,27 +36,22 @@ PAY_TABLES = {
     "today": {"EVENT_PAY_X": 1.0, "SCOOP_PREMIUM": 5.0, "SCOOP_MISS_DEBT_X": 2.0},
     "new": {"EVENT_PAY_X": 0.25, "SCOOP_PREMIUM": 10.0, "SCOOP_MISS_DEBT_X": 1.0},
     "lead": {"EVENT_PAY_X": 0.25, "SCOOP_PREMIUM": 10.0, "SCOOP_MISS_DEBT_X": 1.0},
-    "wires": {"EVENT_PAY_X": 0.25, "SCOOP_PREMIUM": 10.0, "SCOOP_MISS_DEBT_X": 1.0},
 }
 PAY_DEFAULTS = PAY_TABLES["today"]
-LEAD_TABLES = frozenset({"lead", "wires"})
+LEAD_TABLES = frozenset({"lead"})
 # Lead below SCOOP_LEAD_MIN_M pays the event rate, from SCOOP_LEAD_FULL_M the full premium, and in
 # between a straight line from SCOOP_LEAD_START_X to the full premium.
 SCOOP_LEAD_MIN_M, SCOOP_LEAD_FULL_M = 5, 30
 SCOOP_LEAD_START_X = 1.0
 # Release wires and investor-relations pages: official, so a claim citing one is never a scoop.
 WIRE_NAMES = frozenset({"prnewswire", "globenewswire", "businesswire", "stocktitan",
-                        "accessnewswire", "accesswire", "newsfile", "newsfilecorp"})
+                        "accessnewswire", "accesswire", "newsfile", "newsfilecorp", "newswire",
+                        "einpresswire", "prweb", "prlog", "newsdirect", "gcs-web"})
 IR_HOST_LABELS = frozenset({"ir", "investor", "investors"})
-IR_PATH = "/investor-relations"
-# Under a WIDE_TABLES table more wires, release hosts and release paths are official too.
-WIDE_TABLES = frozenset({"wires"})
-WIDE_WIRE_NAMES = WIRE_NAMES | {"newswire", "einpresswire", "prweb", "prlog", "newsdirect",
-                                "gcs-web"}
-# A wire's name as a word in a page name marks a copied release (".../bizwire-2026-11-19-acme").
-SLUG_WIRE_NAMES = (WIDE_WIRE_NAMES - {"newswire", "newsfile", "gcs-web"}) | {"bizwire"}
 RELEASE_PATH_PARTS = frozenset({"investors", "investor", "investor-relations", "press-releases",
                                 "press-release", "pressreleases", "news-releases"})
+# A wire's name as a word in a page's address marks a copied release (".../bizwire-2026-acme").
+SLUG_WIRE_NAMES = (WIRE_NAMES - {"newswire", "newsfile", "gcs-web"}) | {"bizwire"}
 SCOOP_DEBT_TRUST = 1.0
 # An operator-confirmed misconduct penalty, in multiples of the claim's full value (or of a
 # missed scoop's debt).
@@ -190,17 +185,14 @@ def lead_pay(received) -> bool:
     return pay_table(_ms(received)) in LEAD_TABLES
 
 
-def official_release(url: Optional[str], wide: bool = False) -> bool:
-    """A release wire or investor-relations page; `wide` adds the WIDE_TABLES list."""
+def official_release(url: Optional[str]) -> bool:
+    """A release wire or investor-relations page."""
     parts = urlsplit(url or "")
     labels = (parts.hostname or "").lower().removeprefix("www.").split(".")
     path = parts.path.lower()
-    segments = path.split("/")
-    if wide and (WIDE_WIRE_NAMES.intersection(labels) or RELEASE_PATH_PARTS.intersection(segments)
-                 or SLUG_WIRE_NAMES.intersection(re.split(r"[-._/]", path))):
-        return True
-    return (bool(WIRE_NAMES.intersection(labels)) or labels[0] in IR_HOST_LABELS
-            or IR_PATH in path)
+    return bool(WIRE_NAMES.intersection(labels) or labels[0] in IR_HOST_LABELS
+                or RELEASE_PATH_PARTS.intersection(path.split("/"))
+                or SLUG_WIRE_NAMES.intersection(re.split(r"[-._/]", path)))
 
 
 def lead_multiple(lead_ms: float, received=None) -> float:
@@ -229,7 +221,7 @@ def scoop_multiple(published: Optional[datetime], received: Optional[datetime],
     if contested or not (out and received and out > received):
         return _pay("EVENT_PAY_X", received)
     if lead_pay(received):
-        if official_release(source_url, pay_table(_ms(received)) in WIDE_TABLES):
+        if official_release(source_url):
             return _pay("EVENT_PAY_X", received)
         return lead_multiple((out - received).total_seconds() * 1000, received)
     return _pay("SCOOP_PREMIUM", received)
