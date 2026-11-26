@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -52,6 +53,8 @@ IR_PATH = "/investor-relations"
 WIDE_TABLES = frozenset({"wires"})
 WIDE_WIRE_NAMES = WIRE_NAMES | {"newswire", "einpresswire", "prweb", "prlog", "newsdirect",
                                 "gcs-web"}
+# A wire's name as a word in a page name marks a copied release (".../bizwire-2026-11-19-acme").
+SLUG_WIRE_NAMES = (WIDE_WIRE_NAMES - {"newswire", "newsfile", "gcs-web"}) | {"bizwire"}
 RELEASE_PATH_PARTS = frozenset({"investors", "investor", "investor-relations", "press-releases",
                                 "press-release", "pressreleases", "news-releases"})
 SCOOP_DEBT_TRUST = 1.0
@@ -192,8 +195,9 @@ def official_release(url: Optional[str], wide: bool = False) -> bool:
     parts = urlsplit(url or "")
     labels = (parts.hostname or "").lower().removeprefix("www.").split(".")
     path = parts.path.lower()
-    if wide and (WIDE_WIRE_NAMES.intersection(labels)
-                 or RELEASE_PATH_PARTS.intersection(path.split("/"))):
+    segments = path.split("/")
+    if wide and (WIDE_WIRE_NAMES.intersection(labels) or RELEASE_PATH_PARTS.intersection(segments)
+                 or SLUG_WIRE_NAMES.intersection(re.split(r"[-._/]", path))):
         return True
     return (bool(WIRE_NAMES.intersection(labels)) or labels[0] in IR_HOST_LABELS
             or IR_PATH in path)
