@@ -135,3 +135,44 @@ def test_a_validator_rebuilds_the_lead_price_from_the_confirm_record():
     late = RECEIVED + timedelta(hours=3)
     assert reverify.paid_right(_scoop_item(0.25, late), wire, RECEIVED)
     assert not reverify.paid_right(_scoop_item(10.0, late), wire, RECEIVED)
+
+
+WIRES = LEAD + timedelta(days=2)
+WIDE = ["https://www.newswire.ca/news-releases/acme-8.html",
+        "https://www.newswire.com/news/acme-to-acquire-beta",
+        "https://www.einpresswire.com/article/1/acme",
+        "https://www.prweb.com/releases/acme-301.html",
+        "https://www.prlog.org/1-acme.html",
+        "https://www.newsdirect.com/news/acme",
+        "https://acme.gcs-web.com/news-releases/news-release-details/acme",
+        "https://www.acme.com/investors/news/acme",
+        "https://www.acme.com/press-releases/2026/acme",
+        "https://www.acme.com/en/press-release/acme",
+        "https://www.benzinga.com/pressreleases/26/12/1/acme",
+        "https://www.acme.com/news-releases/acme"]
+
+
+@pytest.fixture
+def _wires(monkeypatch):
+    monkeypatch.setattr(types, "_switch", None)
+    types.set_pay_switch(STEPS + [{"pay_table": "wires", "from_ms": int(WIRES.timestamp() * 1000)}])
+
+
+@pytest.mark.parametrize("url", WIDE)
+def test_the_wires_table_widens_the_official_list(_wires, url):
+    after = WIRES + timedelta(hours=1)
+    assert types.pay_table(int(after.timestamp() * 1000)) == "wires"
+    assert types.official_release(url, wide=True) and not types.official_release(url)
+    assert _m(120, received=after, url=url) == 0.25
+    assert _m(120, received=WIRES - timedelta(minutes=1), url=url) == 10.0
+
+
+@pytest.mark.parametrize("url", [
+    NEWS, "https://finance.yahoo.com/news/x", "https://www.acme.com/ir",
+    "https://www.reuters.com/business/acme-investors-cheer-2026-12-01/",
+    "https://www.newswires.example.org/acme"])
+def test_news_pages_stay_scoops_under_the_wires_table(_wires, url):
+    after = WIRES + timedelta(hours=1)
+    assert not types.official_release(url, wide=True)
+    assert _m(120, received=after, url=url) == 10.0
+    assert _m(17.5, received=after, url=url) == 5.5

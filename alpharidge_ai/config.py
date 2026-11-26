@@ -139,11 +139,6 @@ JUDGE_MODEL = os.getenv("EL_JUDGE_MODEL", "")
 JUDGE_API_KEY = os.getenv("API_KEY") or os.getenv("EL_JUDGE_API_KEY", "")
 JUDGE_POLL_S = float(os.getenv("JUDGE_POLL_S", "10"))
 JUDGE_DAILY_CAP_USD = float(os.getenv("EL_JUDGE_DAILY_CAP_USD", "10"))
-# Shadow wording (alpharidge_ai.judge.shadow): asked as well for its types and logged, never
-# posted. Off unless set.
-JUDGE_SHADOW = os.getenv("EL_JUDGE_SHADOW", "").strip().lower() in ("1", "true", "yes", "on")
-JUDGE_SHADOW_LOG = os.path.expanduser(os.getenv("EL_JUDGE_SHADOW_LOG",
-                                                "~/.alpharidge_judge_shadow.jsonl"))
 # Hotkeys whose posted verdicts re-verify accepts, when the signed profile names none.
 JUDGE_VALIDATORS = tuple(h.strip() for h in os.getenv("JUDGE_VALIDATORS", "").split(",")
                          if h.strip())

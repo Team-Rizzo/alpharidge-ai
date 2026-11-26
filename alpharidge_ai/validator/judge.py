@@ -17,7 +17,6 @@ from urllib.parse import urlsplit
 import bittensor as bt
 
 from alpharidge_ai import config
-from alpharidge_ai.judge import shadow
 from alpharidge_ai.ledger.api_client import AlpharidgeAPIError, AuthorizationError
 from alpharidge_ai.schema import Claim, confirm_claim, judged, kind_key
 from alpharidge_ai.schema.hashing import canonical_json
@@ -241,7 +240,6 @@ class JudgeWorker:
         passed = bool(result and result.passed)
         answers: dict = {}
         seen = (key, page.content_hash)
-        fresh = False
         if passed and seen in self.answers:
             answers = self.answers[seen]
         elif passed:
@@ -263,7 +261,6 @@ class JudgeWorker:
                 return "judge_failed"
             self.fails = 0
             self.answers[seen] = answers
-            fresh = True
         reason = None if passed else (result.reason if result else "invalid_claim")
         body = verdict_body(item, claim, page.content_hash, answers, passed, reason)
         try:
@@ -274,30 +271,4 @@ class JudgeWorker:
                 return "closed"
             raise
         self.done.add(key)
-        if fresh and config.JUDGE_SHADOW and shadow.wanted(claim):
-            await self._shadow(item, claim, page, answers, types)
         return status or "posted"
-
-    async def _shadow(self, item: dict, claim: Claim, page, answers: dict, types=None) -> None:
-        """Ask the shadow wording too, after the post, and log both outcomes."""
-        if not self.spend.room(self.judge.est_usd):
-            return
-        published = page.published_at.isoformat() if page.published_at else None
-        try:
-            got = await asyncio.to_thread(shadow.ask, self.judge, claim, page.text, published,
-                                          types)
-        except Exception as e:
-            self.spend.add(self.judge.est_usd)
-            bt.logging.warning(f"[JUDGE] shadow call failed: {e!r}")
-            return
-        cost = getattr(self.judge, "last_cost", None)
-        self.spend.add(cost if cost is not None else self.judge.est_usd)
-        live, shadowed = shadow.outcome(answers, claim), shadow.outcome(got, claim, True)
-        shadow.log(Path(config.JUDGE_SHADOW_LOG), {
-            "at": self.clock().isoformat(), "claim_id": str(item["claim_id"]),
-            "key": item["key"], "type": claim.event_type.value, "url": page.final_url or page.url,
-            "live": live, "shadow": shadowed, "shadow_version": shadow.SHADOW_VERSION,
-            "live_answers": answers, "shadow_answers": got, "cost": cost})
-        if live != shadowed:
-            bt.logging.info(f"[JUDGE] shadow {shadow.SHADOW_VERSION} differs on claim "
-                            f"{item['claim_id']} ({claim.event_type.value}): {live} -> {shadowed}")
