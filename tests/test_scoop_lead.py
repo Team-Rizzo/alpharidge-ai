@@ -149,7 +149,11 @@ WIDE = ["https://www.newswire.ca/news-releases/acme-8.html",
         "https://www.acme.com/press-releases/2026/acme",
         "https://www.acme.com/en/press-release/acme",
         "https://www.benzinga.com/pressreleases/26/12/1/acme",
-        "https://www.acme.com/news-releases/acme"]
+        "https://www.acme.com/news-releases/acme",
+        "https://www.financialcontent.com/article/bizwire-2026-11-19-acme-secures-430-million",
+        "https://finance.yahoo.com/news/acme-buy-beta-globenewswire-1.html",
+        "https://www.example-markets.com/news/acme-prnewswire-301.html",
+        "https://www.example-markets.com/news/acme-buys-beta-businesswire.html"]
 
 
 @pytest.fixture
@@ -170,7 +174,9 @@ def test_the_wires_table_widens_the_official_list(_wires, url):
 @pytest.mark.parametrize("url", [
     NEWS, "https://finance.yahoo.com/news/x", "https://www.acme.com/ir",
     "https://www.reuters.com/business/acme-investors-cheer-2026-12-01/",
-    "https://www.newswires.example.org/acme"])
+    "https://www.newswires.example.org/acme",
+    "https://www.example-news.com/2026/11/ap-newswire-reports-acme-deal",
+    "https://www.example-news.com/wire-acme"])
 def test_news_pages_stay_scoops_under_the_wires_table(_wires, url):
     after = WIRES + timedelta(hours=1)
     assert not types.official_release(url, wide=True)
