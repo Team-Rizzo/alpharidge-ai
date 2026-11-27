@@ -36,9 +36,10 @@ PAY_TABLES = {
     "today": {"EVENT_PAY_X": 1.0, "SCOOP_PREMIUM": 5.0, "SCOOP_MISS_DEBT_X": 2.0},
     "new": {"EVENT_PAY_X": 0.25, "SCOOP_PREMIUM": 10.0, "SCOOP_MISS_DEBT_X": 1.0},
     "lead": {"EVENT_PAY_X": 0.25, "SCOOP_PREMIUM": 10.0, "SCOOP_MISS_DEBT_X": 1.0},
+    "lowdebt": {"EVENT_PAY_X": 0.25, "SCOOP_PREMIUM": 10.0, "SCOOP_MISS_DEBT_X": 0.25},
 }
 PAY_DEFAULTS = PAY_TABLES["today"]
-LEAD_TABLES = frozenset({"lead"})
+LEAD_TABLES = frozenset({"lead", "lowdebt"})
 # Lead below SCOOP_LEAD_MIN_M pays the event rate, from SCOOP_LEAD_FULL_M the full premium, and in
 # between a straight line from SCOOP_LEAD_START_X to the full premium.
 SCOOP_LEAD_MIN_M, SCOOP_LEAD_FULL_M = 5, 30
