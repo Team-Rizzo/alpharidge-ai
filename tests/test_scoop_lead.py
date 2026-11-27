@@ -110,6 +110,21 @@ def test_the_event_rate_and_debt_are_the_new_tables():
     assert types.pay_settings(RECEIVED) == types.pay_settings(LEAD - timedelta(minutes=1))
 
 
+def test_the_lower_debt_table_keeps_the_lead_pay_and_quarters_the_debt():
+    low = LEAD + timedelta(days=2)
+    types.set_pay_switch(STEPS + [{"pay_table": "lowdebt", "from_ms": int(low.timestamp() * 1000)}])
+    at = low + timedelta(hours=1)
+    assert types.pay_table(int(at.timestamp() * 1000)) == "lowdebt"
+    assert types.event_price("high", at) == types.event_price("high", RECEIVED)
+    assert _m(17.5, received=at) == _m(17.5)
+    assert _m(120, received=at, url="https://www.stocktitan.net/news/A/a.html") == 0.25
+    day = date(2026, 12, 3)
+    assert types.scoop_debt("merger_acquisition", day, at) == pytest.approx(
+        types.scoop_debt("merger_acquisition", day, RECEIVED) / 4)
+    assert types.scoop_debt("merger_acquisition", day, low - timedelta(minutes=1)) == (
+        types.scoop_debt("merger_acquisition", day, RECEIVED))
+
+
 def test_steps_parse_from_the_env_and_out_of_order_ones_are_refused(monkeypatch):
     monkeypatch.setenv("EL_PAY_TABLE", "new,lead")
     monkeypatch.setenv("EL_PAY_TABLE_FROM_MS", f"{STEPS[0]['from_ms']},{STEPS[1]['from_ms']}")
